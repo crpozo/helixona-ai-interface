@@ -1,0 +1,83 @@
+{
+  "_comment": "SCPs recomendadas para la OU de producción de la clínica. NO se despliegan con este paquete (se aplican desde AWS Organizations, cuenta de gestión). Ajustar los ARNs de roles de excepción antes de aplicar.",
+  "policies": [
+    {
+      "name": "DenyRegionsOutsideUS",
+      "description": "Residencia en EE.UU. (política de la clínica): deniega toda acción fuera de us-* salvo servicios globales.",
+      "policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "DenyNonUsRegions",
+            "Effect": "Deny",
+            "NotAction": [
+              "a4b:*", "access-analyzer:*", "account:*", "acm:*", "aws-marketplace:*", "aws-portal:*", "billing:*", "budgets:*",
+              "ce:*", "chatbot:*", "cloudfront:*", "config:*", "cur:*", "globalaccelerator:*", "health:*", "iam:*",
+              "importexport:*", "kms:*", "networkmanager:*", "organizations:*", "pricing:*", "route53:*", "route53domains:*",
+              "s3:GetAccountPublic*", "s3:ListAllMyBuckets", "s3:PutAccountPublic*", "shield:*", "sso:*", "sts:*",
+              "support:*", "trustedadvisor:*", "waf:*", "wafv2:*", "wellarchitected:*"
+            ],
+            "Resource": "*",
+            "Condition": {
+              "StringNotLike": { "aws:RequestedRegion": ["us-*"] }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "DenyBedrockInvocationLogging",
+      "description": "El model invocation logging de Bedrock guardaría prompts y respuestas (PHI). Nadie puede activarlo. TODO: verificar si aplica al endpoint Mantle.",
+      "policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "DenyInvocationLogging",
+            "Effect": "Deny",
+            "Action": ["bedrock:PutModelInvocationLoggingConfiguration"],
+            "Resource": "*"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DenyDisablingAuditControls",
+      "description": "Nadie (ni admin) apaga CloudTrail, GuardDuty o Config desde las cuentas miembro.",
+      "policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "DenyCloudTrailTampering",
+            "Effect": "Deny",
+            "Action": ["cloudtrail:StopLogging", "cloudtrail:DeleteTrail", "cloudtrail:UpdateTrail", "cloudtrail:PutEventSelectors"],
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenyGuardDutyAndConfigTampering",
+            "Effect": "Deny",
+            "Action": [
+              "guardduty:DeleteDetector", "guardduty:DisassociateFromMasterAccount", "guardduty:UpdateDetector",
+              "config:DeleteConfigurationRecorder", "config:StopConfigurationRecorder", "config:DeleteDeliveryChannel"
+            ],
+            "Resource": "*"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DenyGlobalInferenceProfiles",
+      "description": "Los perfiles de inferencia `global.` pueden enrutar fuera de EE.UU.; solo se permiten modelos directos y perfiles `us.`.",
+      "policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "DenyGlobalProfiles",
+            "Effect": "Deny",
+            "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+            "Resource": ["arn:aws:bedrock:*:*:inference-profile/global.*", "arn:aws:bedrock:*::foundation-model/global.*"]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@helixona/infra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Infraestructura AWS (CDK v2) de la interfaz Claude/Bedrock de la clínica",
+  "type": "module",
+  "scripts": {
+    "synth": "cdk synth --quiet",
+    "deploy": "cdk deploy --all --require-approval never",
+    "diff": "cdk diff --all",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.269.0",
+    "cdk-nag": "^2.38.2",
+    "constructs": "^10.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "aws-cdk": "^2.1141.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}
