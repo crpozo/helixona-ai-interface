@@ -2,9 +2,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import "./styles.css";
+import { brand } from "./brand";
 
 // El título es fijo: nunca contiene datos de la conversación.
-document.title = "Asistente de la clínica";
+document.title = brand.productName;
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Falta el elemento #root");

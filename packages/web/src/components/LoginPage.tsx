@@ -1,6 +1,8 @@
 import { useState } from "react";
 import type { Role } from "../lib/types";
 import { ApiError, devLogin } from "../lib/api";
+import { Logo } from "./Logo";
+import { brand } from "../brand";
 
 interface Props {
   onDevLoggedIn: () => void;
@@ -30,7 +32,8 @@ export function LoginPage({ onDevLoggedIn, reason }: Props) {
   return (
     <main className="login">
       <div className="login-card">
-        <h1>Asistente de la clínica</h1>
+        <div className="login-logo"><Logo variant="login" /></div>
+        <h1>{brand.productName}</h1>
         <p className="muted">Acceso exclusivo para personal autorizado. Inicia sesión con tu cuenta corporativa.</p>
         {reason && (
           <p className="notice" role="status">

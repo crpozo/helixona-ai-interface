@@ -1,3 +1,4 @@
+import { Logo } from "./Logo";
 import { useState } from "react";
 import type { Conversation, Me } from "../lib/types";
 import { modelLabel } from "../lib/models";
@@ -36,7 +37,7 @@ export function Sidebar({ me, conversations, selectedId, open, onClose, onSelect
   return (
     <aside id="sidebar" className={`sidebar${open ? " open" : ""}`} aria-label="Conversaciones">
       <div className="sidebar-head">
-        <span className="brand">Asistente de la clínica</span>
+        <Logo />
         <button type="button" className="btn btn-icon only-mobile" onClick={onClose} aria-label="Cerrar panel">
           ×
         </button>
