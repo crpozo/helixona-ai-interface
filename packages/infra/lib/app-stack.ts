@@ -131,12 +131,16 @@ export class AppStack extends cdk.Stack {
       image: ecs.ContainerImage.fromEcrRepository(props.apiRepository, cfg.imageTag),
       essential: true,
       readonlyRootFilesystem: true,
-      user: '1000:1000',
       portMappings: [{ containerPort, protocol: ecs.Protocol.TCP, name: 'http' }],
       logging: ecs.LogDrivers.awsLogs({ logGroup: this.appLogGroup, streamPrefix: 'api', mode: ecs.AwsLogDriverMode.NON_BLOCKING }),
       healthCheck: {
-        // Sin curl en imágenes distroless: el contenedor expone /api/health y Node hace la sonda.
-        command: ['CMD-SHELL', `node -e "fetch('${containerProtocol}://127.0.0.1:${containerPort}/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"`],
+        // Sin shell ni curl en imágenes distroless: forma exec (`CMD`) y Node hace la sonda.
+        command: [
+          'CMD',
+          'node',
+          '-e',
+          `fetch('${containerProtocol}://127.0.0.1:${containerPort}/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))`,
+        ],
         interval: cdk.Duration.seconds(30),
         timeout: cdk.Duration.seconds(5),
         retries: 3,

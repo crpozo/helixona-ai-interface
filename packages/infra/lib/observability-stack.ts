@@ -190,6 +190,24 @@ export class ObservabilityStack extends cdk.Stack {
         serverAccessLogsPrefix: 's3-access/cloudtrail/',
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
+      // Log group propio (el que crea `Trail` por defecto no va cifrado con KMS).
+      trailKey.addToResourcePolicy(
+        new iam.PolicyStatement({
+          sid: 'AllowCloudWatchLogsUseOfKey',
+          principals: [new iam.ServicePrincipal(`logs.${this.region}.amazonaws.com`)],
+          actions: ['kms:Encrypt*', 'kms:Decrypt*', 'kms:ReEncrypt*', 'kms:GenerateDataKey*', 'kms:Describe*'],
+          resources: ['*'],
+          conditions: {
+            ArnLike: { 'kms:EncryptionContext:aws:logs:arn': `arn:${this.partition}:logs:${this.region}:${this.account}:log-group:*` },
+          },
+        }),
+      );
+      const trailLogGroup = new logs.LogGroup(this, 'TrailLogGroup', {
+        logGroupName: `/helixona/${stage}/cloudtrail`,
+        retention: logs.RetentionDays.ONE_YEAR,
+        encryptionKey: trailKey,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
       const trail = new cloudtrail.Trail(this, 'Trail', {
         trailName: resourceName(stage, 'trail'),
         bucket: trailBucket,
@@ -198,7 +216,7 @@ export class ObservabilityStack extends cdk.Stack {
         includeGlobalServiceEvents: true,
         isMultiRegionTrail: true,
         sendToCloudWatchLogs: true,
-        cloudWatchLogsRetention: logs.RetentionDays.ONE_YEAR,
+        cloudWatchLogGroup: trailLogGroup,
       });
       // Data events: quién toca las tablas con PHI y el bucket de adjuntos.
       trail.addS3EventSelector([{ bucket: props.attachmentsBucket }], { readWriteType: cloudtrail.ReadWriteType.ALL });

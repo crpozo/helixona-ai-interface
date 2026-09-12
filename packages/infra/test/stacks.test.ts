@@ -122,8 +122,8 @@ describe('AuthStack', () => {
       LogoutURLs: ['https://chat.test/login'],
       AccessTokenValidity: 15,
       IdTokenValidity: 15,
-      RefreshTokenValidity: 12,
-      TokenValidityUnits: { AccessToken: 'minutes', IdToken: 'minutes', RefreshToken: 'hours' },
+      RefreshTokenValidity: 720, // 12 h expresadas en minutos
+      TokenValidityUnits: { AccessToken: 'minutes', IdToken: 'minutes', RefreshToken: 'minutes' },
     });
   });
 
@@ -139,7 +139,7 @@ describe('AuthStack', () => {
 describe('AppStack', () => {
   it('servicio Fargate sin IP pública, sin ECS Exec y en subredes privadas', () => {
     appT.hasResourceProperties('AWS::ECS::Service', {
-      LaunchType: Match.absent(),
+      LaunchType: 'FARGATE',
       EnableExecuteCommand: false,
       NetworkConfiguration: { AwsvpcConfiguration: Match.objectLike({ AssignPublicIp: 'DISABLED' }) },
     });
@@ -149,10 +149,11 @@ describe('AppStack', () => {
       RequiresCompatibilities: ['FARGATE'],
       ContainerDefinitions: [
         Match.objectLike({
+          // arrayWith exige el mismo orden relativo que en la plantilla
           Environment: Match.arrayWith([
+            { Name: 'AUTH_MODE', Value: 'cognito' },
             { Name: 'STORE_MODE', Value: 'dynamo' },
             { Name: 'LLM_MODE', Value: 'bedrock' },
-            { Name: 'AUTH_MODE', Value: 'cognito' },
           ]),
           Secrets: Match.arrayWith([Match.objectLike({ Name: 'SESSION_SECRET' }), Match.objectLike({ Name: 'COGNITO_CLIENT_SECRET' })]),
         }),
@@ -177,7 +178,7 @@ describe('AppStack', () => {
     expect(allowsOnAudit).not.toContain('dynamodb:*');
     const denies = statements.filter((s) => s.Effect === 'Deny' && mentionsAudit(s.Resource));
     expect(denies.some((s) => (Array.isArray(s.Action) ? s.Action : [s.Action]).includes('dynamodb:DeleteItem'))).toBe(true);
-    expect(appStack.taskRole.roleName).toBe('helixona-test-task-role');
+    appT.hasResourceProperties('AWS::IAM::Role', { RoleName: 'helixona-test-task-role' });
   });
 
   it('ALB con idle timeout 600 s, health check /api/health y 403 por defecto', () => {
