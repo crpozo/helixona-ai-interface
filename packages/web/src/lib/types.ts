@@ -1,0 +1,168 @@
+// Tipos copiados de docs/CONTRATO.md. Si el contrato cambia, cambia aquí.
+
+export type Role = "staff" | "admin";
+
+export type ModelAlias = "sonnet" | "opus" | "fable" | (string & {});
+
+export interface CatalogModel {
+  alias: string;
+  modelId: string;
+  label: string;
+  description: string;
+  costFactor: number;
+  available: boolean;
+}
+
+export interface Me {
+  user: { id: string; email: string; name: string; roles: Role[] };
+  session: { expiresAt: string; idleTimeoutSeconds: number };
+  catalog: {
+    defaultAlias: string;
+    effort: "low" | "medium" | "high" | "xhigh" | "max";
+    models: CatalogModel[];
+  };
+  limits: { maxMessageChars: number; contextLimitTokens: number };
+}
+
+export type FallbackReason = "refusal" | "availability";
+
+export interface Conversation {
+  id: string;
+  title: string;
+  modelAlias: string;
+  modelId: string;
+  pinnedModel: string | null;
+  pinReason: FallbackReason | null;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  estimatedUsd: number;
+}
+
+/** Bloques de contenido tal cual la API. Solo interpretamos `text` y `thinking`. */
+export interface TextBlock {
+  type: "text";
+  text: string;
+}
+export interface ThinkingBlock {
+  type: "thinking";
+  thinking?: string;
+  text?: string;
+}
+export interface OtherBlock {
+  type: string;
+  [key: string]: unknown;
+}
+export type ContentBlock = TextBlock | ThinkingBlock | OtherBlock;
+
+export interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: ContentBlock[];
+  model: string | null;
+  fallbackReason: FallbackReason | null;
+  stopReason: string | null;
+  usage: Usage | null;
+  createdAt: string;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+  enabled: boolean;
+  createdAt: string;
+}
+
+export interface AuditEvent {
+  id: string;
+  ts: string;
+  userId: string;
+  action: string;
+  conversationId?: string;
+  model?: string;
+  servedBy?: string;
+  fallbackReason?: string;
+  refusalCategory?: string | null;
+  stopReason?: string;
+  usage?: Usage;
+  latencyMs?: number;
+  meta?: Record<string, string | number | boolean>;
+}
+
+export interface UsageRow {
+  userId: string;
+  day: string;
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedUsd: number;
+  byModel: Record<string, { turns: number; estimatedUsd: number }>;
+}
+
+export interface ApiErrorBody {
+  error: { code: string; message: string };
+}
+
+// ---- Eventos SSE (§4) ----
+
+export type SseErrorCode =
+  | "quota_exceeded"
+  | "context_limit"
+  | "model_unavailable"
+  | "bad_request"
+  | "internal"
+  | (string & {});
+
+export interface SseMessageStart {
+  userMessageId: string;
+  assistantMessageId: string;
+  model: string;
+}
+export interface SseTextDelta {
+  text: string;
+}
+export interface SseFallback {
+  from: string;
+  to: string;
+  reason: "refusal";
+}
+export interface SseModelSwitched {
+  from: string;
+  to: string;
+  reason: "availability";
+}
+export interface SseRefused {
+  category: string | null;
+}
+export interface SseError {
+  code: SseErrorCode;
+  message: string;
+  retryable: boolean;
+  partial: boolean;
+}
+export interface SseDone {
+  assistantMessageId: string;
+  model: string;
+  stopReason: string | null;
+  usage: Usage | null;
+  fallbackReason: FallbackReason | null;
+}
+
+export type ChatSseEvent =
+  | { type: "message_start"; data: SseMessageStart }
+  | { type: "text_delta"; data: SseTextDelta }
+  | { type: "thinking_delta"; data: SseTextDelta }
+  | { type: "fallback"; data: SseFallback }
+  | { type: "model_switched"; data: SseModelSwitched }
+  | { type: "refused"; data: SseRefused }
+  | { type: "error"; data: SseError }
+  | { type: "done"; data: SseDone };

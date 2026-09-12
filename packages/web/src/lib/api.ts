@@ -1,0 +1,210 @@
+import type {
+  AdminUser,
+  ApiErrorBody,
+  AuditEvent,
+  ChatSseEvent,
+  Conversation,
+  Me,
+  Message,
+  Role,
+  UsageRow,
+} from "./types";
+import { readSseStream } from "./sse";
+
+export const CSRF_HEADER = "X-Requested-With";
+export const CSRF_VALUE = "helixona";
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+type UnauthorizedHandler = () => void;
+type ActivityHandler = () => void;
+
+const hooks: { onUnauthorized: UnauthorizedHandler | null; onActivity: ActivityHandler | null } = {
+  onUnauthorized: null,
+  onActivity: null,
+};
+
+/** La app registra aquí qué hacer con un 401 (limpiar estado y volver a /login). */
+export function setUnauthorizedHandler(fn: UnauthorizedHandler | null) {
+  hooks.onUnauthorized = fn;
+}
+/** Cualquier fetch cuenta como actividad para el temporizador de inactividad. */
+export function setActivityHandler(fn: ActivityHandler | null) {
+  hooks.onActivity = fn;
+}
+
+async function parseError(res: Response): Promise<ApiError> {
+  let code = "http_error";
+  let message = "Se produjo un error inesperado.";
+  try {
+    const body = (await res.json()) as Partial<ApiErrorBody>;
+    if (body?.error?.code) code = body.error.code;
+    if (body?.error?.message) message = body.error.message;
+  } catch {
+    // cuerpo no JSON: nos quedamos con el mensaje genérico
+  }
+  return new ApiError(res.status, code, message);
+}
+
+async function request<T>(
+  path: string,
+  init: { method?: string; body?: unknown; signal?: AbortSignal } = {},
+): Promise<T> {
+  const method = init.method ?? "GET";
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (method !== "GET" && method !== "HEAD") headers[CSRF_HEADER] = CSRF_VALUE;
+  if (init.body !== undefined) headers["Content-Type"] = "application/json";
+
+  hooks.onActivity?.();
+  const res = await fetch(path, {
+    method,
+    headers,
+    credentials: "same-origin",
+    cache: "no-store",
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    signal: init.signal,
+  });
+
+  if (res.status === 401) {
+    hooks.onUnauthorized?.();
+    throw new ApiError(401, "unauthorized", "Sesión no válida.");
+  }
+  if (!res.ok) throw await parseError(res);
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+// ---- Auth ----
+
+export function getMe(signal?: AbortSignal): Promise<Me> {
+  return request<Me>("/api/me", { signal });
+}
+
+export function devLogin(username: string, role: Role): Promise<{ ok: true }> {
+  return request<{ ok: true }>("/api/auth/dev-login", { method: "POST", body: { username, role } });
+}
+
+export function logout(): Promise<{ logoutUrl: string }> {
+  return request<{ logoutUrl: string }>("/api/auth/logout", { method: "POST" });
+}
+
+// ---- Conversaciones ----
+
+export async function listConversations(): Promise<Conversation[]> {
+  const r = await request<{ items: Conversation[] }>("/api/conversations");
+  return r.items;
+}
+
+export function createConversation(modelAlias: string): Promise<Conversation> {
+  return request<Conversation>("/api/conversations", { method: "POST", body: { modelAlias } });
+}
+
+export function getConversation(
+  id: string,
+  signal?: AbortSignal,
+): Promise<{ conversation: Conversation; messages: Message[] }> {
+  return request(`/api/conversations/${encodeURIComponent(id)}`, { signal });
+}
+
+export function renameConversation(id: string, title: string): Promise<Conversation> {
+  return request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: { title },
+  });
+}
+
+export function deleteConversation(id: string): Promise<void> {
+  return request<void>(`/api/conversations/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+const KNOWN_EVENTS = new Set<ChatSseEvent["type"]>([
+  "message_start",
+  "text_delta",
+  "thinking_delta",
+  "fallback",
+  "model_switched",
+  "refused",
+  "error",
+  "done",
+]);
+
+/**
+ * Envía un mensaje y devuelve los eventos SSE tipados según el contrato (§4).
+ * El llamador puede abortar con `signal` (botón "Detener").
+ */
+export async function* sendMessage(
+  conversationId: string,
+  text: string,
+  signal: AbortSignal,
+): AsyncGenerator<ChatSseEvent, void, undefined> {
+  hooks.onActivity?.();
+  const res = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      [CSRF_HEADER]: CSRF_VALUE,
+    },
+    credentials: "same-origin",
+    cache: "no-store",
+    body: JSON.stringify({ text }),
+    signal,
+  });
+
+  if (res.status === 401) {
+    hooks.onUnauthorized?.();
+    throw new ApiError(401, "unauthorized", "Sesión no válida.");
+  }
+  if (!res.ok) throw await parseError(res);
+  if (!res.body) throw new ApiError(res.status, "no_body", "Respuesta vacía del servidor.");
+
+  for await (const ev of readSseStream(res.body, signal)) {
+    if (!KNOWN_EVENTS.has(ev.event as ChatSseEvent["type"])) continue;
+    let data: unknown;
+    try {
+      data = ev.data === "" ? {} : JSON.parse(ev.data);
+    } catch {
+      continue; // evento malformado: lo ignoramos en lugar de romper el turno
+    }
+    hooks.onActivity?.();
+    yield { type: ev.event, data } as ChatSseEvent;
+  }
+}
+
+// ---- Administración ----
+
+export async function adminListUsers(): Promise<AdminUser[]> {
+  const r = await request<{ items: AdminUser[] }>("/api/admin/users");
+  return r.items;
+}
+
+export function adminCreateUser(input: { email: string; name: string; role: Role }): Promise<AdminUser> {
+  return request<AdminUser>("/api/admin/users", { method: "POST", body: input });
+}
+
+export function adminDisableUser(id: string): Promise<{ ok: true }> {
+  return request(`/api/admin/users/${encodeURIComponent(id)}/disable`, { method: "POST" });
+}
+
+export function adminEnableUser(id: string): Promise<{ ok: true }> {
+  return request(`/api/admin/users/${encodeURIComponent(id)}/enable`, { method: "POST" });
+}
+
+export async function adminUsage(day: string): Promise<UsageRow[]> {
+  const r = await request<{ items: UsageRow[] }>(`/api/admin/usage?day=${encodeURIComponent(day)}`);
+  return r.items;
+}
+
+export async function adminAudit(day: string): Promise<AuditEvent[]> {
+  const r = await request<{ items: AuditEvent[] }>(`/api/admin/audit?day=${encodeURIComponent(day)}`);
+  return r.items;
+}

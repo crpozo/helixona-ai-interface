@@ -1,0 +1,10 @@
+node_modules/
+dist/
+cdk.out/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+packages/web/dist/
