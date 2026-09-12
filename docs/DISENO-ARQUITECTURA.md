@@ -16,7 +16,7 @@ Cuatro matices que cambian el diseño respecto al pedido literal:
 1. **"Usuario y contraseña" no basta para PHI.** MFA obligatorio, alta solo por administrador, cierre automático por inactividad y revocación real de sesión son requisitos, no opcionales. La identidad la gestiona Cognito; nunca una tabla de contraseñas propia.
 2. **"Si Fable no se puede usar" son dos problemas distintos** con dos mecanismos distintos: (a) el clasificador de seguridad declina el pedido (`stop_reason: "refusal"`, HTTP 200) → lo resuelve el middleware de fallback del SDK de Anthropic; (b) el modelo no está disponible (429, 5xx, acceso no habilitado, región) → lo resuelve un router propio en el backend. Bedrock no tiene el parámetro server-side `fallbacks`.
 3. **Hay una incógnita contractual que hay que cerrar antes de tocar PHI:** Fable 5.1 exige retención de datos de 30 días en la API de Anthropic y no está disponible bajo Zero Data Retention. En Bedrock "la retención la fija la plataforma", y no tenemos confirmación escrita de qué significa eso. El diseño deja el modelo primario como parámetro: si la respuesta no satisface al oficial de privacidad, el sistema arranca con Opus 5 y Fable se activa después sin cambiar código.
-4. **Conviene medir en el piloto si Fable 5.1 aporta sobre Opus 5 en las tareas reales.** Fable cuesta el doble, sus turnos pueden durar minutos y sus clasificadores cubren más categorías (incluida "bio", con falsos positivos posibles en contenido médico). Respetamos Fable 5.1 como primario por defecto, pero es plausible que Opus 5 a `medium` sea el mejor default para el chat diario y Fable quede como opción de "tarea difícil".
+4. **El empleado elige el modelo por conversación: Sonnet, Opus o Fable, siempre en su última versión.** Los tres corren a esfuerzo `medium`. El catálogo de modelos es configuración bajo control de cambios, no código, y cada modelo tiene su propia cadena de respaldo (sección 7b). Recomendamos Opus 5 como default del selector y medir en el piloto: Fable cuesta 5 veces Sonnet y 2 veces Opus, sus turnos pueden durar minutos y sus clasificadores cubren la categoría "bio", con falsos positivos posibles en contenido médico.
 
 ## 2. Alternativas consideradas
 
@@ -65,7 +65,7 @@ Flujo de un turno de chat:
 1. El empleado entra por CloudFront (TLS, WAF, cabeceras de seguridad, CSP estricta) y carga la SPA.
 2. Inicia sesión en Cognito (usuario + contraseña + TOTP). El backend canjea el código (Authorization Code + PKCE) y crea una **sesión del lado servidor** en DynamoDB; el navegador solo recibe una cookie `httpOnly; Secure; SameSite=Lax` con un id opaco. Nada en `localStorage`.
 3. El empleado escribe (y opcionalmente adjunta un PDF, en fase 2). El backend valida la sesión en **cada** handler, valida la entrada (zod, tamaños), y persiste el turno de usuario cifrado.
-4. El **ModelRouter** decide el modelo: el fijado en la conversación si existe; si no, Fable 5.1 (o Opus 5 si el breaker de Fable está abierto). Llama a Bedrock con el cliente Mantle en streaming, `output_config.effort = "medium"`, y el middleware de refusal-fallback hacia Opus 5.
+4. El **ModelRouter** toma el modelo elegido por el empleado al crear la conversación (Sonnet, Opus o Fable, resuelto a su ID vigente en Bedrock) o el fijado por un fallback anterior; si el breaker de ese modelo está abierto, usa su respaldo. Llama a Bedrock con el cliente Mantle en streaming, `output_config.effort = "medium"`, y el middleware de refusal-fallback configurado para ese modelo.
 5. La respuesta se transmite al navegador por SSE con heartbeats cada 15 s (los turnos de Fable pueden estar decenas de segundos sin emitir texto).
 6. Al terminar, el backend revisa `stop_reason` antes de leer `content`, persiste el `content` completo (bloques `thinking` y `fallback` incluidos), fija el modelo de la conversación si hubo fallback, y escribe el evento de auditoría (quién, conversación, modelo pedido/servido, motivo, categoría de refusal, tokens, latencia) **sin contenido**.
 
@@ -178,7 +178,8 @@ import {
 const FABLE = "anthropic.claude-fable-5-1";
 const OPUS = "anthropic.claude-opus-5";
 
-// Cliente para conversaciones cuyo primario es Fable: refusal → Opus 5 (con fallback credit).
+// Un cliente por modelo del catálogo, cada uno con su propia cadena de respaldo (ver 7b).
+// Ejemplo para Fable: refusal → Opus 5 (con fallback credit).
 const clientFable = new AnthropicBedrockMantle({
   awsRegion: process.env.AWS_REGION!,
   timeout: 600_000, maxRetries: 1,
@@ -220,6 +221,33 @@ async function turno(conv: Conversacion, messages: MessageParam[], sse: SseWrite
 }
 ```
 
+## 7b. Selección de modelo por el empleado (Sonnet, Opus, Fable)
+
+Requisito: el empleado elige entre Sonnet, Opus y Fable, siempre en su última versión, con esfuerzo `medium`.
+
+**Catálogo de modelos como configuración** (SSM Parameter Store, validado, bajo control de cambios; nunca IDs en código):
+
+| Alias en la UI | ID en Bedrock hoy | Precio 1P entrada/salida por millón (Bedrock a verificar) | Costo relativo | Uso sugerido |
+|---|---|---|---|---|
+| Sonnet | `anthropic.claude-sonnet-5` | $2 / $10 | 1x | Traducción, cartas, resúmenes cortos, tareas rápidas |
+| Opus | `anthropic.claude-opus-5` | $5 / $25 | 2,5x | Default recomendado para el trabajo diario |
+| Fable | `anthropic.claude-fable-5-1` | $10 / $50 | 5x | Tareas difíciles, documentos largos, razonamiento profundo |
+
+**"Siempre la última versión"**: Bedrock no tiene Models API para descubrir versiones, así que no puede ser automático. Los IDs sin sufijo de fecha (`claude-opus-5`, `claude-sonnet-5`, `claude-fable-5-1`) son estables; cuando Anthropic publica una versión nueva, actualizar el catálogo es cambiar un parámetro tras un checklist corto: habilitar el modelo en la cuenta, smoke test sin PHI (streaming, effort, refusal forzado, fallback), revisar precio y cuotas, autorización del oficial de privacidad (para Fable, la incógnita de retención), aviso a los usuarios. Las conversaciones abiertas siguen con la versión con la que empezaron; las nuevas usan la versión nueva.
+
+Reglas de diseño:
+
+- **La elección se hace al crear la conversación y queda fijada** para toda la conversación (`pinnedModel`). Motivo: la caché de prompts es por modelo y los bloques `thinking` están ligados al modelo que los produjo. "Cambiar de modelo" a mitad de una conversación se ofrece como "continuar en otro modelo", que crea una rama copiando el historial (Fable 5.1 lee los bloques `thinking` de otros modelos; los demás descartan los de Fable sin costo; comportamiento en Bedrock a verificar).
+- **Default y restricciones**: el administrador fija el modelo por defecto del selector (recomendado Opus) y puede restringir qué modelos ve cada rol o cada plantilla (por ejemplo, Sonnet para traducción, Fable solo para roles clínicos). El selector muestra nombre, una línea de descripción y el costo relativo.
+- **Cadena de respaldo por modelo elegido**, configurable en el catálogo. Nunca se cae a un modelo más caro que el elegido sin autorización de la clínica:
+  - Fable → Opus 5: rechazo por clasificador vía middleware con crédito de fallback; indisponibilidad vía router (sección 7).
+  - Opus → Opus 4.8 (`anthropic.claude-opus-4-8`): es el destino que Anthropic recomienda para los rechazos "cyber" de Opus 5; disponibilidad vía router. A verificar en Bedrock y a autorizar por la clínica; si no, Opus sin respaldo automático y error claro con "Reintentar".
+  - Sonnet → sin respaldo automático por rechazo (no hay clasificadores documentados para Sonnet 5; verificar en el spike). Por indisponibilidad: reintento y error claro, u Opus 5 solo si la clínica acepta el costo.
+  - El cliente con su middleware se construye **por modelo elegido** (mapa alias → cliente), nunca uno global: con el middleware configurado a nivel de cliente, una conversación fijada en el modelo de respaldo intentaría caer al mismo modelo.
+- **Diferencias de API entre los tres** (mismo cuerpo de request, con excepciones que el router aplica por modelo): los tres aceptan `output_config.effort` en Bedrock y ninguno acepta `thinking` con `budget_tokens`/`disabled` ni `temperature`/`top_p`/`top_k` ni prefill. Sonnet 5 **no soporta mensajes de sistema a mitad de conversación** (las instrucciones operativas van en el `system` versionado por conversación). El tokenizador de Sonnet 5 usa ~30 % más tokens: re-baselinear cuotas y el límite de contexto con `count_tokens`. Mínimo cacheable por modelo: 512 tokens en Fable 5.1 y Opus 5; Sonnet 5 a verificar.
+- **UI y contabilidad**: insignia del modelo que respondió (incluido si fue un respaldo); auditoría y costo por modelo, por usuario y por plantilla a partir de `usage` y `usage.iterations`; cuotas por usuario expresadas en dinero, no en tokens, para que elegir Fable consuma cuota proporcionalmente. Latencia esperada distinta por modelo: Sonnet responde rápido, Fable puede tardar minutos; el indicador "Pensando…" y los heartbeats aplican a los tres.
+- **HIPAA**: cada modelo del catálogo lo autoriza el oficial de privacidad como parte de la lista de modelos autorizados (sección 8). La incógnita de retención de 30 días aplica a Fable 5.1; para Sonnet 5 y Opus 5 hay que confirmar que no existe un requisito equivalente en Bedrock.
+
 ## 8. Controles HIPAA
 
 Administrativos (clínica + Helixona):
@@ -254,7 +282,7 @@ Alternativas aceptables: **Next.js** (App Router, runtime Node, `output: "standa
 |---|---|---|---|
 | **0. Decisiones y cumplimiento** | 1–2 (en paralelo) | Cuenta AWS de la clínica + BAA en Artifact; BAA Helixona–clínica; acceso a `anthropic.claude-fable-5-1` y `anthropic.claude-opus-5` en la región y cuotas; consultas escritas a AWS/Anthropic (retención de Fable 5.1 en Bedrock, cobertura BAA del endpoint Mantle, PrivateLink, acciones IAM); cotización de Claude Enterprise/Healthcare; **spike sin PHI** del cliente Mantle (IDs con/sin `us.`, effort medium, streaming, refusal forzado → middleware → Opus 5, fallback a mitad de salida, preserved thinking en cuenta nueva) | Sin respuestas escritas no entra PHI. Plan B: `PRIMARY_MODEL = Opus 5` |
 | **1. Cimientos** | 2–3 | Organization + SCPs, Identity Center, CDK (VPC, endpoints, KMS, DynamoDB, S3, Cognito, Fargate, ALB, CloudFront/WAF, CloudTrail, Config HIPAA, GuardDuty, Budgets), pipeline OIDC, staging sin PHI | Login con MFA en URL productiva |
-| **2. MVP** | 4–6 | Chat con streaming, historial cifrado con TTL, borrado, ModelRouter con ambas vías de fallback y pin, auditoría sin PHI, cuotas por usuario, alarmas. **Fuera del MVP**: adjuntos, panel admin (consola de Cognito), breaker sofisticado | Conversación completa extremo a extremo con fallback demostrado |
+| **2. MVP** | 4–6 | Chat con streaming, selector de modelo (Sonnet/Opus/Fable) fijado por conversación, historial cifrado con TTL, borrado, ModelRouter con catálogo configurable, ambas vías de fallback y pin, auditoría sin PHI, cuotas por usuario, alarmas. **Fuera del MVP**: adjuntos, panel admin (consola de Cognito), breaker sofisticado | Conversación completa extremo a extremo con fallback demostrado |
 | **3. Endurecimiento y evidencia** | 7–8 | Test anti-fuga, CSP y sanitización, revisión IAM/KMS, restauración desde backup, runbooks, análisis de riesgos, políticas, capacitación; adjuntos PDF si la clínica los pidió | Revisión de seguridad externa (o pentest) sin hallazgos altos |
 | **4. Piloto controlado** | 9–11 | 5–10 empleados con PHI real; medir p50/p95 de latencia, tasa de refusal por categoría, fallbacks por motivo, aciertos de caché, costo por usuario, calidad percibida; **A/B Fable 5.1 vs Opus 5** en las tareas reales | Decisión formal del oficial de privacidad; elección del modelo primario definitivo |
 | **5. Salida y traspaso** | 12 | Alta de todo el personal, traspaso de operación a la clínica, calendario de revisiones | — |
@@ -263,12 +291,14 @@ Alternativas aceptables: **Next.js** (App Router, runtime Node, `output: "standa
 
 **Costo mensual** (orden de magnitud; precios de la API 1P como proxy: Fable 5.1 $10/$50, Opus 5 $5/$25 por millón de tokens, lectura de caché de Fable $0,25/millón; **la tarifa de Bedrock es distinta y hay que verificarla**):
 
-| Supuesto: 30 empleados, 15–20 activos/día, 10–20 turnos por persona y día, ~6K tokens de entrada (60 % desde caché) y 2–5K de salida por turno (el pensamiento se factura como salida) | Fable 5.1 primario | Opus 5 primario |
-|---|---|---|
-| Modelo | USD 600–1.500 | USD 300–800 |
-| Infraestructura (Fargate, ALB, CloudFront/WAF, endpoints, KMS, DynamoDB, logs, CloudTrail/Config/GuardDuty, Cognito) | USD 150–300 | USD 150–300 |
-| Extra si no hay PrivateLink para Mantle (NAT + egreso restringido) | +USD 40–300 | +USD 40–300 |
-| **Total** | **USD 800–2.000** | **USD 500–1.300** |
+| Supuesto: 30 empleados, 15–20 activos/día, 10–20 turnos por persona y día, ~6K tokens de entrada (60 % desde caché) y 2–5K de salida por turno (el pensamiento se factura como salida) | Todos en Fable 5.1 | Todos en Opus 5 | Todos en Sonnet 5 | Mezcla plausible (20 % Fable, 50 % Opus, 30 % Sonnet) |
+|---|---|---|---|---|
+| Modelo | USD 600–1.500 | USD 300–800 | USD 120–320 | USD 350–850 |
+| Infraestructura (Fargate, ALB, CloudFront/WAF, endpoints, KMS, DynamoDB, logs, CloudTrail/Config/GuardDuty, Cognito) | USD 150–300 | USD 150–300 | USD 150–300 | USD 150–300 |
+| Extra si no hay PrivateLink para Mantle (NAT + egreso restringido) | +USD 40–300 | +USD 40–300 | +USD 40–300 | +USD 40–300 |
+| **Total** | **USD 800–2.000** | **USD 500–1.300** | **USD 300–900** | **USD 550–1.400** |
+
+Con el selector, el costo real depende de qué elijan los empleados: por eso las cuotas por usuario se expresan en dinero y el administrador puede restringir Fable por rol.
 
 Los adjuntos PDF grandes (un PDF de 100 páginas se reenvía en cada turno) y las conversaciones largas son las variables que rompen la estimación: cuotas diarias por usuario, límite de contexto (~150K tokens con sugerencia de nueva conversación) y AWS Budgets con alarma desde el día 1.
 
@@ -294,8 +324,9 @@ Para AWS / Anthropic (respuesta escrita antes de PHI):
 2. Cobertura del BAA de AWS para el endpoint Mantle (`bedrock-mantle.{region}.api.aws`), no solo `bedrock-runtime`; si el model invocation logging aplica a Mantle.
 3. Existencia de VPC endpoint (PrivateLink) para Mantle; acciones IAM y ARNs exactos; si se requieren perfiles cross-region `us.` y confirmación de que la inferencia queda en EE.UU.
 4. Precios de Bedrock para ambos modelos (entrada, salida, escritura/lectura de caché, crédito de fallback) y cuotas por defecto.
-5. Comportamiento en Bedrock de: middleware de refusal-fallback y `BetaFallbackState` con IDs con prefijo y streaming; fallback a mitad de salida; lectura de bloques `thinking` entre modelos; enforcement de historial append-only en cuentas nuevas; `display: "summarized"`; Guardrails con Mantle.
-6. Claude Enterprise / Claude for Healthcare: BAA, mínimos de asientos, precio por asiento, si la configuración HIPAA-ready (ZDR) excluye a Fable 5.1, y si permite fijar effort. Elegibilidad HIPAA/BAA de Claude Platform on AWS.
+5. Si Sonnet 5 y Opus 5 en Bedrock tienen requisitos de retención equivalentes al de Fable 5.1; si Sonnet 5 tiene clasificadores que devuelvan `refusal`; mínimo cacheable de Sonnet 5.
+6. Comportamiento en Bedrock de: middleware de refusal-fallback y `BetaFallbackState` con IDs con prefijo y streaming; fallback a mitad de salida; lectura de bloques `thinking` entre modelos; enforcement de historial append-only en cuentas nuevas; `display: "summarized"`; Guardrails con Mantle.
+7. Claude Enterprise / Claude for Healthcare: BAA, mínimos de asientos, precio por asiento, si la configuración HIPAA-ready (ZDR) excluye a Fable 5.1, y si permite fijar effort. Elegibilidad HIPAA/BAA de Claude Platform on AWS.
 
 Para la clínica:
 1. ¿Quién será titular de la cuenta AWS (recomendado: la clínica) y quién es el oficial de privacidad/seguridad que firma las decisiones de riesgo?
@@ -304,7 +335,7 @@ Para la clínica:
 4. ¿Cuánto tiempo deben conservarse las conversaciones (¿forman parte del registro médico o no deben persistirse?) y aceptan la retención efectiva TTL + 35 días?
 5. ¿Pueden los administradores leer conversaciones ajenas? ¿Se muestra el razonamiento resumido del modelo?
 6. ¿Restringir el acceso por IP/VPN y a dispositivos gestionados? ¿Personal en viaje?
-7. ¿Aceptan Opus 5 como modelo de respaldo y, si el piloto lo indica, como primario? ¿Autorizan Opus 4.8 como tercer salto?
+7. ¿Qué modelos del catálogo autorizan (Sonnet 5, Opus 5, Fable 5.1) y para qué roles? ¿Cuál es el default del selector? ¿Autorizan Opus 4.8 como respaldo de Opus 5 y Opus 5 como respaldo de Sonnet 5 pese a costar más?
 8. Presupuesto mensual objetivo y quién opera el día a día (altas/bajas, revisar el informe de costos).
 
 Para Helixona:
