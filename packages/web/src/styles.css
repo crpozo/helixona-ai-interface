@@ -784,3 +784,16 @@ td {
 .login-card {
   box-shadow: var(--brand-shadow);
 }
+
+/* Banner de la vista previa (solo modo demo) */
+.demo-banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 0.35rem 1rem;
+  border-bottom: 1px solid var(--border);
+}

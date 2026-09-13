@@ -72,7 +72,11 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
       catalog: {
         defaultAlias: deps.catalog.defaultAlias,
         effort: deps.catalog.effort,
-        models: deps.catalog.models.map((m) => ({ alias: m.alias, modelId: m.modelId, label: m.label, description: m.description, costFactor: m.costFactor, available: modelsForRole(deps.catalog, s.roles).some((x) => x.alias === m.alias) })),
+        models: [
+          ...deps.catalog.models.map((m) => ({ alias: m.alias, modelId: m.modelId, label: m.label, description: m.description, costFactor: m.costFactor, available: modelsForRole(deps.catalog, s.roles).some((x) => x.alias === m.alias) })),
+          // Modelos solo de respaldo: no seleccionables, pero la UI necesita su etiqueta.
+          ...deps.catalog.fallbackModels.map((m) => ({ alias: m.modelId, modelId: m.modelId, label: m.label, description: "Solo como respaldo", costFactor: 0, available: false })),
+        ],
       },
       limits: { maxMessageChars: config.MAX_MESSAGE_CHARS, contextLimitTokens: config.CONTEXT_LIMIT_TOKENS },
     };

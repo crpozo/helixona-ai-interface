@@ -2,7 +2,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // En modo demo (vista previa publicada) los assets se referencian de forma relativa.
+  base: mode === "demo" ? "./" : "/",
   plugins: [react()],
   server: {
     port: 5173,
@@ -14,7 +16,8 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "dist",
+    outDir: mode === "demo" ? "dist-demo" : "dist",
+    target: "es2022",
     sourcemap: false,
     emptyOutDir: true,
   },
@@ -23,4 +26,4 @@ export default defineConfig({
     globals: false,
     include: ["src/**/*.test.{ts,tsx}"],
   },
-});
+}));

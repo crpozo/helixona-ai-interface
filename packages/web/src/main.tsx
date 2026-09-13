@@ -7,6 +7,11 @@ import { brand } from "./brand";
 // El título es fijo: nunca contiene datos de la conversación.
 document.title = brand.productName;
 
+if (import.meta.env.MODE === "demo") {
+  const { installMockApi } = await import("./demo/mockApi");
+  installMockApi();
+}
+
 const root = document.getElementById("root");
 if (!root) throw new Error("Falta el elemento #root");
 

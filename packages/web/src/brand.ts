@@ -9,6 +9,6 @@ export const brand = {
   name: "Helixona",
   productName: "Asistente Helixona",
   tagline: "Uso interno · personal autorizado",
-  logoUrl: "/brand/logo.svg",
-  logoMarkUrl: "/brand/logo-mark.svg",
+  logoUrl: `${import.meta.env.BASE_URL}brand/logo.svg`,
+  logoMarkUrl: `${import.meta.env.BASE_URL}brand/logo-mark.svg`,
 } as const;
