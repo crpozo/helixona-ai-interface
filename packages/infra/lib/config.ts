@@ -49,7 +49,8 @@ export interface DeployConfig {
 
 function str(scope: cdk.App, key: string, fallback = ''): string {
   const v = scope.node.tryGetContext(key);
-  return v === undefined || v === null ? fallback : String(v);
+  // Una cadena vacía (p. ej. `-c clave=` desde CI con una variable sin definir) cuenta como "no dado".
+  return v === undefined || v === null || String(v).trim() === '' ? fallback : String(v);
 }
 function bool(scope: cdk.App, key: string, fallback: boolean): boolean {
   const v = scope.node.tryGetContext(key);
