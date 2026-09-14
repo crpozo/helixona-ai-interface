@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { BedrockProvider, CircuitBreaker, createSafeLogger, FakeProvider, ModelRouter, parseCatalog } from "@helixona/core";
+import { CircuitBreaker, createSafeLogger, FakeProvider, ModelRouter, parseCatalog, SdkProvider } from "@helixona/core";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { CognitoIdentityProvider, CognitoUserDirectory } from "./auth/cognito.js";
@@ -25,7 +25,7 @@ export async function createDeps(env: NodeJS.ProcessEnv = process.env): Promise<
   const directory = config.AUTH_MODE === "dev" ? new MemoryUserDirectory() : new CognitoUserDirectory(config.COGNITO_REGION!, config.COGNITO_USER_POOL_ID!);
   const provider = config.LLM_MODE === "fake"
     ? new FakeProvider({ refusalFallbacks: Object.fromEntries(catalog.models.map((m) => [m.modelId, m.refusalFallbacks])), delayMs: 15 })
-    : new BedrockProvider({ awsRegion: config.AWS_REGION!, catalog, timeoutMs: config.LLM_TIMEOUT_MS, logger: log });
+    : new SdkProvider({ mode: config.LLM_MODE, catalog, awsRegion: config.AWS_REGION, apiKey: config.ANTHROPIC_API_KEY, workspaceId: config.ANTHROPIC_AWS_WORKSPACE_ID, timeoutMs: config.LLM_TIMEOUT_MS, logger: log });
   const router = new ModelRouter({ catalog, provider, breaker: new CircuitBreaker(), logger: log, maxTokens: config.MAX_TOKENS, thinkingDisplay: config.THINKING_DISPLAY, firstEventTimeoutMs: config.FIRST_EVENT_TIMEOUT_MS });
   const systemPrompt = loadSystemPrompt(config.SYSTEM_PROMPT_FILE, new URL("..", import.meta.url).pathname);
   return { config, log, catalog, repos, sessions, identity, directory, provider, router, systemPrompt };

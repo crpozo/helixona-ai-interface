@@ -55,6 +55,16 @@ CDK_DEFAULT_ACCOUNT=123456789012 CDK_DEFAULT_REGION=us-east-1 npm run synth
 
 En producción la API rechaza arrancar con `AUTH_MODE=dev`, `STORE_MODE=memory` o `LLM_MODE=fake`.
 
+### Proveedor de modelos
+
+La aplicación es la misma con tres proveedores, elegidos por `LLM_MODE`:
+
+| `LLM_MODE` | Quién sirve el modelo | Autenticación | PHI |
+|---|---|---|---|
+| `bedrock` | Amazon Bedrock (endpoint Mantle) | Rol IAM de la tarea | Bajo el BAA de AWS. La familia Claude 5 requiere habilitación comercial por cuenta |
+| `anthropic` | Claude API de Anthropic | `ANTHROPIC_API_KEY` (Secrets Manager) | Solo con BAA firmado con Anthropic. Fable 5.1 exige retención de 30 días |
+| `claude-platform-aws` | Claude Platform on AWS (operado por Anthropic, facturación AWS Marketplace) | Rol IAM + `ANTHROPIC_AWS_WORKSPACE_ID` | Cobertura HIPAA/BAA a confirmar con Anthropic |
+
 ## Reglas que el código hace cumplir
 
 - Sin `thinking` con presupuesto, sin `temperature/top_p/top_k`, sin prefill, sin `tool_choice` forzado (400 en Fable 5.1 / Opus 5); `output_config.effort` constante por conversación; prompt de sistema versionado por conversación con caché de 1 h.

@@ -6,6 +6,7 @@ export * from "./history.js";
 export * from "./types.js";
 export * from "./llm/provider.js";
 export * from "./llm/bedrock-provider.js";
+export * from "./llm/sdk-provider.js";
 export * from "./llm/fake-provider.js";
 export * from "./llm/router.js";
 export { ulid } from "ulid";

@@ -22,7 +22,9 @@ const Env = z.object({
   TABLE_AUDIT: z.string().optional(),
   TABLE_USAGE: z.string().optional(),
   AWS_REGION: z.string().optional(),
-  LLM_MODE: z.enum(["bedrock", "fake"]).default("bedrock"),
+  LLM_MODE: z.enum(["bedrock", "anthropic", "claude-platform-aws", "fake"]).default("bedrock"),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_AWS_WORKSPACE_ID: z.string().optional(),
   MODEL_CATALOG_JSON: z.string().optional(),
   SYSTEM_PROMPT_FILE: z.string().default("prompts/system.es.md"),
   EFFORT: EffortSchema.optional(),
@@ -59,6 +61,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
   }
   if (cfg.LLM_MODE === "bedrock" && !cfg.AWS_REGION) throw new Error("falta AWS_REGION para LLM_MODE=bedrock");
+  if (cfg.LLM_MODE === "anthropic" && !cfg.ANTHROPIC_API_KEY) throw new Error("falta ANTHROPIC_API_KEY para LLM_MODE=anthropic");
+  if (cfg.LLM_MODE === "claude-platform-aws" && (!cfg.AWS_REGION || !cfg.ANTHROPIC_AWS_WORKSPACE_ID)) throw new Error("faltan AWS_REGION o ANTHROPIC_AWS_WORKSPACE_ID para LLM_MODE=claude-platform-aws");
   if (!cfg.SESSION_SECRET) {
     if (prod) throw new Error("falta SESSION_SECRET");
   }

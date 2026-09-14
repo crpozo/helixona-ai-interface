@@ -5,7 +5,12 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -15,7 +20,8 @@
     "@anthropic-ai/bedrock-sdk": "^0.33.5",
     "@anthropic-ai/sdk": "^0.125.0",
     "ulid": "^3.0.0",
-    "zod": "^4.0.0"
+    "zod": "^4.0.0",
+    "@anthropic-ai/aws-sdk": "^0.7.1"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
