@@ -2,8 +2,10 @@
 #   - Environment "production" en GitHub con aprobación obligatoria (reviewers).
 #   - Secret AWS_DEPLOY_ROLE_ARN: rol IAM con trust OIDC acotado a este repo + environment.
 #   - Variables del environment (Settings > Environments > production > Variables):
-#       APP_BASE_URL, DOMAIN_NAME, CERTIFICATE_ARN, COGNITO_DOMAIN_PREFIX, ALERT_EMAIL,
-#       MONTHLY_BUDGET_USD (opcional), CLOUDFRONT_PREFIX_LIST_ID (opcional).
+#       APP_BASE_URL, COGNITO_DOMAIN_PREFIX, ALERT_EMAIL,
+#       DOMAIN_NAME + CERTIFICATE_ARN (van juntas; vacías = URL por defecto de CloudFront, ver
+#       packages/infra/README.md "Sin dominio propio"), MONTHLY_BUDGET_USD (opcional),
+#       CLOUDFRONT_PREFIX_LIST_ID (opcional), LLM_MODE (opcional, default anthropic).
 # Orden: FoundationStack (crea el ECR) -> build+push de la imagen -> cdk deploy --all.
 name: Deploy
 

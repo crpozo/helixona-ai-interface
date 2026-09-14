@@ -16,10 +16,22 @@ Infraestructura AWS (CDK v2, TypeScript) de la interfaz Claude/Bedrock de la cl�
 
 1. **BAA de AWS aceptado en AWS Artifact** en la cuenta de producción (titular: la clínica). Sin BAA no se despliega en producción.
 2. **Acceso a modelos habilitado** en Bedrock (us-east-1) para `anthropic.claude-sonnet-5`, `anthropic.claude-opus-5`, `anthropic.claude-opus-4-8` y `anthropic.claude-fable-5-1`.
-3. **Certificado ACM** en `us-east-1` para el dominio (sirve para CloudFront y para el ALB, ya que todo se despliega en `us-east-1`). Sin `certificateArn` el ALB escucha en HTTP 80: solo para entornos de desarrollo sin PHI.
+3. **Certificado ACM** en `us-east-1` para el dominio (sirve para CloudFront y para el ALB, ya que todo se despliega en `us-east-1`). Sin `certificateArn` el ALB escucha en HTTP 80: solo para entornos sin PHI (ver «Sin dominio propio» más abajo).
 4. **Dominio** (`domainName`, `appBaseUrl`) y registro DNS apuntando a la distribución de CloudFront tras el despliegue.
 5. Cuenta bootstrapeada (`cdk bootstrap aws://<cuenta>/us-east-1`) y rol OIDC para GitHub Actions (`AWS_DEPLOY_ROLE_ARN`).
 6. SCPs de `lib/scp-recommendations.json` aplicadas a la OU de producción.
+
+## Sin dominio propio: URL de CloudFront (dos pasadas)
+
+Mientras no haya acceso al DNS de `helixona.com` se puede desplegar con el dominio por defecto de CloudFront (`https://<id>.cloudfront.net`). Sin `domainName` ni `certificateArn` la distribución usa el certificado por defecto de CloudFront y el tramo CloudFront → ALB va por HTTP dentro de AWS: válido para arrancar y probar, **no apto para PHI**.
+
+Como la URL de la distribución solo se conoce después de crearla, y Cognito necesita la URL de retorno exacta, son dos pasadas:
+
+1. **Primera pasada** (variables del environment `production`): `DOMAIN_NAME` y `CERTIFICATE_ARN` **vacíos o inexistentes**; `APP_BASE_URL` con cualquier `https://` provisional (p. ej. el dominio definitivo `https://ai.helixona.com`). Ejecutar el workflow *Deploy*.
+2. Copiar la salida `DistributionDomainName` del stack `Helixona-<stage>-App` (Actions → log de *Deploy all stacks*, o CloudFormation → Outputs).
+3. **Segunda pasada**: `APP_BASE_URL=https://<id>.cloudfront.net` y volver a ejecutar *Deploy* (solo cambian el cliente de Cognito y la variable del contenedor).
+
+Para pasar al dominio definitivo más adelante: validar el certificado ACM (CNAME en el DNS), poner `DOMAIN_NAME`, `CERTIFICATE_ARN` y `APP_BASE_URL=https://ai.helixona.com`, desplegar y crear el CNAME `ai` → `<id>.cloudfront.net`.
 
 ## Contexto de despliegue
 
