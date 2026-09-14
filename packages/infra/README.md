@@ -80,3 +80,18 @@ aws cognito-idp admin-add-user-to-group --user-pool-id "$POOL_ID" --username adm
 - **AWS Config / conformance pack HIPAA**: `enableConfig=true` y `hipaaConformancePackS3Uri` cuando exista un recorder en la cuenta.
 - **CloudTrail**: `enableCloudTrail=true` solo si no hay trail de organización; añadir Object Lock al bucket.
 - **Prefix list de CloudFront** (`cloudFrontPrefixListId`): el default `pl-3b927c52` es el de `us-east-1`; verificar en la cuenta (`aws ec2 describe-managed-prefix-lists --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing`).
+
+## Acceso para desplegar sin compartir credenciales
+
+1. Un administrador de la cuenta ejecuta una sola vez, con sus propias credenciales:
+   ```bash
+   npx cdk bootstrap aws://<ACCOUNT_ID>/us-east-1
+   aws cloudformation deploy --stack-name helixona-github-deploy-role \
+     --template-file packages/infra/bootstrap/github-oidc-deploy-role.yaml \
+     --capabilities CAPABILITY_NAMED_IAM --region us-east-1
+   aws cloudformation describe-stacks --stack-name helixona-github-deploy-role \
+     --query "Stacks[0].Outputs[?OutputKey=='DeployRoleArn'].OutputValue" --output text
+   ```
+2. En GitHub → Settings → Environments → `production`: añadir revisores obligatorios.
+3. En GitHub → Settings → Secrets → `AWS_DEPLOY_ROLE_ARN` = el ARN que devolvió el paso 1.
+4. Ejecutar el workflow **Deploy** (`workflow_dispatch`). El rol solo puede asumir los roles del bootstrap de CDK y publicar imágenes en los repositorios ECR `helixona-*`; no hay claves estáticas en ningún sitio.

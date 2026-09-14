@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Rol de despliegue para GitHub Actions (OIDC, sin claves estáticas) del repositorio
+  crpozo/helixona-ai-interface. Solo puede asumir los roles que crea `cdk bootstrap` y
+  publicar imágenes en los repositorios ECR de Helixona. Se despliega UNA vez por un
+  administrador de la cuenta, después de `cdk bootstrap`.
+Parameters:
+  GitHubOrg:
+    Type: String
+    Default: crpozo
+  GitHubRepo:
+    Type: String
+    Default: helixona-ai-interface
+  GitHubEnvironment:
+    Type: String
+    Default: production
+    Description: Environment de GitHub con aprobación requerida desde el que se permite desplegar.
+  CreateOidcProvider:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: "false" si la cuenta ya tiene el proveedor OIDC de GitHub.
+  CdkQualifier:
+    Type: String
+    Default: hnb659fds
+    Description: Qualifier del bootstrap de CDK (por defecto hnb659fds).
+Conditions:
+  CreateProvider: !Equals [!Ref CreateOidcProvider, "true"]
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: ["sts.amazonaws.com"]
+      ThumbprintList: ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: helixona-github-deploy
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - CreateProvider
+                - !Ref GitHubOidcProvider
+                - !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrg}/${GitHubRepo}:environment:${GitHubEnvironment}
+      Policies:
+        - PolicyName: cdk-deploy-via-bootstrap-roles
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AssumeCdkBootstrapRoles
+                Effect: Allow
+                Action: sts:AssumeRole
+                Resource:
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/cdk-${CdkQualifier}-deploy-role-${AWS::AccountId}-${AWS::Region}
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/cdk-${CdkQualifier}-file-publishing-role-${AWS::AccountId}-${AWS::Region}
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/cdk-${CdkQualifier}-image-publishing-role-${AWS::AccountId}-${AWS::Region}
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/cdk-${CdkQualifier}-lookup-role-${AWS::AccountId}-${AWS::Region}
+              - Sid: EcrLogin
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: EcrPushHelixonaRepos
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:DescribeRepositories
+                  - ecr:DescribeImages
+                Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/helixona-*
+              - Sid: ReadStackOutputs
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - sts:GetCallerIdentity
+                Resource: "*"
+Outputs:
+  DeployRoleArn:
+    Description: Valor para el secreto AWS_DEPLOY_ROLE_ARN del repositorio en GitHub.
+    Value: !GetAtt DeployRole.Arn
