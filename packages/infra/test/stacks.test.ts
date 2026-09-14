@@ -29,6 +29,7 @@ beforeAll(() => {
     logsBucket: f.logsBucket,
     sessionSecret: f.sessionSecret,
     cognitoClientSecret: f.cognitoClientSecret,
+    anthropicApiKeySecret: f.anthropicApiKeySecret,
     apiRepository: f.apiRepository,
     userPool: a.userPool,
     userPoolClient: a.userPoolClient,
@@ -96,6 +97,7 @@ describe('FoundationStack', () => {
   it('crea los secretos SESSION_SECRET y COGNITO_CLIENT_SECRET', () => {
     foundation.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'helixona-test-session-secret', GenerateSecretString: Match.objectLike({ PasswordLength: 64 }) });
     foundation.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'helixona-test-cognito-client-secret' });
+    foundation.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'helixona-test-anthropic-api-key' });
   });
 });
 
@@ -153,9 +155,9 @@ describe('AppStack', () => {
           Environment: Match.arrayWith([
             { Name: 'AUTH_MODE', Value: 'cognito' },
             { Name: 'STORE_MODE', Value: 'dynamo' },
-            { Name: 'LLM_MODE', Value: 'bedrock' },
+            { Name: 'LLM_MODE', Value: 'anthropic' },
           ]),
-          Secrets: Match.arrayWith([Match.objectLike({ Name: 'SESSION_SECRET' }), Match.objectLike({ Name: 'COGNITO_CLIENT_SECRET' })]),
+          Secrets: Match.arrayWith([Match.objectLike({ Name: 'SESSION_SECRET' }), Match.objectLike({ Name: 'COGNITO_CLIENT_SECRET' }), Match.objectLike({ Name: 'ANTHROPIC_API_KEY' })]),
         }),
       ],
     });

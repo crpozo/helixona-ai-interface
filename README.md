@@ -1,6 +1,6 @@
 # Helixona AI Interface — asistente Claude privado para la clínica
 
-Interfaz web propia para que el personal de una clínica sujeta a HIPAA use Claude (Sonnet 5, Opus 5 o Fable 5.1, siempre en su última versión) a través de **Amazon Bedrock**, con usuario y contraseña + MFA en **Amazon Cognito**, sesiones del lado servidor, historial cifrado con KMS y auditoría sin contenido.
+Interfaz web propia para que el personal de una clínica sujeta a HIPAA use Claude (Sonnet 5, Opus 5 o Fable 5.1, siempre en su última versión) a través de la **Claude API de Anthropic** o de **Amazon Bedrock**, con usuario y contraseña + MFA en **Amazon Cognito**, sesiones del lado servidor, historial cifrado con KMS y auditoría sin contenido.
 
 - Diseño y decisiones: [`docs/DISENO-ARQUITECTURA.md`](docs/DISENO-ARQUITECTURA.md)
 - Contrato técnico (rutas, eventos SSE, variables, tablas): [`docs/CONTRATO.md`](docs/CONTRATO.md)

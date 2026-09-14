@@ -34,6 +34,7 @@ export class FoundationStack extends cdk.Stack {
   readonly logsBucket: s3.Bucket;
   readonly sessionSecret: secretsmanager.Secret;
   readonly cognitoClientSecret: secretsmanager.Secret;
+  readonly anthropicApiKeySecret: secretsmanager.Secret;
   readonly apiRepository: ecr.Repository;
 
   constructor(scope: Construct, id: string, props: FoundationStackProps) {
@@ -215,6 +216,16 @@ export class FoundationStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
+    // Clave de la Claude API de Anthropic (LLM_MODE=anthropic). Placeholder: se rellena a mano en
+    // Secrets Manager con la clave generada en console.anthropic.com; nunca pasa por el repositorio ni por CI.
+    this.anthropicApiKeySecret = new secretsmanager.Secret(this, 'AnthropicApiKeySecret', {
+      secretName: resourceName(stage, 'anthropic-api-key'),
+      description: 'Clave de la Claude API de Anthropic (ANTHROPIC_API_KEY). Rellenar a mano tras el despliegue.',
+      encryptionKey: this.phiKey,
+      secretStringValue: cdk.SecretValue.unsafePlainText('REPLACE_ME_WITH_ANTHROPIC_API_KEY'),
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     // ---------------------------------------------------------------- ECR
     // El repositorio vive aquí (y no en AppStack) para poder hacer build+push de la imagen antes
     // del primer despliegue del servicio Fargate. `cdk synth` no necesita Docker.
@@ -240,6 +251,7 @@ export class FoundationStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'LogsBucketName', { value: this.logsBucket.bucketName });
     new cdk.CfnOutput(this, 'SessionSecretArn', { value: this.sessionSecret.secretArn });
     new cdk.CfnOutput(this, 'CognitoClientSecretArn', { value: this.cognitoClientSecret.secretArn });
+    new cdk.CfnOutput(this, 'AnthropicApiKeySecretArn', { value: this.anthropicApiKeySecret.secretArn });
     new cdk.CfnOutput(this, 'ApiRepositoryUri', { value: this.apiRepository.repositoryUri });
 
     // ---------------------------------------------------------- cdk-nag
@@ -257,9 +269,9 @@ export class FoundationStack extends cdk.Stack {
         { id: 'HIPAA.Security-DynamoDBAutoScalingEnabled', reason: 'Tabla on-demand (PAY_PER_REQUEST); el autoscaling de capacidad no aplica.' },
       ]);
     }
-    for (const secret of [this.sessionSecret, this.cognitoClientSecret]) {
+    for (const secret of [this.sessionSecret, this.cognitoClientSecret, this.anthropicApiKeySecret]) {
       NagSuppressions.addResourceSuppressions(secret, [
-        { id: 'AwsSolutions-SMG4', reason: 'Rotación manual documentada: rotar SESSION_SECRET invalida todas las sesiones y el client secret lo emite Cognito; no hay lambda de rotación.' },
+        { id: 'AwsSolutions-SMG4', reason: 'Rotación manual documentada: rotar SESSION_SECRET invalida todas las sesiones, el client secret lo emite Cognito y la clave de Anthropic se rota desde console.anthropic.com; no hay lambda de rotación.' },
         { id: 'HIPAA.Security-SecretsManagerRotationEnabled', reason: 'Rotación manual documentada (ver README); rotación automática no aplicable a estos valores.' },
       ]);
     }

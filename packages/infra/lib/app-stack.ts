@@ -27,6 +27,7 @@ export interface AppStackProps extends cdk.StackProps {
   readonly logsBucket: s3.IBucket;
   readonly sessionSecret: secretsmanager.ISecret;
   readonly cognitoClientSecret: secretsmanager.ISecret;
+  readonly anthropicApiKeySecret: secretsmanager.ISecret;
   readonly apiRepository: ecr.IRepository;
   readonly userPool: cognito.IUserPool;
   readonly userPoolClient: cognito.IUserPoolClient;
@@ -119,6 +120,7 @@ export class AppStack extends cdk.Stack {
     // Manager se concede explícitamente al rol de ejecución (más arriba).
     const sessionSecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'SessionSecretRef', props.sessionSecret.secretArn);
     const cognitoClientSecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'CognitoClientSecretRef', props.cognitoClientSecret.secretArn);
+    const anthropicApiKeySecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'AnthropicApiKeySecretRef', props.anthropicApiKeySecret.secretArn);
 
     const containerPort = 3000;
     const containerProtocol = cfg.tlsToContainer ? 'https' : 'http';
@@ -164,7 +166,7 @@ export class AppStack extends cdk.Stack {
         TABLE_AUDIT: tableNames.audit.tableName,
         TABLE_USAGE: tableNames.usage.tableName,
         AWS_REGION: this.region,
-        LLM_MODE: 'bedrock',
+        LLM_MODE: cfg.llmMode,
         EFFORT: 'medium',
         MAX_TOKENS: '64000',
         THINKING_DISPLAY: 'omitted',
@@ -180,6 +182,7 @@ export class AppStack extends cdk.Stack {
       secrets: {
         SESSION_SECRET: ecs.Secret.fromSecretsManager(sessionSecretRef),
         COGNITO_CLIENT_SECRET: ecs.Secret.fromSecretsManager(cognitoClientSecretRef),
+        ...(cfg.llmMode === 'anthropic' ? { ANTHROPIC_API_KEY: ecs.Secret.fromSecretsManager(anthropicApiKeySecretRef) } : {}),
       },
     });
     // Sistema de archivos de solo lectura: /tmp escribible para Node.
@@ -354,7 +357,7 @@ export class AppStack extends cdk.Stack {
     };
 
     this.distribution = new cloudfront.Distribution(this, 'Distribution', {
-      comment: `Helixona ${stage}: interfaz Claude/Bedrock de la clínica`,
+      comment: `Helixona ${stage}: interfaz Claude de la clínica`,
       ...(cfg.domainName && cfCertificate ? { domainNames: [cfg.domainName], certificate: cfCertificate } : {}),
       minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
       sslSupportMethod: cloudfront.SSLMethod.SNI,
@@ -402,25 +405,29 @@ export class AppStack extends cdk.Stack {
     const account = this.account;
     const partition = this.partition;
 
-    // Bedrock: solo los modelos del catálogo (§6) y los perfiles de inferencia `us.` de Anthropic.
-    // Los perfiles cross-region `us.` enrutan a otras regiones de EE.UU.: hacen falta también los
-    // ARNs de foundation-model en esas regiones (`us-*`).
-    const modelArns = CATALOG_MODEL_IDS.flatMap((modelId) => [
-      `arn:${partition}:bedrock:${region}::foundation-model/${modelId}`,
-      `arn:${partition}:bedrock:us-*::foundation-model/${modelId}`,
-    ]);
-    this.taskRole.addToPolicy(
-      new iam.PolicyStatement({
-        sid: 'BedrockInvokeCatalogModels',
-        actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-        resources: [
-          ...modelArns,
-          // TODO(Mantle): a verificar para el endpoint Mantle (`bedrock-mantle`): si expone otras
-          // acciones IAM o ARNs distintos (p. ej. `bedrock:InvokeModel*` sobre perfiles propios).
-          `arn:${partition}:bedrock:${region}:${account}:inference-profile/us.anthropic.*`,
-        ],
-      }),
-    );
+    // Bedrock (solo con llmMode=bedrock): los modelos del catálogo (§6) y los perfiles de inferencia
+    // `us.` de Anthropic. Los perfiles cross-region `us.` enrutan a otras regiones de EE.UU.: hacen
+    // falta también los ARNs de foundation-model en esas regiones (`us-*`).
+    // Con llmMode=anthropic el rol NO tiene permisos de Bedrock: la app usa la Claude API con la clave
+    // de Secrets Manager (mínimo privilegio).
+    if (props.config.llmMode === 'bedrock') {
+      const modelArns = CATALOG_MODEL_IDS.flatMap((modelId) => [
+        `arn:${partition}:bedrock:${region}::foundation-model/${modelId}`,
+        `arn:${partition}:bedrock:us-*::foundation-model/${modelId}`,
+      ]);
+      this.taskRole.addToPolicy(
+        new iam.PolicyStatement({
+          sid: 'BedrockInvokeCatalogModels',
+          actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+          resources: [
+            ...modelArns,
+            // TODO(Mantle): a verificar para el endpoint Mantle (`bedrock-mantle`): si expone otras
+            // acciones IAM o ARNs distintos (p. ej. `bedrock:InvokeModel*` sobre perfiles propios).
+            `arn:${partition}:bedrock:${region}:${account}:inference-profile/us.anthropic.*`,
+          ],
+        }),
+      );
+    }
 
     const rwActions = [
       'dynamodb:GetItem',

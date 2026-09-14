@@ -17,7 +17,9 @@ export interface DeployConfig {
   readonly cloudFrontCertificateArn?: string;
   /** Prefijo del dominio de Cognito (`https://<prefijo>.auth.<region>.amazoncognito.com`). */
   readonly cognitoDomainPrefix: string;
-  /** Crear NAT Gateway (egreso a Internet para el endpoint público de Bedrock Mantle). */
+  /** Proveedor de modelos: `anthropic` (Claude API, clave en Secrets Manager) o `bedrock`. */
+  readonly llmMode: 'anthropic' | 'bedrock';
+  /** Crear NAT Gateway (egreso a Internet). Forzado a true con `llmMode=anthropic` (api.anthropic.com). */
   readonly enableNat: boolean;
   /** TLS entre ALB y contenedor (el contenedor debe servir HTTPS con certificado autofirmado). */
   readonly tlsToContainer: boolean;
@@ -71,6 +73,9 @@ export function loadConfig(app: cdk.App): DeployConfig {
     throw new Error(`Contexto "stage" inválido: "${stage}" (minúsculas, dígitos y guiones, 2-16 chars)`);
   }
   const appBaseUrl = str(app, 'appBaseUrl', 'https://chat.example-clinic.test').replace(/\/+$/, '');
+  const llmModeRaw = str(app, 'llmMode', 'anthropic');
+  if (llmModeRaw !== 'anthropic' && llmModeRaw !== 'bedrock') throw new Error(`Contexto "llmMode" inválido: "${llmModeRaw}" (anthropic | bedrock)`);
+  const llmMode = llmModeRaw as 'anthropic' | 'bedrock';
   const desiredCount = num(app, 'desiredCount', 1);
   if (desiredCount < 1 || desiredCount > 2) throw new Error('Contexto "desiredCount" debe ser 1 o 2');
   const geo = str(app, 'geoAllowCountries', '')
@@ -88,7 +93,9 @@ export function loadConfig(app: cdk.App): DeployConfig {
     certificateArn: opt(str(app, 'certificateArn')),
     cloudFrontCertificateArn: opt(str(app, 'cloudFrontCertificateArn')),
     cognitoDomainPrefix: str(app, 'cognitoDomainPrefix', `helixona-${stage}`),
-    enableNat: bool(app, 'enableNat', false),
+    llmMode,
+    // La Claude API vive en Internet: el contenedor necesita egreso (NAT). Con Bedrock puede ir por PrivateLink.
+    enableNat: bool(app, 'enableNat', false) || llmMode === 'anthropic',
     tlsToContainer: bool(app, 'tlsToContainer', false),
     imageTag: str(app, 'imageTag', 'latest'),
     desiredCount,

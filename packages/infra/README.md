@@ -95,3 +95,20 @@ aws cognito-idp admin-add-user-to-group --user-pool-id "$POOL_ID" --username adm
 2. En GitHub → Settings → Environments → `production`: añadir revisores obligatorios.
 3. En GitHub → Settings → Secrets → `AWS_DEPLOY_ROLE_ARN` = el ARN que devolvió el paso 1.
 4. Ejecutar el workflow **Deploy** (`workflow_dispatch`). El rol solo puede asumir los roles del bootstrap de CDK y publicar imágenes en los repositorios ECR `helixona-*`; no hay claves estáticas en ningún sitio.
+
+## Proveedor de modelos (`llmMode`)
+
+Por defecto `llmMode=anthropic`: la app llama a la **Claude API de Anthropic** con la clave guardada en
+Secrets Manager (`helixona-<stage>-anthropic-api-key`), el contenedor sale a Internet por NAT y el rol de la
+tarea **no** tiene permisos de Bedrock. Tras el primer despliegue del FoundationStack:
+
+1. En console.anthropic.com crea una clave de API para la organización de la clínica (nombre `helixona-prod`)
+   y ponle un límite de gasto mensual.
+2. Consola AWS → Secrets Manager → `helixona-prod-anthropic-api-key` → *Retrieve secret value* → *Edit* →
+   pega la clave como texto plano → guardar. Luego fuerza un nuevo despliegue del servicio ECS (o vuelve a
+   ejecutar el workflow) para que la tarea la lea.
+3. **Sin BAA firmado con Anthropic no puede entrar información de pacientes.** Solicítalo en
+   https://www.anthropic.com/contact-sales antes del piloto con datos reales.
+
+Con `-c llmMode=bedrock` (o la variable `LLM_MODE` del repositorio en GitHub) se vuelve a Bedrock: sin NAT,
+sin clave y con la política de Bedrock en el rol de la tarea.

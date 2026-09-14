@@ -11,6 +11,7 @@
     "certificateArn": "",
     "cloudFrontCertificateArn": "",
     "cognitoDomainPrefix": "helixona-clinica",
+    "llmMode": "anthropic",
     "enableNat": false,
     "tlsToContainer": false,
     "imageTag": "latest",

@@ -50,6 +50,7 @@ export function buildStacks(app: cdk.App, config: DeployConfig, env: cdk.Environ
     logsBucket: foundation.logsBucket,
     sessionSecret: foundation.sessionSecret,
     cognitoClientSecret: foundation.cognitoClientSecret,
+    anthropicApiKeySecret: foundation.anthropicApiKeySecret,
     apiRepository: foundation.apiRepository,
     userPool: auth.userPool,
     userPoolClient: auth.userPoolClient,

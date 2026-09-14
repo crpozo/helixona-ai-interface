@@ -84,6 +84,7 @@ jobs:
             echo "-c alertEmail=${{ vars.ALERT_EMAIL }}"
             echo "-c monthlyBudgetUsd=${{ vars.MONTHLY_BUDGET_USD || '1500' }}"
             echo "-c cloudFrontPrefixListId=${{ vars.CLOUDFRONT_PREFIX_LIST_ID }}"
+            echo "-c llmMode=${{ vars.LLM_MODE || 'anthropic' }}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
         env:

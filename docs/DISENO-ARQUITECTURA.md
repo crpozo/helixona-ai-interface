@@ -18,6 +18,10 @@ Cuatro matices que cambian el diseño respecto al pedido literal:
 3. **Hay una incógnita contractual que hay que cerrar antes de tocar PHI:** Fable 5.1 exige retención de datos de 30 días en la API de Anthropic y no está disponible bajo Zero Data Retention. En Bedrock "la retención la fija la plataforma", y no tenemos confirmación escrita de qué significa eso. El diseño deja el modelo primario como parámetro: si la respuesta no satisface al oficial de privacidad, el sistema arranca con Opus 5 y Fable se activa después sin cambiar código.
 4. **El empleado elige el modelo por conversación: Sonnet, Opus o Fable, siempre en su última versión.** Los tres corren a esfuerzo `medium`. El catálogo de modelos es configuración bajo control de cambios, no código, y cada modelo tiene su propia cadena de respaldo (sección 7b). Recomendamos Opus 5 como default del selector y medir en el piloto: Fable cuesta 5 veces Sonnet y 2 veces Opus, sus turnos pueden durar minutos y sus clasificadores cubren la categoría "bio", con falsos positivos posibles en contenido médico.
 
+### Actualización 2026-09-14: proveedor de modelos
+
+En la cuenta AWS de la clínica, Bedrock devuelve "not available for this account" para toda la familia Claude 5 (Sonnet 5, Opus 5, Fable 5.1); es una habilitación comercial por cuenta que AWS gestiona por ventas y está solicitada. Para no depender de ella, la aplicación tiene ahora un proveedor por configuración (`LLM_MODE`): `bedrock`, `anthropic` (Claude API con clave en Secrets Manager) y `claude-platform-aws`. **Decisión: arrancar con `anthropic`**, que ofrece los tres modelos hoy. Condiciones: (1) sin BAA firmado con Anthropic no entra PHI; (2) la PHI sale de la cuenta AWS hacia Anthropic bajo ese BAA y se documenta en el análisis de riesgos; (3) Fable 5.1 opera con retención de 30 días en Anthropic, cubierta por el BAA. Si AWS habilita Claude 5 en Bedrock más adelante, volver es un cambio de configuración.
+
 ## 2. Alternativas consideradas
 
 | Opción | Qué ofrece | Por qué no es la base hoy | Qué hacer |
