@@ -6,8 +6,8 @@
   },
   "context": {
     "stage": "prod",
-    "appBaseUrl": "https://chat.example-clinic.test",
-    "domainName": "",
+    "appBaseUrl": "https://ai.helixona.com",
+    "domainName": "ai.helixona.com",
     "certificateArn": "",
     "cloudFrontCertificateArn": "",
     "cognitoDomainPrefix": "helixona-clinica",
