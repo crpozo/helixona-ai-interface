@@ -24,6 +24,8 @@ const Env = z.object({
   TABLE_PROJECTS: z.string().optional(),
   AWS_REGION: z.string().optional(),
   LLM_MODE: z.enum(["bedrock", "anthropic", "claude-platform-aws", "fake"]).default("bedrock"),
+  /** Dev only: delay between simulated tokens of the fake provider (slower = easier to test streaming UI). */
+  FAKE_DELAY_MS: z.coerce.number().int().nonnegative().default(15),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_AWS_WORKSPACE_ID: z.string().optional(),
   MODEL_CATALOG_JSON: z.string().optional(),

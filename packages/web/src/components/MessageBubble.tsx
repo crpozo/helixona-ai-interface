@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { ChatMessage, Notice } from "../lib/chatReducer";
 import type { CatalogModel } from "../lib/types";
 import { modelLabel } from "../lib/models";
@@ -39,7 +39,8 @@ function errorText(code: string, fallback: string): string {
   }
 }
 
-export function MessageBubble({ message: m, models, onRetry }: Props) {
+// Memoized: while one message streams, the others must not re-render on every token.
+export const MessageBubble = memo(function MessageBubble({ message: m, models, onRetry }: Props) {
   const [showThinking, setShowThinking] = useState(false);
   const isUser = m.role === "user";
   const thinkingWhileWaiting = m.status === "pending";
@@ -122,4 +123,4 @@ export function MessageBubble({ message: m, models, onRetry }: Props) {
       )}
     </article>
   );
-}
+});

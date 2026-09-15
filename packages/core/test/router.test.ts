@@ -3,7 +3,8 @@ import { ModelRouter } from "../src/llm/router.js";
 import { FakeProvider } from "../src/llm/fake-provider.js";
 import { DEFAULT_CATALOG } from "../src/catalog.js";
 import { CircuitBreaker } from "../src/breaker.js";
-import type { LlmProvider } from "../src/llm/provider.js";
+import type { LlmProvider, StreamHandle } from "../src/llm/provider.js";
+import type { BetaMessage, BetaRawMessageStreamEvent } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { collect, conv, history, refusalFallbacks } from "./helpers.js";
 
 const mk = (extra: Partial<ConstructorParameters<typeof ModelRouter>[0]> = {}) =>
@@ -144,5 +145,53 @@ describe("ModelRouter", () => {
     const r = await p;
     expect(r.ok).toBe(false);
     expect((c.events.at(-1) as { code: string }).code).toBe("aborted");
+  });
+});
+
+/** Provider that reports the Anthropic API's bare ids (`claude-sonnet-5`) instead of the catalog's `anthropic.` ids. */
+function bareIdProvider(): LlmProvider {
+  return {
+    stream(params): StreamHandle {
+      const bare = params.model.replace(/^anthropic\./, "");
+      const usage = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+      const events = [
+        { type: "message_start", message: { id: "m", type: "message", role: "assistant", model: bare, content: [], stop_reason: null, stop_sequence: null, usage } },
+        { type: "content_block_start", index: 0, content_block: { type: "text", text: "", citations: null } },
+        { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "hola" } },
+        { type: "content_block_stop", index: 0 },
+        { type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 5 } },
+        { type: "message_stop" },
+      ] as unknown as BetaRawMessageStreamEvent[];
+      return {
+        async *[Symbol.asyncIterator]() { for (const e of events) yield e; },
+        async finalMessage() {
+          return { id: "m", type: "message", role: "assistant", model: bare, content: [{ type: "text", text: "hola", citations: null }], stop_reason: "end_turn", stop_sequence: null, usage } as unknown as BetaMessage;
+        },
+        abort() {},
+      };
+    },
+  };
+}
+
+describe("ModelRouter: provider model ids", () => {
+  it("an answer served under the API's bare id is not a fallback: no pin, catalog id in events, priced", async () => {
+    const c = collect();
+    const r = await mk({ provider: bareIdProvider() }).runTurn({ conversation: conv({ modelAlias: "sonnet" }), history, userText: "hola", systemPrompt: "s", emit: c.emit });
+    expect(r.ok).toBe(true);
+    expect(r.servedModel).toBe("anthropic.claude-sonnet-5");
+    expect(r.fallbackReason).toBeNull();
+    expect(r.pin).toBeNull();
+    expect(c.events.some((e) => e.type === "fallback")).toBe(false);
+    expect(c.events.at(-1)).toMatchObject({ type: "done", model: "anthropic.claude-sonnet-5", fallbackReason: null });
+    expect(r.usage.estimatedUsd).toBeGreaterThan(0);
+  });
+
+  it("a stale pin holding the bare id resolves to the conversation's own model and is dropped", async () => {
+    const c = collect();
+    const stale = conv({ modelAlias: "sonnet", pinnedModel: "claude-sonnet-5", pinReason: "refusal", pinnedUntil: null });
+    const r = await mk({ provider: bareIdProvider() }).runTurn({ conversation: stale, history, userText: "hola", systemPrompt: "s", emit: c.emit });
+    expect(c.events[0]).toEqual({ type: "message_start", model: "anthropic.claude-sonnet-5" });
+    expect(r.servedModel).toBe("anthropic.claude-sonnet-5");
+    expect(r.pin).toBeNull();
   });
 });

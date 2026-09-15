@@ -71,6 +71,22 @@ export const DEFAULT_CATALOG: Catalog = CatalogSchema.parse({
   ],
 });
 
+/**
+ * Maps a model id as reported by a provider back to the catalog id. The catalog uses Bedrock-style
+ * ids (`anthropic.claude-sonnet-5`); the Anthropic API reports `claude-sonnet-5` and Bedrock may
+ * report a region-prefixed inference profile (`us.anthropic.…`). Unknown ids are returned as-is.
+ */
+export function canonicalModelId(catalog: Catalog, id: string): string {
+  const known = [...catalog.models, ...catalog.fallbackModels].map((m) => m.modelId);
+  if (known.includes(id)) return id;
+  const bare = stripProviderPrefix(id);
+  return known.find((k) => stripProviderPrefix(k) === bare) ?? id;
+}
+
+function stripProviderPrefix(id: string): string {
+  return id.replace(/^(?:[a-z]{2}\.)?anthropic\./, "");
+}
+
 export function parseCatalog(json: string | undefined | null): Catalog {
   if (!json || json.trim() === "") return DEFAULT_CATALOG;
   return CatalogSchema.parse(JSON.parse(json));

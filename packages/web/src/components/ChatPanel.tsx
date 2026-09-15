@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMessage, ChatState } from "../lib/chatReducer";
 import type { AttachmentMeta, Conversation, Me } from "../lib/types";
 import { modelLabel } from "../lib/models";
@@ -18,18 +18,53 @@ interface Props {
   onOpenProject?: () => void;
 }
 
+/** Distance from the bottom (px) under which the reader counts as "at the bottom". */
+const FOLLOW_THRESHOLD = 48;
+
 export function ChatPanel({ me, conversation, projectName, state, loading, onSend, onStop, onRetry, onChangeModel, onOpenProject }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
+  // Follow mode keeps the newest text in view only while the reader is at the bottom. Scrolling up
+  // during streaming switches it off (no forced jumps, no flicker); scrolling back down, sending a
+  // message or opening another conversation switches it on again.
+  const followRef = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
   const models = me.catalog.models;
   const available = models.filter((m) => m.available !== false);
-  const lastText = state.messages[state.messages.length - 1]?.text.length ?? 0;
+  const last = state.messages[state.messages.length - 1];
+  const count = state.messages.length;
+  const lastText = last?.text.length ?? 0;
+  const lastRole = last?.role ?? null;
 
-  useEffect(() => {
+  const scrollToBottom = useCallback(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, []);
+  const follow = useCallback(() => {
+    followRef.current = true;
+    setAtBottom(true);
+    scrollToBottom();
+  }, [scrollToBottom]);
+
+  const onScroll = () => {
     const el = listRef.current;
     if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
-    if (nearBottom || state.streaming) el.scrollTop = el.scrollHeight;
-  }, [state.messages.length, lastText, state.streaming]);
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_THRESHOLD;
+    followRef.current = near;
+    setAtBottom((prev) => (prev === near ? prev : near));
+  };
+
+  // Another conversation, or its messages just loaded: start at the bottom.
+  useEffect(() => {
+    if (!loading) follow();
+  }, [conversation.id, loading, follow]);
+  // The reader's own message: always show it.
+  useEffect(() => {
+    if (lastRole === "user") follow();
+  }, [count, lastRole, follow]);
+  // Streaming text: follow only while the reader stays at the bottom.
+  useEffect(() => {
+    if (followRef.current) scrollToBottom();
+  }, [count, lastText, state.streaming, scrollToBottom]);
 
   const activeModel = conversation.pinnedModel ?? conversation.modelId;
 
@@ -72,18 +107,25 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
         )}
       </header>
 
-      <div className="chat-list" ref={listRef} role="log" aria-live="polite" aria-busy={loading || state.streaming}>
-        {loading ? (
-          <p className="muted center">Loading conversation…</p>
-        ) : state.messages.length === 0 ? (
-          <p className="muted center">Type your first message to get started.</p>
-        ) : (
-          state.messages.map((m) => <MessageBubble key={m.id} message={m} models={models} onRetry={onRetry} />)
-        )}
-        {state.transportError && !state.messages.some((m) => m.error) && (
-          <p className="notice notice-error" role="alert">
-            {state.transportError}
-          </p>
+      <div className="chat-body">
+        <div className="chat-list" ref={listRef} onScroll={onScroll} role="log" aria-live="polite" aria-busy={loading || state.streaming}>
+          {loading ? (
+            <p className="muted center">Loading conversation…</p>
+          ) : state.messages.length === 0 ? (
+            <p className="muted center">Type your first message to get started.</p>
+          ) : (
+            state.messages.map((m) => <MessageBubble key={m.id} message={m} models={models} onRetry={onRetry} />)
+          )}
+          {state.transportError && !state.messages.some((m) => m.error) && (
+            <p className="notice notice-error" role="alert">
+              {state.transportError}
+            </p>
+          )}
+        </div>
+        {!atBottom && count > 0 && (
+          <button type="button" className="jump-latest" onClick={follow} aria-label="Jump to the latest message">
+            ↓ {state.streaming ? "New text" : "Latest"}
+          </button>
         )}
       </div>
 

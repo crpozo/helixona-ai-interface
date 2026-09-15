@@ -3,8 +3,14 @@ import type { CatalogModel } from "./types";
 /** Nombre legible de un modelo a partir de su id de Bedrock; si no está en el catálogo, el id. */
 export function modelLabel(models: CatalogModel[] | undefined, modelId: string | null | undefined): string {
   if (!modelId) return "";
-  const m = models?.find((x) => x.modelId === modelId);
+  // Messages stored before ids were normalized carry the API's bare id (`claude-sonnet-5`).
+  const bare = stripPrefix(modelId);
+  const m = models?.find((x) => x.modelId === modelId) ?? models?.find((x) => stripPrefix(x.modelId) === bare);
   return m ? m.label : modelId;
+}
+
+function stripPrefix(id: string): string {
+  return id.replace(/^(?:[a-z]{2}\.)?anthropic\./, "");
 }
 
 export function modelLabelByAlias(models: CatalogModel[] | undefined, alias: string): string {

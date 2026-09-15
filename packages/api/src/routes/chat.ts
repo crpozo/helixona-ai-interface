@@ -139,7 +139,10 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
         await deps.repos.conversations.update(userId, id, {
           messageCount: seq + 2,
           lastInputTokens: result.usage.inputTokens + result.usage.cacheReadTokens + result.usage.cacheWriteTokens + result.usage.outputTokens,
-          ...(result.pin ? { pinnedModel: result.pin.model, pinReason: result.pin.reason, pinnedUntil: result.pin.until } : {}),
+          // No pin means the conversation's own model answered: clear any earlier pin (expired or stale).
+          pinnedModel: result.pin?.model ?? null,
+          pinReason: result.pin?.reason ?? null,
+          pinnedUntil: result.pin?.until ?? null,
         });
         await deps.repos.usage.add(userId, day, result.servedModel, result.usage);
         await audit(deps, req, { action: "turn", conversationId: id, model: result.requestedModel, servedBy: result.servedModel, fallbackReason: result.fallbackReason ?? undefined, stopReason: result.stopReason ?? undefined, usage: result.usage, latencyMs });

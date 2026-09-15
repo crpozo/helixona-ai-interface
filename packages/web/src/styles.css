@@ -625,13 +625,42 @@ label {
   white-space: nowrap;
   max-width: 100%;
 }
+.chat-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .chat-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  /* The panel manages its own scroll position; browser scroll anchoring would fight it while streaming. */
+  overflow-anchor: none;
   padding: 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
+}
+.jump-latest {
+  position: absolute;
+  left: 50%;
+  bottom: 0.75rem;
+  transform: translateX(-50%);
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--brand-line-gold);
+  background: var(--surface-2);
+  color: var(--brand-primary);
+  font: inherit;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  box-shadow: var(--brand-shadow);
+}
+.jump-latest:hover {
+  color: var(--brand-accent-soft);
 }
 
 .msg {

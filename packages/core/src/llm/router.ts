@@ -1,5 +1,5 @@
 import type { BetaContentBlock, BetaContentBlockParam, BetaMessageParam, BetaTextBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
-import { estimateUsd, modelByAlias, type Catalog, type CatalogModel } from "../catalog.js";
+import { canonicalModelId, estimateUsd, modelByAlias, type Catalog, type CatalogModel } from "../catalog.js";
 import { CircuitBreaker } from "../breaker.js";
 import { classifyError, FirstEventTimeoutError, type ClassifiedError } from "../errors.js";
 import { toMessageParams } from "../history.js";
@@ -73,7 +73,8 @@ export class ModelRouter {
     let model = conv.modelId;
     if (conv.pinnedModel) {
       const pinActive = conv.pinReason === "refusal" || !conv.pinnedUntil || new Date(conv.pinnedUntil).getTime() > this.now().getTime();
-      if (pinActive) model = conv.pinnedModel;
+      // Pins written before provider ids were normalized may hold the bare API id.
+      if (pinActive) model = canonicalModelId(this.opts.catalog, conv.pinnedModel);
     }
     if (this.breaker.isOpen(model)) {
       const alt = entry.availabilityFallbacks.find((id) => id !== model && !this.breaker.isOpen(id));
@@ -128,18 +129,21 @@ export class ModelRouter {
         for await (const ev of stream) {
           if (timer) { clearTimeout(timer); timer = null; }
           if (ev.type === "message_start") {
-            if (ev.message.model && ev.message.model !== currentModel && !refusalFallback) {
+            // The API reports its own id (`claude-sonnet-5`); compare on catalog ids or every turn looks like a fallback.
+            const reported = ev.message.model ? canonicalModelId(this.opts.catalog, ev.message.model) : null;
+            if (reported && reported !== currentModel && !refusalFallback) {
               // El middleware ya cambió de modelo antes de cualquier salida.
               refusalFallback = true;
-              input.emit({ type: "fallback", from: currentModel, to: ev.message.model, reason: "refusal" });
-              currentModel = ev.message.model;
+              input.emit({ type: "fallback", from: currentModel, to: reported, reason: "refusal" });
+              currentModel = reported;
             }
           } else if (ev.type === "content_block_start" && (ev.content_block as { type: string }).type === "fallback") {
             const fb = ev.content_block as unknown as { from: { model: string }; to: { model: string } };
-            if (fb.to?.model && fb.to.model !== currentModel) {
+            const to = fb.to?.model ? canonicalModelId(this.opts.catalog, fb.to.model) : null;
+            if (to && to !== currentModel) {
               refusalFallback = true;
-              input.emit({ type: "fallback", from: fb.from?.model ?? currentModel, to: fb.to.model, reason: "refusal" });
-              currentModel = fb.to.model;
+              input.emit({ type: "fallback", from: fb.from?.model ? canonicalModelId(this.opts.catalog, fb.from.model) : currentModel, to, reason: "refusal" });
+              currentModel = to;
             }
           } else if (ev.type === "content_block_delta") {
             if (ev.delta.type === "text_delta") { emittedChars += ev.delta.text.length; input.emit({ type: "text_delta", text: ev.delta.text }); }
@@ -157,7 +161,7 @@ export class ModelRouter {
           return { ok: false, requestedModel: startModel, servedModel: null, content: [], stopReason: "refusal", refusalCategory: category, usage: EMPTY_USAGE, fallbackReason: null, pin: null, latencyMs, partial: emittedChars > 0, error: null };
         }
 
-        const servedModel = final.model || currentModel;
+        const servedModel = final.model ? canonicalModelId(this.opts.catalog, final.model) : currentModel;
         const iterFallback = (final.usage?.iterations ?? []).some((i) => (i as { type: string }).type === "fallback_message");
         const hadFallback = refusalFallback || iterFallback || servedModel !== model;
         const fallbackReason: PinReason | null = hadFallback ? "refusal" : availabilitySwitch;
