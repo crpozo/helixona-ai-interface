@@ -23,7 +23,7 @@ export function LoginPage({ onDevLoggedIn, reason }: Props) {
       await devLogin(username.trim(), role);
       onDevLoggedIn();
     } catch (err) {
-      setError(err instanceof ApiError ? `No se pudo iniciar sesión (${err.code}).` : "No se pudo iniciar sesión.");
+      setError(err instanceof ApiError ? `Could not sign in (${err.code}).` : "Could not sign in.");
     } finally {
       setBusy(false);
     }
@@ -34,23 +34,23 @@ export function LoginPage({ onDevLoggedIn, reason }: Props) {
       <div className="login-card">
         <div className="login-logo"><Logo variant="login" /></div>
         <h1>{brand.productName}</h1>
-        <p className="muted">Acceso exclusivo para personal autorizado. Inicia sesión con tu cuenta corporativa.</p>
+        <p className="muted">Restricted to authorized staff. Sign in with your work account.</p>
         {reason && (
           <p className="notice" role="status">
             {reason}
           </p>
         )}
         <a href="/api/auth/login" className="btn btn-primary block">
-          Iniciar sesión
+          Sign in
         </a>
 
         {import.meta.env.DEV && (
           <form className="dev-login" onSubmit={submitDev}>
-            <h2>Acceso de desarrollo</h2>
-            <p className="muted small">Solo disponible cuando la API corre con AUTH_MODE=dev.</p>
-            <label htmlFor="dev-username">Usuario</label>
+            <h2>Developer access</h2>
+            <p className="muted small">Only available when the API is running with AUTH_MODE=dev.</p>
+            <label htmlFor="dev-username">Username</label>
             <input id="dev-username" value={username} onChange={(e) => setUsername(e.target.value)} required autoComplete="off" />
-            <label htmlFor="dev-role">Rol</label>
+            <label htmlFor="dev-role">Role</label>
             <select id="dev-role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
               <option value="staff">staff</option>
               <option value="admin">admin</option>
@@ -61,7 +61,7 @@ export function LoginPage({ onDevLoggedIn, reason }: Props) {
               </p>
             )}
             <button type="submit" className="btn" disabled={busy || !username.trim()}>
-              {busy ? "Entrando…" : "Entrar (dev)"}
+              {busy ? "Signing in…" : "Sign in (dev)"}
             </button>
           </form>
         )}

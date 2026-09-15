@@ -24,12 +24,12 @@ export function ModelSelector({ models, defaultAlias, busy = false, onConfirm, o
         if (alias) onConfirm(alias);
       }}
     >
-      <h2 id={`${groupId}-title`}>Nueva conversación</h2>
+      <h2 id={`${groupId}-title`}>New conversation</h2>
       <p className="muted">
-        Elige el modelo. Queda fijo para toda la conversación; el costo relativo se muestra respecto al más económico.
+        Choose a model. It stays fixed for the entire conversation; relative cost is shown against the least expensive option.
       </p>
       <fieldset className="model-options" aria-labelledby={`${groupId}-title`}>
-        <legend className="visually-hidden">Modelo</legend>
+        <legend className="visually-hidden">Model</legend>
         {available.map((m) => {
           const id = `${groupId}-${m.alias}`;
           return (
@@ -45,7 +45,7 @@ export function ModelSelector({ models, defaultAlias, busy = false, onConfirm, o
               <span className="model-option-body">
                 <span className="model-option-head">
                   <span className="model-option-label">{m.label}</span>
-                  <span className="badge badge-cost" aria-label={`Costo relativo ${formatCostFactor(m.costFactor)}`}>
+                  <span className="badge badge-cost" aria-label={`Relative cost ${formatCostFactor(m.costFactor)}`}>
                     {formatCostFactor(m.costFactor)}
                   </span>
                 </span>
@@ -54,15 +54,15 @@ export function ModelSelector({ models, defaultAlias, busy = false, onConfirm, o
             </label>
           );
         })}
-        {available.length === 0 && <p role="alert">No hay modelos disponibles para tu rol.</p>}
+        {available.length === 0 && <p role="alert">No models are available for your role.</p>}
       </fieldset>
       <div className="row gap">
         <button type="submit" className="btn btn-primary" disabled={busy || !alias}>
-          {busy ? "Creando…" : "Empezar"}
+          {busy ? "Creating…" : "Start"}
         </button>
         {onCancel && (
           <button type="button" className="btn" onClick={onCancel} disabled={busy}>
-            Cancelar
+            Cancel
           </button>
         )}
       </div>

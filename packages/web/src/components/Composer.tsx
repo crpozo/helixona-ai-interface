@@ -38,14 +38,14 @@ export function Composer({ maxChars, streaming, disabled = false, onSend, onStop
       }}
     >
       <label htmlFor="composer-text" className="visually-hidden">
-        Mensaje
+        Message
       </label>
       <textarea
         id="composer-text"
         ref={ref}
         value={text}
         rows={1}
-        placeholder="Escribe tu mensaje… (Enter envía, Shift+Enter salto de línea)"
+        placeholder="Type your message… (Enter to send, Shift+Enter for a new line)"
         disabled={disabled}
         aria-invalid={over || undefined}
         aria-describedby="composer-counter"
@@ -59,16 +59,16 @@ export function Composer({ maxChars, streaming, disabled = false, onSend, onStop
       />
       <div className="composer-bar">
         <span id="composer-counter" className={`counter${over ? " over" : ""}`} aria-live="polite">
-          {text.length.toLocaleString("es")} / {maxChars.toLocaleString("es")}
+          {text.length.toLocaleString("en-US")} / {maxChars.toLocaleString("en-US")}
         </span>
         <div className="row gap">
           {streaming && (
             <button type="button" className="btn btn-danger" onClick={onStop}>
-              Detener
+              Stop
             </button>
           )}
           <button type="submit" className="btn btn-primary" disabled={!canSend}>
-            Enviar
+            Send
           </button>
         </div>
       </div>

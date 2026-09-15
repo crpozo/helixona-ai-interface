@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { SseParser, readSseStream } from "./sse";
 
 describe("SseParser", () => {
-  it("parsea un evento completo", () => {
+  it("parses a complete event", () => {
     const p = new SseParser();
     const evs = p.feed('event: text_delta\ndata: {"text":"hola"}\n\n');
     expect(evs).toEqual([{ event: "text_delta", data: '{"text":"hola"}' }]);
   });
 
-  it("une eventos partidos entre chunks", () => {
+  it("joins events split across chunks", () => {
     const p = new SseParser();
     expect(p.feed("event: text_de")).toEqual([]);
     expect(p.feed('lta\ndata: {"te')).toEqual([]);
@@ -18,7 +18,7 @@ describe("SseParser", () => {
     expect(p.feed("\n")).toEqual([{ event: "done", data: "{}" }]);
   });
 
-  it("ignora comentarios (ping) y no rompe el búfer", () => {
+  it("ignores comments (ping) without breaking the buffer", () => {
     const p = new SseParser();
     expect(p.feed(": ping\n\n")).toEqual([]);
     expect(p.feed(': ping\nevent: text_delta\ndata: {"text":"a"}\n\n: otro\n')).toEqual([
@@ -26,7 +26,7 @@ describe("SseParser", () => {
     ]);
   });
 
-  it("devuelve varios eventos de un mismo chunk, en orden", () => {
+  it("returns several events from a single chunk, in order", () => {
     const p = new SseParser();
     const evs = p.feed(
       'event: message_start\ndata: {"model":"m"}\n\nevent: text_delta\ndata: {"text":"1"}\n\nevent: text_delta\ndata: {"text":"2"}\n\n',
@@ -35,24 +35,24 @@ describe("SseParser", () => {
     expect(evs[2]?.data).toBe('{"text":"2"}');
   });
 
-  it("soporta CRLF y data multilínea", () => {
+  it("supports CRLF and multi-line data", () => {
     const p = new SseParser();
     const evs = p.feed("event: x\r\ndata: a\r\ndata: b\r\n\r\n");
     expect(evs).toEqual([{ event: "x", data: "a\nb" }]);
   });
 
-  it("no corta un CR final que podría ser CRLF", () => {
+  it("does not split a trailing CR that could be CRLF", () => {
     const p = new SseParser();
     expect(p.feed("event: x\r")).toEqual([]);
     expect(p.feed("\ndata: y\r\n\r\n")).toEqual([{ event: "x", data: "y" }]);
   });
 
-  it("usa 'message' cuando no hay campo event y respeta id", () => {
+  it("uses 'message' when there is no event field and honors id", () => {
     const p = new SseParser();
     expect(p.feed("id: 7\ndata: z\n\n")).toEqual([{ event: "message", data: "z", id: "7" }]);
   });
 
-  it("end() vacía un evento pendiente sin línea en blanco final", () => {
+  it("end() flushes a pending event without a trailing blank line", () => {
     const p = new SseParser();
     expect(p.feed("event: done\ndata: {}")).toEqual([]);
     expect(p.end()).toEqual([{ event: "done", data: "{}" }]);
@@ -60,8 +60,8 @@ describe("SseParser", () => {
 });
 
 describe("readSseStream", () => {
-  it("lee un ReadableStream troceado byte a byte (incluido UTF-8 multibyte)", async () => {
-    const text = 'event: text_delta\ndata: {"text":"canción"}\n\nevent: done\ndata: {}\n\n';
+  it("reads a ReadableStream chunked byte by byte (including multibyte UTF-8)", async () => {
+    const text = 'event: text_delta\ndata: {"text":"naïve ☕"}\n\nevent: done\ndata: {}\n\n';
     const bytes = new TextEncoder().encode(text);
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -72,7 +72,7 @@ describe("readSseStream", () => {
     const out = [];
     for await (const ev of readSseStream(stream)) out.push(ev);
     expect(out).toEqual([
-      { event: "text_delta", data: '{"text":"canción"}' },
+      { event: "text_delta", data: '{"text":"naïve ☕"}' },
       { event: "done", data: "{}" },
     ]);
   });

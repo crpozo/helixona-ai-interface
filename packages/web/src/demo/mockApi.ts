@@ -5,10 +5,10 @@
 import type { AdminUser, AuditEvent, Conversation, Me, Message, UsageRow } from "../lib/types";
 
 const MODELS = [
-  { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet", description: "Rápido y económico: traducciones, cartas, resúmenes cortos", costFactor: 1, available: true },
-  { alias: "opus", modelId: "anthropic.claude-opus-5", label: "Opus", description: "Equilibrio recomendado para el trabajo diario", costFactor: 2.5, available: true },
-  { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable", description: "Máxima capacidad para tareas difíciles y documentos largos (más lento y costoso)", costFactor: 5, available: true },
-  { alias: "anthropic.claude-opus-4-8", modelId: "anthropic.claude-opus-4-8", label: "Opus 4.8", description: "Solo como respaldo", costFactor: 0, available: false },
+  { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, available: true },
+  { alias: "opus", modelId: "anthropic.claude-opus-5", label: "Opus", description: "Recommended balance for everyday work", costFactor: 2.5, available: true },
+  { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, available: true },
+  { alias: "anthropic.claude-opus-4-8", modelId: "anthropic.claude-opus-4-8", label: "Opus 4.8", description: "Fallback only", costFactor: 0, available: false },
 ];
 const PRICES: Record<string, [number, number]> = { "anthropic.claude-sonnet-5": [2, 10], "anthropic.claude-opus-5": [5, 25], "anthropic.claude-fable-5-1": [10, 50], "anthropic.claude-opus-4-8": [5, 25] };
 const FALLBACK: Record<string, string | undefined> = { "anthropic.claude-fable-5-1": "anthropic.claude-opus-5", "anthropic.claude-opus-5": "anthropic.claude-opus-4-8" };
@@ -23,7 +23,7 @@ const state = {
   loggedIn: true,
   conversations: [] as Conv[],
   users: [
-    { id: "u-ana", email: "ana@helixona.com", name: "Ana Pérez", role: "admin", enabled: true, createdAt: "2026-09-01T14:00:00Z" },
+    { id: "u-ana", email: "ana@helixona.com", name: "Ana Perez", role: "admin", enabled: true, createdAt: "2026-09-01T14:00:00Z" },
     { id: "u-luis", email: "luis@helixona.com", name: "Luis Romero", role: "staff", enabled: true, createdAt: "2026-09-02T15:30:00Z" },
     { id: "u-marta", email: "marta@helixona.com", name: "Marta Gil", role: "staff", enabled: false, createdAt: "2026-09-03T09:10:00Z" },
   ] as AdminUser[],
@@ -33,20 +33,20 @@ const state = {
 
 function seed() {
   const c1: Conv = {
-    id: id(), title: "Ejemplo · carta de recordatorio", modelAlias: "opus", modelId: "anthropic.claude-opus-5", pinnedModel: null, pinReason: null,
+    id: id(), title: "Sample · appointment reminder letter", modelAlias: "opus", modelId: "anthropic.claude-opus-5", pinnedModel: null, pinReason: null,
     createdAt: "2026-09-12T14:02:00Z", updatedAt: "2026-09-12T14:05:00Z", messageCount: 2, messages: [],
   };
   c1.messages.push(
-    { id: id(), role: "user", content: [{ type: "text", text: "Redacta una carta breve para recordar a un paciente su cita de seguimiento del próximo martes a las 10:00 y pedirle que traiga sus últimos análisis." }], model: null, fallbackReason: null, stopReason: null, usage: null, createdAt: "2026-09-12T14:02:10Z" },
-    { id: id(), role: "assistant", content: [{ type: "text", text: "**Asunto: Recordatorio de cita de seguimiento**\n\nEstimado/a paciente:\n\nLe recordamos que tiene una cita de seguimiento el **martes a las 10:00** en nuestra clínica. Le pedimos que traiga sus **últimos análisis de laboratorio** para revisarlos durante la consulta.\n\nSi necesita cambiar la fecha, puede llamarnos y con gusto le ayudaremos.\n\nAtentamente,\nEquipo de Helixona\n\n---\n*Revisa el nombre del paciente y la fecha antes de enviar.*" }], model: "anthropic.claude-opus-5", fallbackReason: null, stopReason: "end_turn", usage: { inputTokens: 812, outputTokens: 190, cacheReadTokens: 640, cacheWriteTokens: 0, estimatedUsd: 0.0089 }, createdAt: "2026-09-12T14:02:24Z" },
+    { id: id(), role: "user", content: [{ type: "text", text: "Write a short letter reminding a patient of their follow-up appointment next Tuesday at 10:00 AM and asking them to bring their latest lab results." }], model: null, fallbackReason: null, stopReason: null, usage: null, createdAt: "2026-09-12T14:02:10Z" },
+    { id: id(), role: "assistant", content: [{ type: "text", text: "**Subject: Follow-up appointment reminder**\n\nDear patient,\n\nThis is a reminder that you have a follow-up appointment on **Tuesday at 10:00 AM** at our clinic. Please bring your **most recent lab results** so we can review them during your visit.\n\nIf you need to reschedule, please call us and we will be happy to help.\n\nSincerely,\nThe Helixona Team\n\n---\n*Check the patient's name and the date before sending.*" }], model: "anthropic.claude-opus-5", fallbackReason: null, stopReason: "end_turn", usage: { inputTokens: 812, outputTokens: 190, cacheReadTokens: 640, cacheWriteTokens: 0, estimatedUsd: 0.0089 }, createdAt: "2026-09-12T14:02:24Z" },
   );
   const c2: Conv = {
-    id: id(), title: "Ejemplo · traducción ES/EN", modelAlias: "sonnet", modelId: "anthropic.claude-sonnet-5", pinnedModel: null, pinReason: null,
+    id: id(), title: "Sample · plain-language instructions", modelAlias: "sonnet", modelId: "anthropic.claude-sonnet-5", pinnedModel: null, pinReason: null,
     createdAt: "2026-09-11T20:40:00Z", updatedAt: "2026-09-11T20:41:00Z", messageCount: 2, messages: [],
   };
   c2.messages.push(
-    { id: id(), role: "user", content: [{ type: "text", text: "Traduce al inglés: \"Tome el medicamento con alimentos, una vez al día, durante 14 días. Si presenta mareos, suspenda y contacte a la clínica.\"" }], model: null, fallbackReason: null, stopReason: null, usage: null, createdAt: "2026-09-11T20:40:05Z" },
-    { id: id(), role: "assistant", content: [{ type: "text", text: "\"Take the medication with food, once a day, for 14 days. If you experience dizziness, stop taking it and contact the clinic.\"" }], model: "anthropic.claude-sonnet-5", fallbackReason: null, stopReason: "end_turn", usage: { inputTokens: 740, outputTokens: 42, cacheReadTokens: 600, cacheWriteTokens: 0, estimatedUsd: 0.0007 }, createdAt: "2026-09-11T20:40:09Z" },
+    { id: id(), role: "user", content: [{ type: "text", text: "Rewrite these instructions in plain language for a patient: \"Take the medication with food, once daily, for 14 days. Discontinue and contact the clinic if dizziness occurs.\"" }], model: null, fallbackReason: null, stopReason: null, usage: null, createdAt: "2026-09-11T20:40:05Z" },
+    { id: id(), role: "assistant", content: [{ type: "text", text: "\"Take your medicine with food once a day for 14 days. If you feel dizzy, stop taking it and call the clinic.\"" }], model: "anthropic.claude-sonnet-5", fallbackReason: null, stopReason: "end_turn", usage: { inputTokens: 740, outputTokens: 42, cacheReadTokens: 600, cacheWriteTokens: 0, estimatedUsd: 0.0007 }, createdAt: "2026-09-11T20:40:09Z" },
   );
   state.conversations.push(c1, c2);
   state.usage.push({ userId: "u-ana", day: today(), turns: 14, inputTokens: 21040, outputTokens: 5120, estimatedUsd: 0.31, byModel: { "anthropic.claude-opus-5": { turns: 9, estimatedUsd: 0.22 }, "anthropic.claude-sonnet-5": { turns: 5, estimatedUsd: 0.09 } } });
@@ -61,7 +61,7 @@ function error(status: number, code: string, message: string): Response { return
 
 function me(): Me {
   return {
-    user: { id: "u-ana", email: "ana@helixona.com", name: "Ana Pérez", roles: ["staff", "admin"] },
+    user: { id: "u-ana", email: "ana@helixona.com", name: "Ana Perez", roles: ["staff", "admin"] },
     session: { expiresAt: new Date(Date.now() + 12 * 3600_000).toISOString(), idleTimeoutSeconds: 900 },
     catalog: { defaultAlias: "opus", effort: "medium", models: MODELS },
     limits: { maxMessageChars: 20000, contextLimitTokens: 150000 },
@@ -73,10 +73,10 @@ function publicConv(c: Conv): Conversation { const { messages: _m, ...rest } = c
 function reply(userText: string, model: string): string {
   const t = userText.replace(/^\/\S+\s*/, "").trim();
   const label = MODELS.find((m) => m.modelId === model)?.label ?? model;
-  if (/traduc/i.test(t)) return `**Traducción**\n\n"${t.replace(/^traduce (al inglés|al español)?:?\s*/i, "").replace(/^"|"$/g, "")}"\n\n*(Respuesta de ejemplo generada por la vista previa, modelo ${label}.)*`;
-  if (/carta|correo|mensaje/i.test(t)) return `**Borrador**\n\nEstimado/a paciente:\n\n${t.length > 20 ? "Le escribimos en relación con su solicitud. " : ""}Quedamos a su disposición para cualquier consulta.\n\nAtentamente,\nEquipo de Helixona\n\n---\n*Revisa los datos antes de enviar. Respuesta de ejemplo (${label}).*`;
-  if (/resum/i.test(t)) return `**Resumen**\n\n- Punto principal del texto recibido.\n- Segundo punto relevante.\n- Acción sugerida para el equipo.\n\n*Respuesta de ejemplo (${label}).*`;
-  return `Esta es una **vista previa** de la interfaz: no hay conexión con Bedrock y las respuestas son de ejemplo.\n\nRecibí tu mensaje (${t.length} caracteres) y lo habría procesado con **${label}** a esfuerzo \`medium\`.\n\nPrueba escribiendo al inicio del mensaje:\n\n- \`/refuse\` para ver un rechazo del clasificador con continuación en el modelo de respaldo\n- \`/refuse-all\` para ver un rechazo de toda la cadena\n- \`/throttle\` para ver un cambio por indisponibilidad\n- \`/long\` para ver una respuesta truncada`;
+  if (/translat/i.test(t)) return `**Translation**\n\n"${t.replace(/^translate (?:(?:into|to) \w+)?:?\s*/i, "").replace(/^"|"$/g, "")}"\n\n*(Sample response generated by the preview, model ${label}.)*`;
+  if (/letter|email|message/i.test(t)) return `**Draft**\n\nDear patient,\n\n${t.length > 20 ? "We are writing to you regarding your request. " : ""}Please do not hesitate to contact us with any questions.\n\nSincerely,\nThe Helixona Team\n\n---\n*Check the details before sending. Sample response (${label}).*`;
+  if (/summar/i.test(t)) return `**Summary**\n\n- Main point of the text provided.\n- Second relevant point.\n- Suggested action for the team.\n\n*Sample response (${label}).*`;
+  return `This is a **preview** of the interface: there is no connection to Bedrock and the responses are samples.\n\nI received your message (${t.length} characters) and would have processed it with **${label}** at \`medium\` effort.\n\nTry starting your message with:\n\n- \`/refuse\` to see a classifier refusal continued by the fallback model\n- \`/refuse-all\` to see a refusal across the entire model chain\n- \`/throttle\` to see a switch due to unavailability\n- \`/long\` to see a truncated response`;
 }
 
 function sse(conv: Conv, text: string, signal: AbortSignal | null | undefined): Response {
@@ -96,7 +96,7 @@ function sse(conv: Conv, text: string, signal: AbortSignal | null | undefined): 
         if (cmd === "refuse-all") { send("refused", { category: "bio" }); controller.close(); return; }
         if (cmd === "throttle") {
           const to = FALLBACK[model];
-          if (!to) { send("error", { code: "model_unavailable", message: "El modelo no está disponible en este momento", retryable: true, partial: false }); controller.close(); return; }
+          if (!to) { send("error", { code: "model_unavailable", message: "The model is currently unavailable", retryable: true, partial: false }); controller.close(); return; }
           send("model_switched", { from: model, to, reason: "availability" }); model = to; fallbackReason = "availability"; await sleep(300);
         }
         if (cmd === "refuse") {
@@ -139,22 +139,22 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
   if (path === "/api/health") return json({ ok: true, version: "demo" });
   if (path === "/api/auth/dev-login" && method === "POST") { state.loggedIn = true; return json({ ok: true }); }
   if (path === "/api/auth/logout" && method === "POST") { state.loggedIn = false; return json({ logoutUrl: "#/login" }); }
-  if (!state.loggedIn) return error(401, "unauthenticated", "Inicia sesión para continuar");
+  if (!state.loggedIn) return error(401, "unauthenticated", "Sign in to continue");
   if (path === "/api/me") return json(me());
   if (path === "/api/conversations" && method === "GET") return json({ items: [...state.conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(publicConv) });
   if (path === "/api/conversations" && method === "POST") {
     const m = MODELS.find((x) => x.alias === body["modelAlias"]);
-    if (!m) return error(400, "unknown_model", "Modelo no disponible");
-    const f = new Intl.DateTimeFormat("es", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-    const c: Conv = { id: id(), title: `Conversación ${f.format(new Date())}`, modelAlias: m.alias, modelId: m.modelId, pinnedModel: null, pinReason: null, createdAt: now(), updatedAt: now(), messageCount: 0, messages: [] };
+    if (!m) return error(400, "unknown_model", "Model not available");
+    const f = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    const c: Conv = { id: id(), title: `Conversation ${f.format(new Date())}`, modelAlias: m.alias, modelId: m.modelId, pinnedModel: null, pinReason: null, createdAt: now(), updatedAt: now(), messageCount: 0, messages: [] };
     state.conversations.push(c);
     return json(publicConv(c), 201);
   }
   const mConv = path.match(/^\/api\/conversations\/([^/]+)(\/messages)?$/);
   if (mConv) {
     const c = state.conversations.find((x) => x.id === mConv[1]);
-    if (!c) return error(404, "not_found", "Conversación no encontrada");
-    if (mConv[2] && method === "POST") { const text = String(body["text"] ?? ""); if (!text) return error(400, "bad_request", "Solicitud inválida"); return sse(c, text, init?.signal); }
+    if (!c) return error(404, "not_found", "Conversation not found");
+    if (mConv[2] && method === "POST") { const text = String(body["text"] ?? ""); if (!text) return error(400, "bad_request", "Invalid request"); return sse(c, text, init?.signal); }
     if (method === "GET") return json({ conversation: publicConv(c), messages: c.messages });
     if (method === "PATCH") { c.title = String(body["title"] ?? c.title).slice(0, 80); c.updatedAt = now(); return json(publicConv(c)); }
     if (method === "DELETE") { state.conversations = state.conversations.filter((x) => x.id !== c.id); return new Response(null, { status: 204 }); }
@@ -165,7 +165,7 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
   if (mUser && method === "POST") { const u = state.users.find((x) => x.id === mUser[1]); if (u) u.enabled = mUser[2] === "enable"; return json({ ok: true }); }
   if (path === "/api/admin/usage") return json({ items: state.usage.filter((u) => u.day === (url.searchParams.get("day") ?? today())) });
   if (path === "/api/admin/audit") return json({ items: state.audit });
-  return error(404, "not_found", "Recurso no encontrado");
+  return error(404, "not_found", "Resource not found");
 }
 
 export function installMockApi(): void {
@@ -180,6 +180,6 @@ export function installMockApi(): void {
   const banner = document.createElement("div");
   banner.className = "demo-banner";
   banner.setAttribute("role", "note");
-  banner.textContent = "Vista previa con datos de ejemplo · sin conexión a Bedrock ni a Cognito";
+  banner.textContent = "Preview with sample data · not connected to Bedrock or Cognito";
   document.body.prepend(banner);
 }

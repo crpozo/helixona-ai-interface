@@ -16,16 +16,16 @@ export function IdleWarning({ secondsLeft, onContinue, onLogout }: Props) {
   return (
     <div className="modal-backdrop" role="presentation">
       <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="idle-title" aria-describedby="idle-desc">
-        <h2 id="idle-title">Tu sesión se cerrará por inactividad</h2>
+        <h2 id="idle-title">Your session is about to expire due to inactivity</h2>
         <p id="idle-desc">
-          Se cerrará en <strong aria-live="polite">{mm}:{ss}</strong>. ¿Quieres continuar?
+          You will be signed out in <strong aria-live="polite">{mm}:{ss}</strong>. Do you want to stay signed in?
         </p>
         <div className="row gap">
           <button ref={btnRef} type="button" className="btn btn-primary" onClick={onContinue}>
-            Seguir conectado
+            Stay signed in
           </button>
           <button type="button" className="btn" onClick={onLogout}>
-            Cerrar sesión ahora
+            Sign out now
           </button>
         </div>
       </div>

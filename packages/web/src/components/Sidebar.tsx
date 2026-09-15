@@ -35,20 +35,20 @@ export function Sidebar({ me, conversations, selectedId, open, onClose, onSelect
   };
 
   return (
-    <aside id="sidebar" className={`sidebar${open ? " open" : ""}`} aria-label="Conversaciones">
+    <aside id="sidebar" className={`sidebar${open ? " open" : ""}`} aria-label="Conversations">
       <div className="sidebar-head">
         <Logo />
-        <button type="button" className="btn btn-icon only-mobile" onClick={onClose} aria-label="Cerrar panel">
+        <button type="button" className="btn btn-icon only-mobile" onClick={onClose} aria-label="Close panel">
           ×
         </button>
       </div>
 
       <button type="button" className="btn btn-primary block" onClick={onNew}>
-        Nueva conversación
+        New conversation
       </button>
 
-      <nav className="conv-list" aria-label="Lista de conversaciones">
-        {conversations.length === 0 && <p className="muted small">Aún no tienes conversaciones.</p>}
+      <nav className="conv-list" aria-label="Conversation list">
+        {conversations.length === 0 && <p className="muted small">You don't have any conversations yet.</p>}
         <ul>
           {conversations.map((c) => (
             <li key={c.id} className={c.id === selectedId ? "active" : ""}>
@@ -61,7 +61,7 @@ export function Sidebar({ me, conversations, selectedId, open, onClose, onSelect
                   }}
                 >
                   <label htmlFor={`rename-${c.id}`} className="visually-hidden">
-                    Nuevo título
+                    New title
                   </label>
                   <input
                     id={`rename-${c.id}`}
@@ -74,10 +74,10 @@ export function Sidebar({ me, conversations, selectedId, open, onClose, onSelect
                     }}
                   />
                   <button type="submit" className="btn btn-small">
-                    Guardar
+                    Save
                   </button>
                   <button type="button" className="btn btn-small" onClick={() => setEditingId(null)}>
-                    Cancelar
+                    Cancel
                   </button>
                 </form>
               ) : (
@@ -92,17 +92,17 @@ export function Sidebar({ me, conversations, selectedId, open, onClose, onSelect
                     <span className="conv-meta">{modelLabel(me.catalog.models, c.modelId)}</span>
                   </button>
                   <div className="conv-actions">
-                    <button type="button" className="btn btn-icon" onClick={() => startRename(c)} aria-label={`Renombrar: ${c.title}`} title="Renombrar">
+                    <button type="button" className="btn btn-icon" onClick={() => startRename(c)} aria-label={`Rename: ${c.title}`} title="Rename">
                       ✎
                     </button>
                     <button
                       type="button"
                       className="btn btn-icon"
                       onClick={() => {
-                        if (window.confirm("¿Borrar esta conversación? Se eliminarán todos sus mensajes.")) onDelete(c.id);
+                        if (window.confirm("Delete this conversation? All of its messages will be removed.")) onDelete(c.id);
                       }}
-                      aria-label={`Borrar: ${c.title}`}
-                      title="Borrar"
+                      aria-label={`Delete: ${c.title}`}
+                      title="Delete"
                     >
                       🗑
                     </button>
@@ -117,7 +117,7 @@ export function Sidebar({ me, conversations, selectedId, open, onClose, onSelect
       <div className="sidebar-foot">
         <div className="user-line" title={me.user.email}>
           <span className="user-name">{me.user.name}</span>
-          <span className="muted small">{isAdmin ? "Administración" : "Personal"}</span>
+          <span className="muted small">{isAdmin ? "Administrator" : "Staff"}</span>
         </div>
         {isAdmin && (
           <a
@@ -128,11 +128,11 @@ export function Sidebar({ me, conversations, selectedId, open, onClose, onSelect
               onAdmin();
             }}
           >
-            Administración
+            Administration
           </a>
         )}
         <button type="button" className="btn block" onClick={onLogout}>
-          Cerrar sesión
+          Sign out
         </button>
       </div>
     </aside>

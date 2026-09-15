@@ -31,7 +31,7 @@ function ExternalLink({ href, children }: { href?: string; children?: React.Reac
     return <span className="md-link-text">{children}</span>;
   }
   const open = () => {
-    const ok = window.confirm(`Vas a abrir un enlace externo en una pestaña nueva:\n\n${target}\n\n¿Continuar?`);
+    const ok = window.confirm(`You are about to open an external link in a new tab:\n\n${target}\n\nContinue?`);
     if (!ok) return;
     const w = window.open(target, "_blank", "noopener,noreferrer");
     if (w) w.opener = null;
@@ -40,7 +40,7 @@ function ExternalLink({ href, children }: { href?: string; children?: React.Reac
     <span className="md-link">
       <span className="md-link-text">{children}</span>{" "}
       <button type="button" className="btn btn-link-ext" onClick={open} title={target}>
-        Abrir enlace externo
+        Open external link
       </button>
     </span>
   );

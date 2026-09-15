@@ -25,7 +25,7 @@ export interface ChatMessage {
   error: SseError | null;
   refusalCategory: string | null;
   stopReason: string | null;
-  /** Texto del usuario que originó este turno, para "Reintentar". */
+  /** Texto del usuario que originó este turno, para "Retry". */
   retryText: string | null;
 }
 
@@ -255,7 +255,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // El flujo terminó sin `done` explícito: cerramos lo que quede abierto.
       const next = updateActive(state, (m) =>
         m.status === "pending" || m.status === "streaming"
-          ? { ...m, status: m.text ? "done" : "error", error: m.text ? m.error : { code: "internal", message: "El servidor cerró la conexión sin responder.", retryable: true, partial: false } }
+          ? { ...m, status: m.text ? "done" : "error", error: m.text ? m.error : { code: "internal", message: "The server closed the connection without responding.", retryable: true, partial: false } }
           : m,
       );
       return { ...next, streaming: false, activeAssistantId: null };

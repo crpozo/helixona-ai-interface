@@ -13,7 +13,7 @@ if (import.meta.env.MODE === "demo") {
 }
 
 const root = document.getElementById("root");
-if (!root) throw new Error("Falta el elemento #root");
+if (!root) throw new Error("Missing #root element");
 
 createRoot(root).render(
   <StrictMode>

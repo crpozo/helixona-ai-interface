@@ -16,6 +16,7 @@
   --warn-text: #6b4e00;
   --user-bubble: var(--brand-user-bubble);
   --focus: var(--brand-accent);
+  --link: var(--brand-link);
   --radius: var(--brand-radius);
   --font: var(--brand-font);
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -39,6 +40,10 @@ body {
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--link);
 }
 
 h1,
@@ -192,8 +197,8 @@ label {
   white-space: nowrap;
 }
 .badge-model {
-  background: #e1eef8;
-  color: var(--primary);
+  background: var(--brand-user-bubble);
+  color: var(--link);
 }
 .badge-cost {
   background: var(--warn-bg);
@@ -615,7 +620,7 @@ label {
 }
 .model-option.selected {
   border-color: var(--primary);
-  background: #f2f7fb;
+  background: var(--brand-user-bubble);
 }
 .model-option input {
   width: auto;
@@ -659,7 +664,7 @@ label {
   width: 100%;
 }
 
-/* Administración */
+/* Administration */
 .admin {
   max-width: 1000px;
   margin: 0 auto;

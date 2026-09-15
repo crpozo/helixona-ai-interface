@@ -15,7 +15,7 @@ const sse = (s: ChatState, event: ChatSseEvent) => chatReducer(s, { type: "sse",
 const assistant = (s: ChatState) => s.messages[s.messages.length - 1]!;
 
 describe("chatReducer", () => {
-  it("send crea burbuja de usuario y asistente pendiente; message_start asigna ids y modelo", () => {
+  it("send creates a user bubble and a pending assistant bubble; message_start assigns ids and model", () => {
     const s = started();
     expect(s.messages.map((m) => m.id)).toEqual(["u1", "a1"]);
     expect(s.streaming).toBe(true);
@@ -23,7 +23,7 @@ describe("chatReducer", () => {
     expect(assistant(s).model).toBe("anthropic.claude-opus-5");
   });
 
-  it("text_delta pasa de pendiente a streaming y acumula texto", () => {
+  it("text_delta moves from pending to streaming and accumulates text", () => {
     let s = started();
     s = sse(s, { type: "text_delta", data: { text: "Hola" } });
     s = sse(s, { type: "text_delta", data: { text: ", mundo" } });
@@ -31,14 +31,14 @@ describe("chatReducer", () => {
     expect(assistant(s).text).toBe("Hola, mundo");
   });
 
-  it("thinking_delta acumula razonamiento sin tocar el texto", () => {
+  it("thinking_delta accumulates reasoning without touching the text", () => {
     let s = started();
     s = sse(s, { type: "thinking_delta", data: { text: "pienso" } });
     expect(assistant(s).thinking).toBe("pienso");
     expect(assistant(s).text).toBe("");
   });
 
-  it("fallback conserva el texto ya recibido y cambia el modelo con aviso", () => {
+  it("fallback keeps the text already received and switches the model with a notice", () => {
     let s = started();
     s = sse(s, { type: "text_delta", data: { text: "parcial" } });
     s = sse(s, { type: "fallback", data: { from: "anthropic.claude-opus-5", to: "anthropic.claude-opus-4-8", reason: "refusal" } });
@@ -49,14 +49,14 @@ describe("chatReducer", () => {
     expect(a.notices).toEqual([{ kind: "fallback", model: "anthropic.claude-opus-4-8" }]);
   });
 
-  it("model_switched registra aviso de disponibilidad", () => {
+  it("model_switched records an availability notice", () => {
     let s = started();
     s = sse(s, { type: "model_switched", data: { from: "a", to: "b", reason: "availability" } });
     expect(assistant(s).notices).toEqual([{ kind: "model_switched", model: "b" }]);
     expect(assistant(s).model).toBe("b");
   });
 
-  it("refused descarta el texto parcial y guarda la categoría", () => {
+  it("refused discards the partial text and stores the category", () => {
     let s = started();
     s = sse(s, { type: "text_delta", data: { text: "algo" } });
     s = sse(s, { type: "refused", data: { category: "cyber" } });
@@ -68,7 +68,7 @@ describe("chatReducer", () => {
     expect(assistant(s).status).toBe("refused");
   });
 
-  it("error con partial=true marca incompleto y conserva el texto", () => {
+  it("error with partial=true marks incomplete and keeps the text", () => {
     let s = started();
     s = sse(s, { type: "text_delta", data: { text: "mitad" } });
     s = sse(s, { type: "error", data: { code: "internal", message: "x", retryable: true, partial: true } });
@@ -78,7 +78,7 @@ describe("chatReducer", () => {
     expect(assistant(s).retryText).toBe("hola");
   });
 
-  it("error sin partial marca error y deja el texto vacío", () => {
+  it("error without partial marks error and leaves the text empty", () => {
     let s = started();
     s = sse(s, { type: "error", data: { code: "quota_exceeded", message: "x", retryable: false, partial: false } });
     expect(assistant(s).status).toBe("error");
@@ -88,7 +88,7 @@ describe("chatReducer", () => {
     expect(assistant(s).status).toBe("error");
   });
 
-  it("done fija modelo, stopReason y aviso de truncado", () => {
+  it("done sets model, stopReason and a truncation notice", () => {
     let s = started();
     s = sse(s, { type: "text_delta", data: { text: "t" } });
     s = sse(s, { type: "done", data: { assistantMessageId: "a1", model: "anthropic.claude-opus-5", stopReason: "max_tokens", usage: null, fallbackReason: null } });
@@ -101,7 +101,7 @@ describe("chatReducer", () => {
     expect(s.activeAssistantId).toBe(null);
   });
 
-  it("stopped marca el mensaje en curso como incompleto", () => {
+  it("stopped marks the in-progress message as incomplete", () => {
     let s = started();
     s = sse(s, { type: "text_delta", data: { text: "t" } });
     s = chatReducer(s, { type: "stopped" });
@@ -110,7 +110,7 @@ describe("chatReducer", () => {
     expect(s.streaming).toBe(false);
   });
 
-  it("remove_failed_turn quita la burbuja del asistente y la del usuario anterior", () => {
+  it("remove_failed_turn removes the assistant bubble and the preceding user bubble", () => {
     let s = started();
     s = sse(s, { type: "error", data: { code: "internal", message: "x", retryable: true, partial: false } });
     s = chatReducer(s, { type: "finish" });
@@ -118,7 +118,7 @@ describe("chatReducer", () => {
     expect(s.messages).toEqual([]);
   });
 
-  it("load convierte mensajes del servidor (bloques text/thinking, fallback)", () => {
+  it("load converts server messages (text/thinking blocks, fallback)", () => {
     const msgs: Message[] = [
       { id: "u", role: "user", content: [{ type: "text", text: "hola" }], model: null, fallbackReason: null, stopReason: null, usage: null, createdAt: "" },
       {

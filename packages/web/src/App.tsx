@@ -66,7 +66,7 @@ export function App() {
   );
 
   useEffect(() => {
-    setUnauthorizedHandler(() => clearAll("Tu sesión ha caducado. Inicia sesión de nuevo."));
+    setUnauthorizedHandler(() => clearAll("Your session has expired. Please sign in again."));
     return () => setUnauthorizedHandler(null);
   }, [clearAll]);
 
@@ -75,7 +75,7 @@ export function App() {
       setConversations(await listConversations());
       setListError(null);
     } catch (e) {
-      if (!(e instanceof ApiError && e.status === 401)) setListError("No se pudo cargar la lista de conversaciones.");
+      if (!(e instanceof ApiError && e.status === 401)) setListError("Could not load the conversation list.");
     }
   }, []);
 
@@ -87,7 +87,7 @@ export function App() {
       await refreshConversations();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) return; // ya gestionado por el handler
-      setAuth({ status: "error", message: "No se pudo conectar con el servidor. Inténtalo de nuevo." });
+      setAuth({ status: "error", message: "Could not connect to the server. Please try again." });
     }
   }, [refreshConversations]);
 
@@ -125,7 +125,7 @@ export function App() {
   const idle = useIdleTimeout({
     enabled: auth.status === "authed",
     timeoutSeconds: auth.status === "authed" ? auth.me.session.idleTimeoutSeconds : 0,
-    onExpire: () => void doLogout("Tu sesión se cerró por inactividad."),
+    onExpire: () => void doLogout("You were signed out due to inactivity."),
   });
 
   const selectConversation = useCallback(
@@ -146,7 +146,7 @@ export function App() {
       } catch (e) {
         if (seq !== loadSeq.current) return;
         if (!(e instanceof ApiError && e.status === 401)) {
-          dispatch({ type: "transport_error", message: "No se pudo cargar la conversación." });
+          dispatch({ type: "transport_error", message: "Could not load the conversation." });
         }
       } finally {
         if (seq === loadSeq.current) setLoadingConv(false);
@@ -171,7 +171,7 @@ export function App() {
       setCreating(false);
       dispatch({ type: "load", conversationId: conv.id, messages: [] });
     } catch (e) {
-      if (!(e instanceof ApiError && e.status === 401)) setListError("No se pudo crear la conversación.");
+      if (!(e instanceof ApiError && e.status === 401)) setListError("Could not create the conversation.");
     } finally {
       setCreateBusy(false);
     }
@@ -187,7 +187,7 @@ export function App() {
         dispatch({ type: "reset" });
       }
     } catch (e) {
-      if (!(e instanceof ApiError && e.status === 401)) setListError("No se pudo borrar la conversación.");
+      if (!(e instanceof ApiError && e.status === 401)) setListError("Could not delete the conversation.");
     }
   };
 
@@ -197,7 +197,7 @@ export function App() {
       setConversations((prev) => prev.map((c) => (c.id === id ? updated : c)));
       if (selected?.id === id) setSelected(updated);
     } catch (e) {
-      if (!(e instanceof ApiError && e.status === 401)) setListError("No se pudo renombrar la conversación.");
+      if (!(e instanceof ApiError && e.status === 401)) setListError("Could not rename the conversation.");
     }
   };
 
@@ -221,11 +221,11 @@ export function App() {
         const msg =
           e instanceof ApiError
             ? e.code === "quota_exceeded"
-              ? "Has agotado tu cuota diaria."
+              ? "You have reached your daily quota."
               : e.code === "context_limit"
-                ? "Esta conversación es demasiado larga. Abre una nueva."
-                : "No se pudo enviar el mensaje."
-            : "Se perdió la conexión con el servidor.";
+                ? "This conversation is too long. Please start a new one."
+                : "Could not send the message."
+            : "Connection to the server was lost.";
         dispatch({ type: "transport_error", message: msg });
       }
     } finally {
@@ -256,7 +256,7 @@ export function App() {
   if (auth.status === "loading") {
     return (
       <main className="center-screen" aria-busy="true">
-        <p className="muted">Cargando…</p>
+        <p className="muted">Loading…</p>
       </main>
     );
   }
@@ -266,7 +266,7 @@ export function App() {
       <main className="center-screen">
         <p role="alert">{auth.message}</p>
         <button type="button" className="btn btn-primary" onClick={() => void bootstrap()}>
-          Reintentar
+          Retry
         </button>
       </main>
     );
@@ -302,14 +302,14 @@ export function App() {
           <div className="main">
             <div className="topbar only-mobile">
               <button type="button" className="btn" onClick={() => setSidebarOpen(true)} aria-expanded={sidebarOpen} aria-controls="sidebar">
-                ☰ Conversaciones
+                ☰ Conversations
               </button>
             </div>
             {listError && (
               <p className="notice notice-error" role="alert">
                 {listError}{" "}
                 <button type="button" className="btn btn-small" onClick={() => setListError(null)}>
-                  Cerrar
+                  Dismiss
                 </button>
               </p>
             )}
@@ -336,10 +336,10 @@ export function App() {
             ) : (
               <div className="panel-center">
                 <div className="empty">
-                  <h1>Hola, {me.user.name}</h1>
-                  <p className="muted">Elige una conversación o empieza una nueva.</p>
+                  <h1>Hello, {me.user.name}</h1>
+                  <p className="muted">Select a conversation or start a new one.</p>
                   <button type="button" className="btn btn-primary" onClick={startNew}>
-                    Nueva conversación
+                    New conversation
                   </button>
                 </div>
               </div>

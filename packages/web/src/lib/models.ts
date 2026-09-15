@@ -12,8 +12,8 @@ export function modelLabelByAlias(models: CatalogModel[] | undefined, alias: str
   return m ? m.label : alias;
 }
 
-/** "1x", "2,5x", "5x" (formato es-ES para el decimal). */
+/** "1x", "2.5x", "5x" (formato en-US para el decimal). */
 export function formatCostFactor(factor: number): string {
-  const s = Number.isInteger(factor) ? String(factor) : factor.toFixed(1).replace(".", ",");
+  const s = Number.isInteger(factor) ? String(factor) : factor.toFixed(1);
   return `${s}x`;
 }

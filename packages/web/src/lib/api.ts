@@ -44,7 +44,7 @@ export function setActivityHandler(fn: ActivityHandler | null) {
 
 async function parseError(res: Response): Promise<ApiError> {
   let code = "http_error";
-  let message = "Se produjo un error inesperado.";
+  let message = "An unexpected error occurred.";
   try {
     const body = (await res.json()) as Partial<ApiErrorBody>;
     if (body?.error?.code) code = body.error.code;
@@ -76,7 +76,7 @@ async function request<T>(
 
   if (res.status === 401) {
     hooks.onUnauthorized?.();
-    throw new ApiError(401, "unauthorized", "Sesión no válida.");
+    throw new ApiError(401, "unauthorized", "Invalid session.");
   }
   if (!res.ok) throw await parseError(res);
   if (res.status === 204) return undefined as T;
@@ -139,7 +139,7 @@ const KNOWN_EVENTS = new Set<ChatSseEvent["type"]>([
 
 /**
  * Envía un mensaje y devuelve los eventos SSE tipados según el contrato (§4).
- * El llamador puede abortar con `signal` (botón "Detener").
+ * El llamador puede abortar con `signal` (botón "Stop").
  */
 export async function* sendMessage(
   conversationId: string,
@@ -162,10 +162,10 @@ export async function* sendMessage(
 
   if (res.status === 401) {
     hooks.onUnauthorized?.();
-    throw new ApiError(401, "unauthorized", "Sesión no válida.");
+    throw new ApiError(401, "unauthorized", "Invalid session.");
   }
   if (!res.ok) throw await parseError(res);
-  if (!res.body) throw new ApiError(res.status, "no_body", "Respuesta vacía del servidor.");
+  if (!res.body) throw new ApiError(res.status, "no_body", "Empty response from the server.");
 
   for await (const ev of readSseStream(res.body, signal)) {
     if (!KNOWN_EVENTS.has(ev.event as ChatSseEvent["type"])) continue;

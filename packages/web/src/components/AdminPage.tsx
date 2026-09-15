@@ -16,12 +16,12 @@ function todayIso(): string {
   return `${y}-${m}-${day}`;
 }
 
-const usd = new Intl.NumberFormat("es", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
-const num = new Intl.NumberFormat("es");
-const dateFmt = new Intl.DateTimeFormat("es", { dateStyle: "medium" });
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+const num = new Intl.NumberFormat("en-US");
+const dateFmt = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 
 function errMsg(e: unknown): string {
-  return e instanceof ApiError ? `Error (${e.code}).` : "Error inesperado.";
+  return e instanceof ApiError ? `Error (${e.code}).` : "Unexpected error.";
 }
 
 export function AdminPage({ me, onBack }: Props) {
@@ -67,7 +67,7 @@ export function AdminPage({ me, onBack }: Props) {
     try {
       await adminCreateUser({ email: form.email.trim(), name: form.name.trim(), role: form.role });
       setForm({ email: "", name: "", role: "staff" });
-      setFormMsg("Usuario creado. Recibirá una contraseña temporal por correo.");
+      setFormMsg("User created. They will receive a temporary password by email.");
       await loadUsers();
     } catch (err) {
       setFormMsg(errMsg(err));
@@ -77,8 +77,8 @@ export function AdminPage({ me, onBack }: Props) {
   };
 
   const toggle = async (u: AdminUser) => {
-    const action = u.enabled ? "deshabilitar" : "habilitar";
-    if (!window.confirm(`¿Seguro que quieres ${action} a ${u.name}?`)) return;
+    const action = u.enabled ? "disable" : "enable";
+    if (!window.confirm(`Are you sure you want to ${action} ${u.name}?`)) return;
     try {
       if (u.enabled) await adminDisableUser(u.id);
       else await adminEnableUser(u.id);
@@ -121,7 +121,7 @@ export function AdminPage({ me, onBack }: Props) {
   return (
     <main className="admin">
       <header className="admin-head">
-        <h1>Administración</h1>
+        <h1>Administration</h1>
         <div className="row gap">
           <span className="muted small">{me.user.name}</span>
           <a
@@ -132,32 +132,32 @@ export function AdminPage({ me, onBack }: Props) {
               onBack();
             }}
           >
-            Volver al chat
+            Back to chat
           </a>
         </div>
       </header>
 
       <section aria-labelledby="users-title" className="card">
-        <h2 id="users-title">Usuarios</h2>
+        <h2 id="users-title">Users</h2>
         {usersError && (
           <p className="notice notice-error" role="alert">
             {usersError}
           </p>
         )}
         {users === null ? (
-          <p className="muted">Cargando…</p>
+          <p className="muted">Loading…</p>
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th scope="col">Nombre</th>
-                  <th scope="col">Correo</th>
-                  <th scope="col">Rol</th>
-                  <th scope="col">Estado</th>
-                  <th scope="col">Alta</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Created</th>
                   <th scope="col">
-                    <span className="visually-hidden">Acciones</span>
+                    <span className="visually-hidden">Actions</span>
                   </th>
                 </tr>
               </thead>
@@ -167,11 +167,11 @@ export function AdminPage({ me, onBack }: Props) {
                     <td>{u.name}</td>
                     <td>{u.email}</td>
                     <td>{u.role}</td>
-                    <td>{u.enabled ? "Activo" : "Deshabilitado"}</td>
+                    <td>{u.enabled ? "Active" : "Disabled"}</td>
                     <td>{dateFmt.format(new Date(u.createdAt))}</td>
                     <td>
                       <button type="button" className="btn btn-small" onClick={() => void toggle(u)} disabled={u.id === me.user.id}>
-                        {u.enabled ? "Deshabilitar" : "Habilitar"}
+                        {u.enabled ? "Disable" : "Enable"}
                       </button>
                     </td>
                   </tr>
@@ -179,7 +179,7 @@ export function AdminPage({ me, onBack }: Props) {
                 {users.length === 0 && (
                   <tr>
                     <td colSpan={6} className="muted">
-                      No hay usuarios.
+                      No users.
                     </td>
                   </tr>
                 )}
@@ -189,18 +189,18 @@ export function AdminPage({ me, onBack }: Props) {
         )}
 
         <form className="admin-form" onSubmit={createUser}>
-          <h3>Dar de alta un usuario</h3>
+          <h3>Add a user</h3>
           <div className="form-grid">
             <div>
-              <label htmlFor="nu-name">Nombre</label>
+              <label htmlFor="nu-name">Name</label>
               <input id="nu-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
-              <label htmlFor="nu-email">Correo corporativo</label>
+              <label htmlFor="nu-email">Work email</label>
               <input id="nu-email" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
             <div>
-              <label htmlFor="nu-role">Rol</label>
+              <label htmlFor="nu-role">Role</label>
               <select id="nu-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
                 <option value="staff">staff</option>
                 <option value="admin">admin</option>
@@ -213,16 +213,16 @@ export function AdminPage({ me, onBack }: Props) {
             </p>
           )}
           <button type="submit" className="btn btn-primary" disabled={formBusy}>
-            {formBusy ? "Creando…" : "Crear usuario"}
+            {formBusy ? "Creating…" : "Create user"}
           </button>
         </form>
       </section>
 
       <section aria-labelledby="usage-title" className="card">
         <div className="row gap wrap">
-          <h2 id="usage-title">Uso del día</h2>
+          <h2 id="usage-title">Daily usage</h2>
           <label htmlFor="usage-day" className="visually-hidden">
-            Día
+            Day
           </label>
           <input id="usage-day" type="date" value={day} max={todayIso()} onChange={(e) => e.target.value && setDay(e.target.value)} />
         </div>
@@ -232,25 +232,25 @@ export function AdminPage({ me, onBack }: Props) {
           </p>
         )}
         {usage === null && !usageError ? (
-          <p className="muted">Cargando…</p>
+          <p className="muted">Loading…</p>
         ) : usage && usage.length === 0 ? (
-          <p className="muted">Sin actividad ese día.</p>
+          <p className="muted">No activity on that day.</p>
         ) : usage ? (
           <>
             <p>
-              Total: <strong>{num.format(totals.turns)}</strong> turnos · {num.format(totals.inputTokens)} tokens de entrada ·{" "}
-              {num.format(totals.outputTokens)} de salida · <strong>{usd.format(totals.estimatedUsd)}</strong> estimados
+              Total: <strong>{num.format(totals.turns)}</strong> turns · {num.format(totals.inputTokens)} input tokens ·{" "}
+              {num.format(totals.outputTokens)} output tokens · <strong>{usd.format(totals.estimatedUsd)}</strong> estimated
             </p>
-            <h3>Por usuario</h3>
+            <h3>By user</h3>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th scope="col">Usuario</th>
-                    <th scope="col">Turnos</th>
-                    <th scope="col">Entrada</th>
-                    <th scope="col">Salida</th>
-                    <th scope="col">Costo est.</th>
+                    <th scope="col">User</th>
+                    <th scope="col">Turns</th>
+                    <th scope="col">Input</th>
+                    <th scope="col">Output</th>
+                    <th scope="col">Est. cost</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -266,14 +266,14 @@ export function AdminPage({ me, onBack }: Props) {
                 </tbody>
               </table>
             </div>
-            <h3>Por modelo</h3>
+            <h3>By model</h3>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th scope="col">Modelo</th>
-                    <th scope="col">Turnos</th>
-                    <th scope="col">Costo est.</th>
+                    <th scope="col">Model</th>
+                    <th scope="col">Turns</th>
+                    <th scope="col">Est. cost</th>
                   </tr>
                 </thead>
                 <tbody>

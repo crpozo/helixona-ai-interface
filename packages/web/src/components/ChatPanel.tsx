@@ -30,7 +30,7 @@ export function ChatPanel({ me, conversation, state, loading, onSend, onStop, on
   const activeModel = conversation.pinnedModel ?? conversation.modelId;
 
   return (
-    <section className="chat" aria-label="Conversación">
+    <section className="chat" aria-label="Conversation">
       <header className="chat-head">
         <h1 className="chat-title" title={conversation.title}>
           {conversation.title}
@@ -40,16 +40,16 @@ export function ChatPanel({ me, conversation, state, loading, onSend, onStop, on
         </span>
         {conversation.pinnedModel && conversation.pinnedModel !== conversation.modelId && (
           <span className="muted small">
-            (elegido: {modelLabel(models, conversation.modelId)})
+            (selected: {modelLabel(models, conversation.modelId)})
           </span>
         )}
       </header>
 
       <div className="chat-list" ref={listRef} role="log" aria-live="polite" aria-busy={loading || state.streaming}>
         {loading ? (
-          <p className="muted center">Cargando conversación…</p>
+          <p className="muted center">Loading conversation…</p>
         ) : state.messages.length === 0 ? (
-          <p className="muted center">Escribe tu primer mensaje para empezar.</p>
+          <p className="muted center">Type your first message to get started.</p>
         ) : (
           state.messages.map((m) => <MessageBubble key={m.id} message={m} models={models} onRetry={onRetry} />)
         )}
