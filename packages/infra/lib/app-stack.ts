@@ -448,6 +448,15 @@ export class AppStack extends cdk.Stack {
         resources: [tables.conversations, tables.messages, tables.sessions, tables.usage].flatMap(withIndexes),
       }),
     );
+    // Daily usage report: the usage table has no per-day index, so the admin listing scans it
+    // (one small row per user and day). Scan is granted on that table only.
+    this.taskRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'DynamoDbUsageScan',
+        actions: ['dynamodb:Scan'],
+        resources: [tables.usage.tableArn],
+      }),
+    );
     // Audit: solo escribir y consultar. Además Deny explícito de Update/Delete (append-only).
     this.taskRole.addToPolicy(
       new iam.PolicyStatement({
@@ -482,8 +491,10 @@ export class AppStack extends cdk.Stack {
           'cognito-idp:AdminEnableUser',
           'cognito-idp:AdminGetUser',
           'cognito-idp:AdminAddUserToGroup',
+          'cognito-idp:AdminRemoveUserFromGroup',
           'cognito-idp:AdminListGroupsForUser',
           'cognito-idp:ListUsers',
+          'cognito-idp:ListUsersInGroup',
           'cognito-idp:AdminUserGlobalSignOut',
           'cognito-idp:AdminRevokeToken',
           'cognito-idp:RevokeToken',
