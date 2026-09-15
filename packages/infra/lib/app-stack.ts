@@ -276,7 +276,7 @@ export class AppStack extends cdk.Stack {
       // CloudFront→ALB va en claro. En producción `certificateArn` es obligatorio.
       cdk.Annotations.of(this).addWarningV2(
         'helixona:no-certificate',
-        'Sin `certificateArn`: el ALB escucha en HTTP 80. No apto para PHI.',
+        'No `certificateArn`: the ALB listens on HTTP 80. Not suitable for PHI.',
       );
       listener = this.loadBalancer.addListener('Http', {
         port: 80,

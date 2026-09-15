@@ -13,12 +13,12 @@ on:
   workflow_dispatch:
     inputs:
       stage:
-        description: Etapa a desplegar (prefija todos los recursos)
+        description: Stage to deploy (prefixes every resource name)
         type: choice
         options: [prod, staging]
         default: prod
       image_tag:
-        description: Tag de la imagen (vacío = SHA del commit)
+        description: Image tag (empty = commit SHA)
         type: string
         default: ''
 
@@ -60,7 +60,7 @@ jobs:
       # Diagnóstico: qué identidad OIDC presenta GitHub (debe coincidir con la trust policy del rol:
       # sub = repo:<org>/<repo>:environment:<environment>, aud = sts.amazonaws.com) y que el secreto
       # AWS_DEPLOY_ROLE_ARN tenga forma de ARN de rol. No imprime el token ni el secreto completo.
-      - name: Verificar identidad OIDC y formato del rol
+      - name: Verify OIDC identity and role ARN format
         env:
           ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
         run: |
@@ -73,17 +73,17 @@ jobs:
           payload = jwt.split(".")[1]
           payload += "=" * (-len(payload) % 4)
           claims = json.loads(base64.urlsafe_b64decode(payload))
-          print("Claims del token OIDC que recibe AWS:")
+          print("OIDC token claims AWS receives:")
           for k in ("iss", "aud", "sub", "repository", "repository_owner", "environment", "ref", "event_name"):
               print(f"  {k}: {claims.get(k)}")
           arn = os.environ.get("ROLE_ARN", "")
           m = re.fullmatch(r"arn:aws:iam::(\d{12}):role/([A-Za-z0-9+=,.@_/-]+)", arn)
           if not m:
-              print(f"::error::El secreto AWS_DEPLOY_ROLE_ARN no tiene formato de ARN de rol IAM (longitud {len(arn)}, "
-                    f"{'con' if arn != arn.strip() else 'sin'} espacios o saltos de línea al borde).")
+              print(f"::error::The AWS_DEPLOY_ROLE_ARN secret is not an IAM role ARN (length {len(arn)}, "
+                    f"{'with' if arn != arn.strip() else 'without'} leading/trailing whitespace).")
               sys.exit(1)
-          print(f"AWS_DEPLOY_ROLE_ARN: formato correcto (cuenta {m.group(1)}, rol {m.group(2)})")
-          print("La trust policy del rol debe permitir exactamente:")
+          print(f"AWS_DEPLOY_ROLE_ARN: valid format (account {m.group(1)}, role {m.group(2)})")
+          print("The role trust policy must allow exactly:")
           print(f"  token.actions.githubusercontent.com:sub = {claims.get('sub')}")
           print(f"  token.actions.githubusercontent.com:aud = sts.amazonaws.com")
           PY
@@ -123,7 +123,7 @@ jobs:
         env:
           CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
 
-      - name: Deploy FoundationStack (KMS, tablas, ECR)
+      - name: Deploy FoundationStack (KMS, tables, ECR)
         working-directory: packages/infra
         run: |
           set -euo pipefail
@@ -161,4 +161,4 @@ jobs:
 
       - name: Post-deploy reminder
         run: |
-          echo "::notice::Si es el primer despliegue: copiar el client secret de Cognito en Secrets Manager (helixona-${{ inputs.stage }}-cognito-client-secret) y forzar un nuevo despliegue del servicio ECS. Ver packages/infra/README.md."
+          echo "::notice::First deployment only: copy the Cognito client secret into Secrets Manager (helixona-${{ inputs.stage }}-cognito-client-secret) and force a new ECS service deployment. See packages/infra/README.md."
