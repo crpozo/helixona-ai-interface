@@ -1,9 +1,9 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
-import type { Conversation, StoredMessage, UsageSummary } from "@helixona/core";
-import type { AuditEvent, AuditRepo, ConversationPatch, ConversationRepo, MessageRepo, Repos, Session, SessionRepo, UsageRepo, UsageRow } from "./types.js";
+import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
+import type { Conversation, Project, StoredMessage, UsageSummary } from "@helixona/core";
+import type { AuditEvent, AuditRepo, ConversationPatch, ConversationRepo, MessageRepo, ProjectPatch, ProjectRepo, Repos, Session, SessionRepo, UsageRepo, UsageRow } from "./types.js";
 
-export interface DynamoTables { conversations: string; messages: string; sessions: string; audit: string; usage: string }
+export interface DynamoTables { conversations: string; messages: string; sessions: string; audit: string; usage: string; projects: string }
 
 const epoch = (d: Date) => Math.floor(d.getTime() / 1000);
 const pad = (n: number) => String(n).padStart(6, "0");
@@ -33,7 +33,44 @@ export class DynamoConversationRepo implements ConversationRepo {
 
 function fromItem(i: Record<string, unknown>): Conversation {
   const { conversationId, expiresAt: _e, ...rest } = i as Record<string, unknown> & { conversationId: string };
-  return { ...(rest as unknown as Conversation), id: conversationId };
+  const c = { ...(rest as unknown as Conversation), id: conversationId };
+  return { ...c, projectId: c.projectId ?? null };
+}
+
+export class DynamoProjectRepo implements ProjectRepo {
+  constructor(private readonly doc: DynamoDBDocumentClient, private readonly table: string) {}
+  async create(p: Project) {
+    await this.doc.send(new PutCommand({ TableName: this.table, Item: { ...p, projectId: p.id }, ConditionExpression: "attribute_not_exists(projectId)" }));
+  }
+  async get(id: string) {
+    const r = await this.doc.send(new GetCommand({ TableName: this.table, Key: { projectId: id } }));
+    return r.Item ? projectFromItem(r.Item) : null;
+  }
+  async list() {
+    // Small table (tens of projects per clinic): a scan is fine and avoids an index.
+    const out: Project[] = [];
+    let key: Record<string, unknown> | undefined;
+    do {
+      const r = await this.doc.send(new ScanCommand({ TableName: this.table, ExclusiveStartKey: key }));
+      out.push(...(r.Items ?? []).map(projectFromItem));
+      key = r.LastEvaluatedKey;
+    } while (key);
+    return out;
+  }
+  async update(id: string, patch: ProjectPatch) {
+    const entries = Object.entries({ ...patch, updatedAt: patch.updatedAt ?? new Date().toISOString() }).filter(([, v]) => v !== undefined);
+    const names: Record<string, string> = {}; const values: Record<string, unknown> = {};
+    const sets = entries.map(([k, v], i) => { names[`#k${i}`] = k; values[`:v${i}`] = v; return `#k${i} = :v${i}`; });
+    const r = await this.doc.send(new UpdateCommand({ TableName: this.table, Key: { projectId: id }, UpdateExpression: `SET ${sets.join(", ")}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values, ConditionExpression: "attribute_exists(projectId)", ReturnValues: "ALL_NEW" })).catch((e: { name?: string }) => { if (e.name === "ConditionalCheckFailedException") return null; throw e; });
+    return r?.Attributes ? projectFromItem(r.Attributes) : null;
+  }
+  async delete(id: string) { await this.doc.send(new DeleteCommand({ TableName: this.table, Key: { projectId: id } })); }
+}
+
+function projectFromItem(i: Record<string, unknown>): Project {
+  const { projectId, ...rest } = i as Record<string, unknown> & { projectId: string };
+  const p = rest as unknown as Project;
+  return { ...p, id: projectId, knowledge: Array.isArray(p.knowledge) ? p.knowledge : [] };
 }
 
 export class DynamoMessageRepo implements MessageRepo {
@@ -120,5 +157,6 @@ export function dynamoRepos(region: string, tables: DynamoTables): Repos {
     sessions: new DynamoSessionRepo(doc, tables.sessions),
     audit: new DynamoAuditRepo(doc, tables.audit),
     usage: new DynamoUsageRepo(doc, tables.usage),
+    projects: new DynamoProjectRepo(doc, tables.projects),
   };
 }

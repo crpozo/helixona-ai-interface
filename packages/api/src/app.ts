@@ -12,6 +12,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerChatRoute } from "./routes/chat.js";
 import { registerAttachmentRoutes } from "./routes/attachments.js";
+import { registerProjectRoutes } from "./routes/projects.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 
 declare module "fastify" {
@@ -109,6 +110,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   registerConversationRoutes(app, deps);
   registerChatRoute(app, deps);
   registerAttachmentRoutes(app, deps);
+  registerProjectRoutes(app, deps);
   registerAdminRoutes(app, deps);
 
   // SPA compilada (mismo origen, sin CORS). Cualquier ruta no-API devuelve index.html.

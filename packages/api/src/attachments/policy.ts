@@ -28,6 +28,15 @@ export function attachmentKey(conversationId: string, attachmentId: string, name
   return `conversations/${conversationId}/${attachmentId}/${safeName(name)}`;
 }
 
+/** Knowledge files live under the project; deleting the project removes the prefix. */
+export function projectKnowledgeKey(projectId: string, attachmentId: string, name: string): string {
+  return `projects/${projectId}/${attachmentId}/${safeName(name)}`;
+}
+
+export const MAX_PROJECT_FILES = 20;
+/** Project knowledge is sent with every turn of every conversation in the project: keep it well inside the context. */
+export const MAX_PROJECT_KNOWLEDGE_TOKENS = 400_000;
+
 export function maxBytesFor(contentType: string, maxAttachmentMb: number): number {
   const t = ALLOWED_TYPES[contentType];
   const mb = t?.maxMb ?? maxAttachmentMb;

@@ -21,6 +21,7 @@ const Env = z.object({
   TABLE_SESSIONS: z.string().optional(),
   TABLE_AUDIT: z.string().optional(),
   TABLE_USAGE: z.string().optional(),
+  TABLE_PROJECTS: z.string().optional(),
   AWS_REGION: z.string().optional(),
   LLM_MODE: z.enum(["bedrock", "anthropic", "claude-platform-aws", "fake"]).default("bedrock"),
   ANTHROPIC_API_KEY: z.string().optional(),
@@ -60,7 +61,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
   }
   if (cfg.STORE_MODE === "dynamo") {
-    for (const k of ["TABLE_CONVERSATIONS", "TABLE_MESSAGES", "TABLE_SESSIONS", "TABLE_AUDIT", "TABLE_USAGE", "AWS_REGION"] as const) {
+    for (const k of ["TABLE_CONVERSATIONS", "TABLE_MESSAGES", "TABLE_SESSIONS", "TABLE_AUDIT", "TABLE_USAGE", "TABLE_PROJECTS", "AWS_REGION"] as const) {
       if (!cfg[k]) throw new Error(`${k} is required for STORE_MODE=dynamo`);
     }
   }

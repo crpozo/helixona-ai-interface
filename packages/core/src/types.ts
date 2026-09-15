@@ -18,6 +18,23 @@ export interface Conversation {
   messageCount: number;
   /** input_tokens del último turno: medida autoritativa del tamaño del contexto. */
   lastInputTokens: number;
+  /** Project this conversation belongs to (its instructions and knowledge are injected on every turn). */
+  projectId?: string | null;
+}
+
+export type ProjectVisibility = "private" | "clinic";
+
+/** A project: shared instructions plus knowledge files that every conversation inside it receives. */
+export interface Project {
+  id: string;
+  ownerId: string;
+  name: string;
+  description: string;
+  instructions: string;
+  visibility: ProjectVisibility;
+  knowledge: AttachmentMeta[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface UsageSummary { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; estimatedUsd: number }

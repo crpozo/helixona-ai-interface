@@ -1,4 +1,4 @@
-import type { Conversation, PinReason, Role, StoredMessage, UsageSummary } from "@helixona/core";
+import type { AttachmentMeta, Conversation, PinReason, Project, ProjectVisibility, Role, StoredMessage, UsageSummary } from "@helixona/core";
 
 export interface Session {
   id: string;
@@ -42,12 +42,32 @@ export interface UsageRow {
 
 export interface ConversationPatch {
   title?: string;
+  modelAlias?: string;
+  modelId?: string;
   pinnedModel?: string | null;
   pinReason?: PinReason | null;
   pinnedUntil?: string | null;
   lastInputTokens?: number;
   messageCount?: number;
   updatedAt?: string;
+}
+
+export interface ProjectPatch {
+  name?: string;
+  description?: string;
+  instructions?: string;
+  visibility?: ProjectVisibility;
+  knowledge?: AttachmentMeta[];
+  updatedAt?: string;
+}
+
+export interface ProjectRepo {
+  create(p: Project): Promise<void>;
+  get(id: string): Promise<Project | null>;
+  /** All projects (small volume; visibility is filtered by the caller). */
+  list(): Promise<Project[]>;
+  update(id: string, patch: ProjectPatch): Promise<Project | null>;
+  delete(id: string): Promise<void>;
 }
 
 export interface ConversationRepo {
@@ -92,4 +112,4 @@ export interface UserDirectory {
   setRole(id: string, role: Role): Promise<void>;
 }
 
-export interface Repos { conversations: ConversationRepo; messages: MessageRepo; sessions: SessionRepo; audit: AuditRepo; usage: UsageRepo }
+export interface Repos { conversations: ConversationRepo; messages: MessageRepo; sessions: SessionRepo; audit: AuditRepo; usage: UsageRepo; projects: ProjectRepo }

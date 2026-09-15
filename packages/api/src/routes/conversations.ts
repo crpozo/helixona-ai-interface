@@ -2,7 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { modelByAlias, modelsForRole, ulid, type Conversation } from "@helixona/core";
 import type { Deps } from "../deps.js";
+import type { ConversationPatch } from "../repos/types.js";
 import { apiError, audit, requireAuth } from "../app.js";
+import { canReadProject } from "./projects.js";
 
 export function publicConversation(c: Conversation) {
   const { userId: _u, systemPromptVersion: _v, lastInputTokens: _t, pinnedUntil: _p, ...rest } = c;
@@ -25,15 +27,21 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
   });
 
   app.post("/api/conversations", { preHandler: requireAuth() }, async (req, reply) => {
-    const body = z.object({ modelAlias: z.string().min(2).max(32) }).safeParse(req.body);
+    const body = z.object({ modelAlias: z.string().min(2).max(32), projectId: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/).nullable().optional() }).safeParse(req.body);
     if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
     const entry = modelByAlias(deps.catalog, body.data.modelAlias);
     if (!entry || !modelsForRole(deps.catalog, req.session!.roles).some((m) => m.alias === entry.alias)) return apiError(reply, 400, "unknown_model", "Model not available");
+    let projectId: string | null = null;
+    if (body.data.projectId) {
+      const project = await deps.repos.projects.get(body.data.projectId);
+      if (!project || !canReadProject(project, req.session!.userId)) return apiError(reply, 400, "unknown_project", "Project not found");
+      projectId = project.id;
+    }
     const t = now();
     const c: Conversation = {
       id: ulid(), userId: req.session!.userId, title: defaultTitle(t), modelAlias: entry.alias, modelId: entry.modelId,
       pinnedModel: null, pinReason: null, pinnedUntil: null, systemPromptVersion: deps.systemPrompt.version,
-      createdAt: t.toISOString(), updatedAt: t.toISOString(), messageCount: 0, lastInputTokens: 0,
+      createdAt: t.toISOString(), updatedAt: t.toISOString(), messageCount: 0, lastInputTokens: 0, projectId,
     };
     await deps.repos.conversations.create(c, ttl);
     await audit(deps, req, { action: "conversation_create", conversationId: c.id, model: c.modelId });
@@ -51,11 +59,19 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
 
   app.patch("/api/conversations/:id", { preHandler: requireAuth() }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const body = z.object({ title: z.string().trim().min(1).max(80) }).safeParse(req.body);
-    if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
-    const c = await deps.repos.conversations.update(req.session!.userId, id, { title: body.data.title });
+    const body = z.object({ title: z.string().trim().min(1).max(80).optional(), modelAlias: z.string().min(2).max(32).optional() }).safeParse(req.body);
+    if (!body.success || (body.data.title === undefined && body.data.modelAlias === undefined)) return apiError(reply, 400, "bad_request", "Invalid request");
+    const patch: ConversationPatch = {};
+    if (body.data.title !== undefined) patch.title = body.data.title;
+    if (body.data.modelAlias !== undefined) {
+      const entry = modelByAlias(deps.catalog, body.data.modelAlias);
+      if (!entry || !modelsForRole(deps.catalog, req.session!.roles).some((m) => m.alias === entry.alias)) return apiError(reply, 400, "unknown_model", "Model not available");
+      // Explicit choice by the user: it also lifts any fallback pin.
+      Object.assign(patch, { modelAlias: entry.alias, modelId: entry.modelId, pinnedModel: null, pinReason: null, pinnedUntil: null });
+    }
+    const c = await deps.repos.conversations.update(req.session!.userId, id, patch);
     if (!c) return apiError(reply, 404, "not_found", "Conversation not found");
-    await audit(deps, req, { action: "conversation_title", conversationId: id });
+    await audit(deps, req, { action: patch.modelId ? "conversation_model" : "conversation_title", conversationId: id, ...(patch.modelId ? { model: patch.modelId } : {}) });
     return publicConversation(c);
   });
 

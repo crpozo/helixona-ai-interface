@@ -2,7 +2,7 @@
  * API simulada para la vista previa publicada (modo `demo`): intercepta `fetch` a `/api/*`
  * y responde en memoria, incluido el streaming SSE. Datos de ejemplo, sin Bedrock ni PHI real.
  */
-import type { AttachmentMeta, AdminUser, AuditEvent, Conversation, Me, Message, UsageRow } from "../lib/types";
+import type { AdminUser, AttachmentMeta, AuditEvent, Conversation, Me, Message, Project, UsageRow } from "../lib/types";
 
 const MODELS = [
   { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, available: true },
@@ -29,6 +29,9 @@ const state = {
   ] as AdminUser[],
   usage: [] as UsageRow[],
   audit: [] as AuditEvent[],
+  projects: [
+    { id: "p-appeals", ownerId: "u-ana", name: "Insurance appeals", description: "Denied claims and prior authorizations", instructions: "You help the billing team write appeal letters. Always cite the claim number, the denial reason and the relevant policy language. Keep a professional, factual tone.", visibility: "clinic", knowledge: [{ id: "k-1", name: "Appeal letter template.md", contentType: "text/markdown", size: 4_210, pages: null }], createdAt: "2026-09-10T16:00:00Z", updatedAt: "2026-09-12T10:00:00Z", canEdit: true },
+  ] as Project[],
 };
 
 function seed() {
@@ -142,11 +145,24 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
   if (!state.loggedIn) return error(401, "unauthenticated", "Sign in to continue");
   if (path === "/api/me") return json(me());
   if (path === "/api/conversations" && method === "GET") return json({ items: [...state.conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(publicConv) });
+  if (path === "/api/projects" && method === "GET") return json({ items: [...state.projects].sort((a, b) => a.name.localeCompare(b.name)) });
+  if (path === "/api/projects" && method === "POST") { const p: Project = { id: id(), ownerId: "u-ana", name: String(body["name"] ?? "New project"), description: String(body["description"] ?? ""), instructions: String(body["instructions"] ?? ""), visibility: body["visibility"] === "clinic" ? "clinic" : "private", knowledge: [], createdAt: now(), updatedAt: now(), canEdit: true }; state.projects.push(p); return json(p, 201); }
+  const mProj = path.match(/^\/api\/projects\/([^/]+)(?:\/knowledge(?:\/([^/]+))?)?$/);
+  if (mProj) {
+    const p = state.projects.find((x) => x.id === mProj[1]);
+    if (!p) return error(404, "not_found", "Project not found");
+    if (!mProj[2] && path.endsWith("/knowledge") && method === "POST") return json({ id: id(), name: String(body["name"] ?? "file.pdf"), contentType: String(body["contentType"] ?? "application/pdf"), size: Number(body["size"] ?? 0), upload: { url: "mock://upload", method: "PUT", headers: {}, expiresAt: now() } }, 201);
+    if (mProj[2] && method === "POST") { const name = String(body["name"] ?? "file.pdf"); p.knowledge.push({ id: mProj[2], name, contentType: name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "text/plain", size: 120_000, pages: name.toLowerCase().endsWith(".pdf") ? 8 : null }); p.updatedAt = now(); return json(p); }
+    if (mProj[2] && method === "DELETE") { p.knowledge = p.knowledge.filter((k) => k.id !== mProj[2]); p.updatedAt = now(); return json(p); }
+    if (method === "GET") return json(p);
+    if (method === "PATCH") { Object.assign(p, { name: String(body["name"] ?? p.name), description: String(body["description"] ?? p.description), instructions: String(body["instructions"] ?? p.instructions), visibility: body["visibility"] === "clinic" ? "clinic" : body["visibility"] === "private" ? "private" : p.visibility, updatedAt: now() }); return json(p); }
+    if (method === "DELETE") { state.projects = state.projects.filter((x) => x.id !== p.id); state.conversations.forEach((c) => { if (c.projectId === p.id) c.projectId = null; }); return new Response(null, { status: 204 }); }
+  }
   if (path === "/api/conversations" && method === "POST") {
     const m = MODELS.find((x) => x.alias === body["modelAlias"]);
     if (!m) return error(400, "unknown_model", "Model not available");
     const f = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-    const c: Conv = { id: id(), title: `Conversation ${f.format(new Date())}`, modelAlias: m.alias, modelId: m.modelId, pinnedModel: null, pinReason: null, createdAt: now(), updatedAt: now(), messageCount: 0, messages: [] };
+    const c: Conv = { id: id(), title: `Conversation ${f.format(new Date())}`, modelAlias: m.alias, modelId: m.modelId, pinnedModel: null, pinReason: null, createdAt: now(), updatedAt: now(), messageCount: 0, messages: [], projectId: typeof body["projectId"] === "string" ? String(body["projectId"]) : null };
     state.conversations.push(c);
     return json(publicConv(c), 201);
   }
@@ -168,7 +184,7 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
       return sse(c, text || "Please review the attached document.", init?.signal, attachments);
     }
     if (method === "GET") return json({ conversation: publicConv(c), messages: c.messages });
-    if (method === "PATCH") { c.title = String(body["title"] ?? c.title).slice(0, 80); c.updatedAt = now(); return json(publicConv(c)); }
+    if (method === "PATCH") { if (typeof body["title"] === "string") c.title = String(body["title"]).slice(0, 80); if (typeof body["modelAlias"] === "string") { const nm = MODELS.find((x) => x.alias === body["modelAlias"]); if (!nm) return error(400, "unknown_model", "Model not available"); c.modelAlias = nm.alias; c.modelId = nm.modelId; c.pinnedModel = null; c.pinReason = null; } c.updatedAt = now(); return json(publicConv(c)); }
     if (method === "DELETE") { state.conversations = state.conversations.filter((x) => x.id !== c.id); return new Response(null, { status: 204 }); }
   }
   if (path === "/api/admin/users" && method === "GET") return json({ items: state.users });

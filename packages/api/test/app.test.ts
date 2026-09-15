@@ -330,3 +330,53 @@ describe("Password sign-in (in-app)", () => {
     await app.close();
   });
 });
+
+describe("Projects and model switching", () => {
+  it("a clinic project is visible to everyone, a private one only to its owner; only owner/admin edit", async () => {
+    const { app } = await makeApp();
+    const ana = await login(app, "ana", "staff");
+    const luis = await login(app, "luis", "staff");
+    const adm = await login(app, "root", "admin");
+    const shared = await app.inject({ method: "POST", url: "/api/projects", headers: { ...H, cookie: ana.cookie }, payload: { name: "Insurance appeals", instructions: "Always cite the EOB line items.", visibility: "clinic" } });
+    expect(shared.statusCode).toBe(201);
+    const priv = await app.inject({ method: "POST", url: "/api/projects", headers: { ...H, cookie: ana.cookie }, payload: { name: "My drafts" } });
+    expect(priv.json().visibility).toBe("private");
+    const seenByLuis = (await app.inject({ method: "GET", url: "/api/projects", headers: { cookie: luis.cookie } })).json().items as { id: string; canEdit: boolean }[];
+    expect(seenByLuis.map((p) => p.id)).toEqual([shared.json().id]);
+    expect(seenByLuis[0]!.canEdit).toBe(false);
+    expect((await app.inject({ method: "PATCH", url: `/api/projects/${shared.json().id}`, headers: { ...H, cookie: luis.cookie }, payload: { name: "Hijack" } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "PATCH", url: `/api/projects/${shared.json().id}`, headers: { ...H, cookie: adm.cookie }, payload: { description: "Appeals for denied claims" } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: `/api/projects/${priv.json().id}`, headers: { cookie: luis.cookie } })).statusCode).toBe(404);
+    await app.close();
+  });
+
+  it("conversations can live in a project, use its knowledge, and switch model mid-chat", async () => {
+    const { app } = await makeApp();
+    const ana = await login(app, "ana", "staff");
+    const project = (await app.inject({ method: "POST", url: "/api/projects", headers: { ...H, cookie: ana.cookie }, payload: { name: "Appeals", instructions: "Be concise.", visibility: "clinic" } })).json();
+    // knowledge file
+    const pdf = await PDFDocument.create(); pdf.addPage();
+    const bytes = Buffer.from(await pdf.save());
+    const k = (await app.inject({ method: "POST", url: `/api/projects/${project.id}/knowledge`, headers: { ...H, cookie: ana.cookie }, payload: { name: "Policy.pdf", size: bytes.length, contentType: "application/pdf" } })).json();
+    expect((await app.inject({ method: "PUT", url: k.upload.url, headers: { "content-type": "application/pdf", "x-requested-with": "helixona" }, payload: bytes })).statusCode).toBe(200);
+    const registered = await app.inject({ method: "POST", url: `/api/projects/${project.id}/knowledge/${k.id}`, headers: { ...H, cookie: ana.cookie }, payload: { name: k.name } });
+    expect(registered.json().knowledge).toEqual([expect.objectContaining({ id: k.id, name: "Policy.pdf", pages: 1 })]);
+    // conversation in the project
+    const conv = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "sonnet", projectId: project.id } })).json();
+    expect(conv.projectId).toBe(project.id);
+    const turn = await app.inject({ method: "POST", url: `/api/conversations/${conv.id}/messages`, headers: { ...H, cookie: ana.cookie }, payload: { text: "Summarize the policy" } });
+    expect(parseSse(turn.body).some((e) => e.event === "done")).toBe(true);
+    // switch model
+    const switched = await app.inject({ method: "PATCH", url: `/api/conversations/${conv.id}`, headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "opus" } });
+    expect(switched.json()).toMatchObject({ modelAlias: "opus", pinnedModel: null });
+    const turn2 = await app.inject({ method: "POST", url: `/api/conversations/${conv.id}/messages`, headers: { ...H, cookie: ana.cookie }, payload: { text: "And the deductible?" } });
+    const start = parseSse(turn2.body).find((e) => e.event === "message_start");
+    expect(String(start?.data["model"])).toContain("opus");
+    expect((await app.inject({ method: "PATCH", url: `/api/conversations/${conv.id}`, headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "gpt" } })).statusCode).toBe(400);
+    // unknown project → 400
+    expect((await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "sonnet", projectId: "01ARZ3NDEKTSV4RRFFQ69G5FAV" } })).statusCode).toBe(400);
+    // deleting the project removes its knowledge
+    expect((await app.inject({ method: "DELETE", url: `/api/projects/${project.id}`, headers: { ...H, cookie: ana.cookie } })).statusCode).toBe(204);
+    await app.close();
+  });
+});

@@ -36,6 +36,23 @@ export interface Conversation {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+  projectId?: string | null;
+}
+
+export type ProjectVisibility = "private" | "clinic";
+
+/** A project: instructions plus knowledge files shared by every conversation inside it. */
+export interface Project {
+  id: string;
+  ownerId: string;
+  name: string;
+  description: string;
+  instructions: string;
+  visibility: ProjectVisibility;
+  knowledge: AttachmentMeta[];
+  createdAt: string;
+  updatedAt: string;
+  canEdit: boolean;
 }
 
 export interface Usage {

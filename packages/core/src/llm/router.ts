@@ -26,6 +26,8 @@ export interface TurnInput {
   /** Full content of the new user turn (documents + text). Defaults to a single text block with `userText`. */
   userContent?: BetaContentBlockParam[];
   systemPrompt: string;
+  /** Extra operator instructions (e.g. a project's instructions), sent as a second cached system block. */
+  systemExtra?: string;
   signal?: AbortSignal;
   emit: (ev: TurnEvent) => void;
 }
@@ -80,8 +82,9 @@ export class ModelRouter {
     return { model, entry, switchedFrom: null };
   }
 
-  buildParams(model: string, systemPrompt: string, history: StoredMessage[], userText: string, userContent?: BetaContentBlockParam[]): StreamParams {
+  buildParams(model: string, systemPrompt: string, history: StoredMessage[], userText: string, userContent?: BetaContentBlockParam[], systemExtra?: string): StreamParams {
     const system: BetaTextBlockParam[] = [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral", ttl: "1h" } }];
+    if (systemExtra) system.push({ type: "text", text: systemExtra, cache_control: { type: "ephemeral", ttl: "1h" } });
     const messages: BetaMessageParam[] = [...toMessageParams(history), { role: "user", content: userContent ?? [{ type: "text", text: userText }] }];
     const params: StreamParams = {
       model,
@@ -107,7 +110,7 @@ export class ModelRouter {
     for (let ci = 0; ci < candidates.length; ci++) {
       const model = candidates[ci]!;
       attempt++;
-      const params = this.buildParams(model, input.systemPrompt, input.history, input.userText, input.userContent);
+      const params = this.buildParams(model, input.systemPrompt, input.history, input.userText, input.userContent, input.systemExtra);
       const controller = new AbortController();
       const onAbort = () => controller.abort();
       input.signal?.addEventListener("abort", onAbort, { once: true });

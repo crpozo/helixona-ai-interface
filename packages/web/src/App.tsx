@@ -2,24 +2,29 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   ApiError,
   createConversation,
+  createProject,
   deleteConversation,
+  deleteProject,
   getConversation,
   getMe,
   listConversations,
+  listProjects,
   logout,
   renameConversation,
   sendMessage,
   setUnauthorizedHandler,
+  updateConversation,
 } from "./lib/api";
 import { chatReducer, initialChatState, type ChatMessage } from "./lib/chatReducer";
 import { useIdleTimeout } from "./lib/idle";
 import { navigate, useRoute } from "./lib/router";
-import type { AttachmentMeta, Conversation, Me } from "./lib/types";
+import type { AttachmentMeta, Conversation, Me, Project } from "./lib/types";
 import { AdminPage } from "./components/AdminPage";
 import { ChatPanel } from "./components/ChatPanel";
 import { IdleWarning } from "./components/IdleWarning";
 import { LoginPage } from "./components/LoginPage";
 import { ModelSelector } from "./components/ModelSelector";
+import { ProjectPage } from "./components/ProjectPage";
 import { Sidebar } from "./components/Sidebar";
 
 type Auth =
@@ -44,6 +49,9 @@ export function App() {
   const route = useRoute();
   const [auth, setAuth] = useState<Auth>({ status: "loading" });
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectView, setProjectView] = useState<string | null>(null);
+  const [newInProject, setNewInProject] = useState<string | null>(null);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [creating, setCreating] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
@@ -65,6 +73,8 @@ export function App() {
       abortStream();
       setAuth({ status: "anon", reason });
       setConversations([]);
+      setProjects([]);
+      setProjectView(null);
       setSelected(null);
       setCreating(false);
       setListError(null);
@@ -90,6 +100,14 @@ export function App() {
     }
   }, []);
 
+  const refreshProjects = useCallback(async () => {
+    try {
+      setProjects(await listProjects());
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 401)) setListError("Could not load the project list.");
+    }
+  }, []);
+
   const bootstrap = useCallback(async () => {
     setAuth({ status: "loading" });
     try {
@@ -97,11 +115,12 @@ export function App() {
       hadSession.current = true;
       setAuth({ status: "authed", me });
       await refreshConversations();
+      await refreshProjects();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) return; // ya gestionado por el handler
       setAuth({ status: "error", message: "Could not connect to the server. Please try again." });
     }
-  }, [refreshConversations]);
+  }, [refreshConversations, refreshProjects]);
 
   useEffect(() => {
     void bootstrap();
@@ -144,6 +163,7 @@ export function App() {
     async (id: string) => {
       abortStream();
       setCreating(false);
+      setProjectView(null);
       setSidebarOpen(false);
       const seq = ++loadSeq.current;
       const known = conversations.find((c) => c.id === id) ?? null;
@@ -167,16 +187,61 @@ export function App() {
     [abortStream, conversations],
   );
 
-  const startNew = () => {
+  const startNew = (projectId: string | null = null) => {
     abortStream();
+    setNewInProject(projectId);
+    setProjectView(null);
     setCreating(true);
     setSidebarOpen(false);
+  };
+
+  const openProject = (id: string) => {
+    abortStream();
+    setCreating(false);
+    setSelected(null);
+    dispatch({ type: "reset" });
+    setProjectView(id);
+    setSidebarOpen(false);
+  };
+
+  const newProject = async () => {
+    try {
+      const p = await createProject({ name: "New project" });
+      setProjects((prev) => [...prev, p].sort((a, b) => a.name.localeCompare(b.name)));
+      openProject(p.id);
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 401)) setListError("Could not create the project.");
+    }
+  };
+
+  const projectUpdated = (p: Project) => setProjects((prev) => prev.map((x) => (x.id === p.id ? p : x)).sort((a, b) => a.name.localeCompare(b.name)));
+
+  const removeProject = async (id: string) => {
+    try {
+      await deleteProject(id);
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      setConversations((prev) => prev.map((c) => (c.projectId === id ? { ...c, projectId: null } : c)));
+      setProjectView(null);
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 401)) setListError("Could not delete the project.");
+    }
+  };
+
+  const changeModel = async (alias: string) => {
+    if (!selected) return;
+    try {
+      const updated = await updateConversation(selected.id, { modelAlias: alias });
+      setConversations((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+      setSelected(updated);
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 401)) setListError("Could not change the model.");
+    }
   };
 
   const confirmNew = async (alias: string) => {
     setCreateBusy(true);
     try {
-      const conv = await createConversation(alias);
+      const conv = await createConversation(alias, newInProject);
       ++loadSeq.current;
       setConversations((prev) => [conv, ...prev]);
       setSelected(conv);
@@ -301,13 +366,17 @@ export function App() {
           <Sidebar
             me={me}
             conversations={conversations}
+            projects={projects}
             selectedId={selected?.id ?? null}
+            projectViewId={projectView}
             open={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
             onSelect={(id) => void selectConversation(id)}
-            onNew={startNew}
+            onNew={() => startNew(null)}
             onDelete={(id) => void removeConversation(id)}
             onRename={rename}
+            onOpenProject={openProject}
+            onNewProject={() => void newProject()}
             onLogout={() => void doLogout(null)}
             onAdmin={() => navigate("/admin")}
           />
@@ -325,7 +394,20 @@ export function App() {
                 </button>
               </p>
             )}
-            {creating ? (
+            {projectView && projects.some((p) => p.id === projectView) ? (
+              <ProjectPage
+                project={projects.find((p) => p.id === projectView)!}
+                conversations={conversations.filter((c) => c.projectId === projectView)}
+                models={me.catalog.models}
+                maxMb={me.limits.attachments?.maxMb ?? 20}
+                uploadsEnabled={me.limits.attachments?.enabled ?? false}
+                onBack={() => setProjectView(null)}
+                onOpenConversation={(id) => void selectConversation(id)}
+                onNewConversation={() => startNew(projectView)}
+                onUpdated={projectUpdated}
+                onDelete={() => void removeProject(projectView)}
+              />
+            ) : creating ? (
               <div className="panel-center">
                 <ModelSelector
                   models={me.catalog.models}
@@ -339,18 +421,21 @@ export function App() {
               <ChatPanel
                 me={me}
                 conversation={selected}
+                projectName={selected.projectId ? projects.find((p) => p.id === selected.projectId)?.name ?? null : null}
                 state={chat}
                 loading={loadingConv}
                 onSend={(t, a) => void send(t, a)}
                 onStop={stop}
                 onRetry={retry}
+                onChangeModel={(alias) => void changeModel(alias)}
+                onOpenProject={selected.projectId ? () => openProject(selected.projectId!) : undefined}
               />
             ) : (
               <div className="panel-center">
                 <div className="empty">
                   <h1>Hello, {me.user.name}</h1>
                   <p className="muted">Select a conversation or start a new one.</p>
-                  <button type="button" className="btn btn-primary" onClick={startNew}>
+                  <button type="button" className="btn btn-primary" onClick={() => startNew(null)}>
                     New conversation
                   </button>
                 </div>

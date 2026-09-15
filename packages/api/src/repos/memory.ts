@@ -1,5 +1,5 @@
-import type { Conversation, StoredMessage, UsageSummary } from "@helixona/core";
-import type { AuditEvent, AuditRepo, ConversationPatch, ConversationRepo, DirectoryUser, MessageRepo, Repos, Session, SessionRepo, UsageRepo, UsageRow, UserDirectory } from "./types.js";
+import type { Conversation, Project, StoredMessage, UsageSummary } from "@helixona/core";
+import type { AuditEvent, AuditRepo, ConversationPatch, ConversationRepo, DirectoryUser, MessageRepo, ProjectPatch, ProjectRepo, Repos, Session, SessionRepo, UsageRepo, UsageRow, UserDirectory } from "./types.js";
 
 export class MemoryConversationRepo implements ConversationRepo {
   private data = new Map<string, Conversation>();
@@ -13,6 +13,19 @@ export class MemoryConversationRepo implements ConversationRepo {
     this.data.set(this.key(userId, id), next); return { ...next };
   }
   async delete(userId: string, id: string) { this.data.delete(this.key(userId, id)); }
+}
+
+export class MemoryProjectRepo implements ProjectRepo {
+  private data = new Map<string, Project>();
+  async create(p: Project) { this.data.set(p.id, structuredClone(p)); }
+  async get(id: string) { const p = this.data.get(id); return p ? structuredClone(p) : null; }
+  async list() { return [...this.data.values()].map((p) => structuredClone(p)); }
+  async update(id: string, patch: ProjectPatch) {
+    const p = this.data.get(id); if (!p) return null;
+    const next = { ...p, ...patch, updatedAt: patch.updatedAt ?? new Date().toISOString() } as Project;
+    this.data.set(id, next); return structuredClone(next);
+  }
+  async delete(id: string) { this.data.delete(id); }
 }
 
 export class MemoryMessageRepo implements MessageRepo {
@@ -63,5 +76,5 @@ export class MemoryUserDirectory implements UserDirectory {
 }
 
 export function memoryRepos(): Repos & { audit: MemoryAuditRepo } {
-  return { conversations: new MemoryConversationRepo(), messages: new MemoryMessageRepo(), sessions: new MemorySessionRepo(), audit: new MemoryAuditRepo(), usage: new MemoryUsageRepo() };
+  return { conversations: new MemoryConversationRepo(), messages: new MemoryMessageRepo(), sessions: new MemorySessionRepo(), audit: new MemoryAuditRepo(), usage: new MemoryUsageRepo(), projects: new MemoryProjectRepo() };
 }

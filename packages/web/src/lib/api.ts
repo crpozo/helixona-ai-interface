@@ -6,6 +6,8 @@ import type {
   Conversation,
   Me,
   Message,
+  Project,
+  ProjectVisibility,
   Role,
   UsageRow,
 } from "./types";
@@ -125,8 +127,8 @@ export async function listConversations(): Promise<Conversation[]> {
   return r.items;
 }
 
-export function createConversation(modelAlias: string): Promise<Conversation> {
-  return request<Conversation>("/api/conversations", { method: "POST", body: { modelAlias } });
+export function createConversation(modelAlias: string, projectId: string | null = null): Promise<Conversation> {
+  return request<Conversation>("/api/conversations", { method: "POST", body: projectId ? { modelAlias, projectId } : { modelAlias } });
 }
 
 export function getConversation(
@@ -136,11 +138,43 @@ export function getConversation(
   return request(`/api/conversations/${encodeURIComponent(id)}`, { signal });
 }
 
+export function updateConversation(id: string, patch: { title?: string; modelAlias?: string }): Promise<Conversation> {
+  return request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { method: "PATCH", body: patch });
+}
+
 export function renameConversation(id: string, title: string): Promise<Conversation> {
-  return request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body: { title },
-  });
+  return updateConversation(id, { title });
+}
+
+// ---- Projects ----
+
+export async function listProjects(): Promise<Project[]> {
+  const r = await request<{ items: Project[] }>("/api/projects");
+  return r.items;
+}
+
+export function createProject(input: { name: string; description?: string; instructions?: string; visibility?: ProjectVisibility }): Promise<Project> {
+  return request<Project>("/api/projects", { method: "POST", body: input });
+}
+
+export function updateProject(id: string, patch: { name?: string; description?: string; instructions?: string; visibility?: ProjectVisibility }): Promise<Project> {
+  return request<Project>(`/api/projects/${encodeURIComponent(id)}`, { method: "PATCH", body: patch });
+}
+
+export function deleteProject(id: string): Promise<void> {
+  return request<void>(`/api/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function createProjectKnowledge(projectId: string, input: { name: string; size: number; contentType: string }): Promise<AttachmentUpload> {
+  return request<AttachmentUpload>(`/api/projects/${encodeURIComponent(projectId)}/knowledge`, { method: "POST", body: input });
+}
+
+export function registerProjectKnowledge(projectId: string, attachmentId: string, name: string): Promise<Project> {
+  return request<Project>(`/api/projects/${encodeURIComponent(projectId)}/knowledge/${encodeURIComponent(attachmentId)}`, { method: "POST", body: { name } });
+}
+
+export function deleteProjectKnowledge(projectId: string, attachmentId: string): Promise<Project> {
+  return request<Project>(`/api/projects/${encodeURIComponent(projectId)}/knowledge/${encodeURIComponent(attachmentId)}`, { method: "DELETE" });
 }
 
 export function deleteConversation(id: string): Promise<void> {

@@ -20,6 +20,7 @@ export interface HelixonaTables {
   readonly sessions: dynamodb.Table;
   readonly audit: dynamodb.Table;
   readonly usage: dynamodb.Table;
+  readonly projects: dynamodb.Table;
 }
 
 /**
@@ -145,7 +146,13 @@ export class FoundationStack extends cdk.Stack {
       sortKey: { name: 'day', type: s },
       timeToLiveAttribute: 'expiresAt',
     });
-    this.tables = { conversations, messages, sessions, audit, usage };
+    // Projects: shared instructions and knowledge-file metadata (small table, no TTL).
+    const projects = new dynamodb.Table(this, 'ProjectsTable', {
+      ...tableDefaults,
+      tableName: resourceName(stage, 'projects'),
+      partitionKey: { name: 'projectId', type: s },
+    });
+    this.tables = { conversations, messages, sessions, audit, usage, projects };
 
     // --------------------------------------------------------- AWS Backup
     // Copia diaria (35 días) de las tablas a un vault cifrado con la CMK. Idealmente el vault
