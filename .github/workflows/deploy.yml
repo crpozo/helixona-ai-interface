@@ -57,6 +57,37 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Diagnóstico: qué identidad OIDC presenta GitHub (debe coincidir con la trust policy del rol:
+      # sub = repo:<org>/<repo>:environment:<environment>, aud = sts.amazonaws.com) y que el secreto
+      # AWS_DEPLOY_ROLE_ARN tenga forma de ARN de rol. No imprime el token ni el secreto completo.
+      - name: Verificar identidad OIDC y formato del rol
+        env:
+          ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, json, os, re, sys, urllib.request
+          url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"] + "&audience=sts.amazonaws.com"
+          req = urllib.request.Request(url, headers={"Authorization": "bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]})
+          jwt = json.load(urllib.request.urlopen(req))["value"]
+          payload = jwt.split(".")[1]
+          payload += "=" * (-len(payload) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(payload))
+          print("Claims del token OIDC que recibe AWS:")
+          for k in ("iss", "aud", "sub", "repository", "repository_owner", "environment", "ref", "event_name"):
+              print(f"  {k}: {claims.get(k)}")
+          arn = os.environ.get("ROLE_ARN", "")
+          m = re.fullmatch(r"arn:aws:iam::(\d{12}):role/([A-Za-z0-9+=,.@_/-]+)", arn)
+          if not m:
+              print(f"::error::El secreto AWS_DEPLOY_ROLE_ARN no tiene formato de ARN de rol IAM (longitud {len(arn)}, "
+                    f"{'con' if arn != arn.strip() else 'sin'} espacios o saltos de línea al borde).")
+              sys.exit(1)
+          print(f"AWS_DEPLOY_ROLE_ARN: formato correcto (cuenta {m.group(1)}, rol {m.group(2)})")
+          print("La trust policy del rol debe permitir exactamente:")
+          print(f"  token.actions.githubusercontent.com:sub = {claims.get('sub')}")
+          print(f"  token.actions.githubusercontent.com:aud = sts.amazonaws.com")
+          PY
+
       # TODO: anclar por SHA (verificar el commit del tag v4 en github.com/aws-actions/configure-aws-credentials).
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
