@@ -185,6 +185,19 @@ aws cognito-idp set-user-pool-mfa-config --user-pool-id "$POOL_ID" --mfa-configu
 
 Record the change and the reason in the incident log.
 
+### Leftovers from the first CloudTrail deploy
+
+The first deploy with CloudTrail failed (the key policy did not allow CloudTrail) and the rollback
+kept three empty resources that are no longer managed by the stack. They cost about USD 1 per month
+(the KMS key) and can be removed from CloudShell:
+
+```bash
+export AWS_REGION=us-east-1
+aws s3 rb s3://helixona-prod-cloudtrail-148274106093 --force
+aws logs delete-log-group --log-group-name /helixona/prod/cloudtrail
+aws kms schedule-key-deletion --key-id 64c83ac4-bd62-43b1-8420-1a4a07bf3dbd --pending-window-in-days 7
+```
+
 ---
 
 ## 6. Sources

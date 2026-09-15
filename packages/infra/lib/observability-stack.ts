@@ -178,8 +178,10 @@ export class ObservabilityStack extends cdk.Stack {
         enableKeyRotation: true,
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
+      // Name changed after the first (rolled-back) deploy left a retained `…-cloudtrail-<account>`
+      // bucket behind; fixed names cannot be re-created while the orphan exists.
       const trailBucket = new s3.Bucket(this, 'TrailBucket', {
-        bucketName: resourceName(stage, `cloudtrail-${this.account}`),
+        bucketName: resourceName(stage, `trail-logs-${this.account}`),
         encryption: s3.BucketEncryption.KMS,
         encryptionKey: trailKey,
         blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -202,8 +204,28 @@ export class ObservabilityStack extends cdk.Stack {
           },
         }),
       );
+      // The Trail construct only writes the bucket policy; CloudTrail must be allowed to use the
+      // key explicitly or CreateTrail fails with "Insufficient permissions to access S3 bucket or
+      // KMS key". Encryption context scopes it to this account's trails.
+      trailKey.addToResourcePolicy(
+        new iam.PolicyStatement({
+          sid: 'AllowCloudTrailEncryptLogs',
+          principals: [new iam.ServicePrincipal('cloudtrail.amazonaws.com')],
+          actions: ['kms:GenerateDataKey*'],
+          resources: ['*'],
+          conditions: { StringLike: { 'kms:EncryptionContext:aws:cloudtrail:arn': `arn:${this.partition}:cloudtrail:*:${this.account}:trail/*` } },
+        }),
+      );
+      trailKey.addToResourcePolicy(
+        new iam.PolicyStatement({
+          sid: 'AllowCloudTrailDescribeKey',
+          principals: [new iam.ServicePrincipal('cloudtrail.amazonaws.com')],
+          actions: ['kms:DescribeKey'],
+          resources: ['*'],
+        }),
+      );
       const trailLogGroup = new logs.LogGroup(this, 'TrailLogGroup', {
-        logGroupName: `/helixona/${stage}/cloudtrail`,
+        logGroupName: `/helixona/${stage}/trail`,
         retention: logs.RetentionDays.ONE_YEAR,
         encryptionKey: trailKey,
         removalPolicy: cdk.RemovalPolicy.RETAIN,

@@ -6,6 +6,7 @@ import { AuthStack } from '../lib/auth-stack.js';
 import { loadConfig } from '../lib/config.js';
 import { FoundationStack } from '../lib/foundation-stack.js';
 import { NetworkStack } from '../lib/network-stack.js';
+import { ObservabilityStack } from '../lib/observability-stack.js';
 
 const env = { account: '123456789012', region: 'us-east-1' };
 
@@ -221,5 +222,56 @@ describe('AppStack', () => {
       Scope: 'CLOUDFRONT',
       Rules: Match.arrayWith([Match.objectLike({ Statement: { RateBasedStatement: Match.objectLike({ Limit: 3000 }) } })]),
     });
+  });
+});
+
+describe('ObservabilityStack (CloudTrail)', () => {
+  it('the trail key lets CloudTrail generate data keys (scoped by encryption context) and describe the key', () => {
+    const app = new cdk.App({ context: { stage: 'test', appBaseUrl: 'https://chat.test', cognitoDomainPrefix: 'helixona-test', enableCloudTrail: true } });
+    const config = loadConfig(app);
+    const f = new FoundationStack(app, 'F2', { env, config });
+    const a = new AuthStack(app, 'A2', { env, config, phiKey: f.phiKey });
+    const n = new NetworkStack(app, 'N2', { env, config, logsBucket: f.logsBucket });
+    const s = new AppStack(app, 'App2', {
+      env,
+      config,
+      phiKey: f.phiKey,
+      tables: f.tables,
+      attachmentsBucket: f.attachmentsBucket,
+      logsBucket: f.logsBucket,
+      sessionSecret: f.sessionSecret,
+      cognitoClientSecret: f.cognitoClientSecret,
+      anthropicApiKeySecret: f.anthropicApiKeySecret,
+      apiRepository: f.apiRepository,
+      userPool: a.userPool,
+      userPoolClient: a.userPoolClient,
+      cognitoDomainUrl: a.cognitoDomainUrl,
+      vpc: n.vpc,
+      appSubnets: n.appSubnets,
+      albSecurityGroup: n.albSecurityGroup,
+      appSecurityGroup: n.appSecurityGroup,
+    });
+    const o = new ObservabilityStack(app, 'O2', {
+      env,
+      config,
+      loadBalancer: s.loadBalancer,
+      targetGroup: s.targetGroup,
+      service: s.service,
+      appLogGroup: s.appLogGroup,
+      logsBucket: f.logsBucket,
+      tables: Object.values(f.tables),
+      attachmentsBucket: f.attachmentsBucket,
+    });
+    const t = Template.fromStack(o);
+    t.hasResourceProperties('AWS::CloudTrail::Trail', { TrailName: 'helixona-test-trail', IsMultiRegionTrail: true, EnableLogFileValidation: true });
+    t.hasResourceProperties('AWS::KMS::Key', {
+      KeyPolicy: {
+        Statement: Match.arrayWith([
+          Match.objectLike({ Sid: 'AllowCloudTrailEncryptLogs', Principal: { Service: 'cloudtrail.amazonaws.com' }, Action: 'kms:GenerateDataKey*', Condition: { StringLike: { 'kms:EncryptionContext:aws:cloudtrail:arn': Match.anyValue() } } }),
+          Match.objectLike({ Sid: 'AllowCloudTrailDescribeKey', Principal: { Service: 'cloudtrail.amazonaws.com' }, Action: 'kms:DescribeKey' }),
+        ]),
+      },
+    });
+    t.hasResourceProperties('AWS::S3::Bucket', { BucketName: 'helixona-test-trail-logs-123456789012' });
   });
 });
