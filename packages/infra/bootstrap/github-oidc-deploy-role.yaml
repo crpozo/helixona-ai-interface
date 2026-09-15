@@ -15,6 +15,16 @@ Parameters:
     Type: String
     Default: production
     Description: Environment de GitHub con aprobación requerida desde el que se permite desplegar.
+  GitHubOwnerId:
+    Type: String
+    Default: "28877839"
+    Description: >
+      ID numérico del propietario en GitHub. Los tokens OIDC nuevos llevan el subject con IDs
+      (repo:<org>@<ownerId>/<repo>@<repoId>:environment:<env>); se aceptan ambos formatos.
+  GitHubRepoId:
+    Type: String
+    Default: "1366529313"
+    Description: ID numérico del repositorio en GitHub (api.github.com/repos/<org>/<repo> → id).
   CreateOidcProvider:
     Type: String
     Default: "true"
@@ -52,7 +62,10 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrg}/${GitHubRepo}:environment:${GitHubEnvironment}
+                # Lista = OR. Formato clásico y formato con IDs (inmutables aunque se renombre el repo).
+                token.actions.githubusercontent.com:sub:
+                  - !Sub repo:${GitHubOrg}/${GitHubRepo}:environment:${GitHubEnvironment}
+                  - !Sub repo:${GitHubOrg}@${GitHubOwnerId}/${GitHubRepo}@${GitHubRepoId}:environment:${GitHubEnvironment}
       Policies:
         - PolicyName: cdk-deploy-via-bootstrap-roles
           PolicyDocument:
