@@ -29,7 +29,7 @@ Parameters:
     Type: String
     Default: "true"
     AllowedValues: ["true", "false"]
-    Description: "false" si la cuenta ya tiene el proveedor OIDC de GitHub.
+    Description: Poner "false" si la cuenta ya tiene el proveedor OIDC de GitHub.
   CdkQualifier:
     Type: String
     Default: hnb659fds
