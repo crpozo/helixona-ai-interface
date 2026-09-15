@@ -102,9 +102,9 @@ describe('FoundationStack', () => {
 });
 
 describe('AuthStack', () => {
-  it('User Pool con MFA REQUIRED solo TOTP, sin autoregistro y contraseña fuerte', () => {
+  it('User Pool con MFA OPTIONAL solo TOTP, sin autoregistro y contraseña fuerte', () => {
     auth.hasResourceProperties('AWS::Cognito::UserPool', {
-      MfaConfiguration: 'ON',
+      MfaConfiguration: 'OPTIONAL',
       EnabledMfas: ['SOFTWARE_TOKEN_MFA'],
       AdminCreateUserConfig: Match.objectLike({ AllowAdminCreateUserOnly: true }),
       UsernameAttributes: ['email'],

@@ -1,9 +1,9 @@
 /*
  * Brand tokens (edit ONLY this file to change the visual identity).
- * Values taken from helixona.com (September 2026): warm off-white canvas, near-black ink,
- * champagne/gold accents, serif headings and Montserrat body text. The site's heading face
- * (TT Ramillas) is a commercial trial font, so headings use Playfair Display (OFL) instead.
- * Fonts are self-hosted from /fonts because the CSP only allows same-origin fonts.
+ * Modeled on helixona.com (September 2026): black canvas, white serif headlines, wide-tracked
+ * uppercase labels, champagne-gold buttons with dark text and gold outlines. The site's heading
+ * face (TT Ramillas) is a commercial trial font, so headings use Playfair Display (OFL); body and
+ * labels use Montserrat (OFL). Fonts are self-hosted from /fonts (the CSP only allows same-origin).
  */
 @font-face {
   font-family: "Montserrat";
@@ -56,32 +56,36 @@
 }
 
 :root {
-  /* Brand colors (helixona.com palette) */
-  --brand-primary: #c9a227;          /* deep gold: primary buttons, active states */
-  --brand-primary-hover: #b8960f;    /* hover/pressed gold */
-  --brand-primary-contrast: #1a1a1a; /* dark text on gold (gold on white fails contrast) */
-  --brand-accent: #d6b981;           /* champagne: focus ring, highlights, selected borders */
-  --brand-accent-soft: #f1d6a0;      /* light champagne tint */
-  --brand-link: #8b7355;             /* bronze: links and gold-toned text on white (readable) */
-  --brand-ink: #1a1a1a;              /* primary text */
-  --brand-ink-muted: #666666;        /* secondary text */
-  --brand-canvas: #f9f7f2;           /* page background (warm off-white) */
-  --brand-surface: #ffffff;          /* cards and panels */
-  --brand-surface-2: #f3efe6;        /* secondary surfaces (warm) */
-  --brand-line: #e0e0e0;             /* borders */
-  --brand-user-bubble: #f6efe0;      /* user message bubble (champagne tint) */
+  /* Brand colors (helixona.com: black + champagne gold + white) */
+  --brand-black: #000000;            /* header/hero background on the site */
+  --brand-primary: #d6b981;          /* champagne: primary buttons, active states */
+  --brand-primary-hover: #e6cc98;    /* lighter champagne on hover */
+  --brand-primary-contrast: #121212; /* dark text on champagne */
+  --brand-accent: #c9a227;           /* deep gold: focus ring, highlights */
+  --brand-accent-soft: #f1d6a0;      /* light champagne */
+  --brand-link: #d6b981;             /* links on dark surfaces */
+  --brand-ink: #f4f1ea;              /* primary text (warm white) */
+  --brand-ink-muted: #a9a394;        /* secondary text (warm gray) */
+  --brand-canvas: #0c0c0c;           /* app background */
+  --brand-surface: #151515;          /* cards, panels, bars */
+  --brand-surface-2: #1f1e1b;        /* secondary surfaces, hover */
+  --brand-line: #2a2823;             /* borders */
+  --brand-line-gold: rgba(214, 185, 129, 0.35); /* gold hairlines */
+  --brand-user-bubble: #262014;      /* user message bubble (dark gold tint) */
+  --brand-glow: radial-gradient(ellipse 70% 55% at 50% 62%, rgba(201, 162, 39, 0.34), rgba(201, 162, 39, 0.08) 45%, transparent 72%);
 
   /* Typography */
   --brand-font: "Montserrat", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --brand-font-heading: "Playfair Display", Georgia, "Times New Roman", serif;
-  --brand-heading-weight: 600;
+  --brand-heading-weight: 500;
+  --brand-tracking: 0.18em;          /* uppercase labels and buttons */
 
   /* Shape */
-  --brand-radius: 8px;
+  --brand-radius: 4px;
   --brand-radius-pill: 999px;
-  --brand-shadow: 0 1px 2px rgba(26, 26, 26, 0.06), 0 8px 24px rgba(139, 115, 85, 0.1);
+  --brand-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 16px 40px rgba(0, 0, 0, 0.5);
 
   /* Logo */
-  --brand-logo-height: 30px;
-  --brand-logo-height-login: 48px;
+  --brand-logo-height: 22px;
+  --brand-logo-height-login: 30px;
 }

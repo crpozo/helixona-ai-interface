@@ -1,15 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 72" role="img" aria-label="Helixona">
-  <!-- Provisional logo in the helixona.com palette. Replace with the official file (Helixona-Logo.png) when available. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 48" role="img" aria-label="Helixona">
+  <!-- HELIXONA wordmark in the helixona.com style (white, wide tracking, gold helix X). The app renders the
+       wordmark inline (Logo.tsx); this file is kept for previews/tools. Replace with the official file when available. -->
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#c9a227"/>
-      <stop offset="1" stop-color="#d6b981"/>
+      <stop offset="0" stop-color="#f1d6a0"/>
+      <stop offset="1" stop-color="#c9a227"/>
     </linearGradient>
   </defs>
-  <g fill="none" stroke="url(#g)" stroke-width="6" stroke-linecap="round">
-    <path d="M14 10 C 34 10, 34 36, 14 36 S 34 62, 54 62"/>
-    <path d="M54 10 C 34 10, 34 36, 54 36 S 34 62, 14 62"/>
-    <path d="M22 23 H 46 M22 49 H 46" stroke-width="4" opacity="0.6"/>
+  <rect width="420" height="48" fill="#000"/>
+  <text x="8" y="34" font-family="Montserrat, 'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="500" fill="#fff" letter-spacing="9">HELI</text>
+  <g fill="none" stroke="url(#g)" stroke-linecap="round" transform="translate(150 4)">
+    <path d="M6 4 C 20 13, 20 27, 34 36" stroke-width="3.6"/>
+    <path d="M34 4 C 20 13, 20 27, 6 36" stroke-width="3.6"/>
+    <path d="M13.5 11.5 H 26.5 M13.5 28.5 H 26.5" stroke-width="2" opacity="0.75"/>
   </g>
-  <text x="76" y="49" font-family="'Playfair Display', Georgia, 'Times New Roman', serif" font-size="36" font-weight="600" fill="#1a1a1a" letter-spacing="1">Helixona</text>
+  <text x="200" y="34" font-family="Montserrat, 'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="500" fill="#fff" letter-spacing="9">ONA</text>
 </svg>

@@ -1,14 +1,14 @@
 /**
- * Marca de la clínica. Para aplicar la identidad de helixona.com:
- *  1. Reemplaza `public/brand/logo.svg` (y opcionalmente `logo-mark.svg`) por los archivos oficiales.
- *  2. Ajusta los tokens de color y tipografía en `src/brand.css` (un solo archivo).
- *  3. Si la tipografía es de pago o web, colócala en `public/fonts/` y decláralo con @font-face en brand.css
- *     (la CSP no permite fuentes remotas; deben servirse desde el mismo origen).
+ * Clinic brand. To use the official logo file from helixona.com:
+ *  1. Put it in `public/brand/` (e.g. `Helixona-Logo.png`, white wordmark on transparent).
+ *  2. Set `logoImage` below to `${import.meta.env.BASE_URL}brand/Helixona-Logo.png`.
+ * While `logoImage` is null the app renders the HELIXONA wordmark with the gold "X" in CSS/SVG.
+ * Colors and typography live in `src/brand.css` (one file). Fonts are self-hosted in `public/fonts/`
+ * because the CSP does not allow remote fonts.
  */
 export const brand = {
   name: "Helixona",
   productName: "Helixona Assistant",
   tagline: "Internal use · authorized staff only",
-  logoUrl: `${import.meta.env.BASE_URL}brand/logo.svg`,
-  logoMarkUrl: `${import.meta.env.BASE_URL}brand/logo-mark.svg`,
+  logoImage: null as string | null,
 } as const;

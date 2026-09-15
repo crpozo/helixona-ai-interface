@@ -35,6 +35,18 @@ export function registerAdminRoutes(app: FastifyInstance, deps: Deps): void {
     return { ok: true };
   });
 
+  app.post("/api/admin/users/:id/role", { preHandler: admin }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = z.object({ role: z.enum(["staff", "admin"]) }).safeParse(req.body);
+    if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
+    if (id === req.session!.userId) return apiError(reply, 400, "bad_request", "You cannot change your own role");
+    await deps.directory.setRole(id, body.data.role);
+    // The role lives in the session: revoke the user's sessions so the next sign-in picks it up.
+    const n = await deps.repos.sessions.deleteAllForUser(id);
+    await audit(deps, req, { action: "admin_user_role", meta: { targetUserId: id, role: body.data.role, sessionsRevoked: n } });
+    return { ok: true };
+  });
+
   app.get("/api/admin/audit", { preHandler: admin }, async (req, reply) => {
     const q = z.object({ day: Day.default(today(now)) }).safeParse(req.query);
     if (!q.success) return apiError(reply, 400, "bad_request", "Invalid request");

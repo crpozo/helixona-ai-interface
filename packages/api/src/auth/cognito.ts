@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
-import { AdminCreateUserCommand, AdminDisableUserCommand, AdminEnableUserCommand, AdminAddUserToGroupCommand, CognitoIdentityProviderClient, ListUsersCommand, AdminUserGlobalSignOutCommand } from "@aws-sdk/client-cognito-identity-provider";
+import { AdminCreateUserCommand, AdminDisableUserCommand, AdminEnableUserCommand, AdminAddUserToGroupCommand, AdminRemoveUserFromGroupCommand, CognitoIdentityProviderClient, ListUsersCommand, ListUsersInGroupCommand, AdminUserGlobalSignOutCommand } from "@aws-sdk/client-cognito-identity-provider";
 import type { Role } from "@helixona/core";
 import type { DirectoryUser, UserDirectory } from "../repos/types.js";
 
@@ -80,17 +80,39 @@ export class CognitoUserDirectory implements UserDirectory {
   constructor(private readonly region: string, private readonly userPoolId: string) { this.client = new CognitoIdentityProviderClient({ region }); }
 
   async list(): Promise<DirectoryUser[]> {
+    const admins = await this.adminUsernames();
     const out: DirectoryUser[] = [];
     let token: string | undefined;
     do {
       const r = await this.client.send(new ListUsersCommand({ UserPoolId: this.userPoolId, PaginationToken: token, Limit: 60 }));
       for (const u of r.Users ?? []) {
         const attr = (n: string) => u.Attributes?.find((a) => a.Name === n)?.Value ?? "";
-        out.push({ id: attr("sub") || (u.Username ?? ""), email: attr("email"), name: attr("name"), role: "staff", enabled: u.Enabled ?? false, createdAt: u.UserCreateDate?.toISOString() ?? "" });
+        out.push({ id: attr("sub") || (u.Username ?? ""), email: attr("email"), name: attr("name"), role: admins.has(u.Username ?? "") ? "admin" : "staff", enabled: u.Enabled ?? false, createdAt: u.UserCreateDate?.toISOString() ?? "" });
       }
       token = r.PaginationToken;
     } while (token);
     return out;
+  }
+
+  /** Usernames in the `admin` group (one paginated call instead of one call per user). */
+  private async adminUsernames(): Promise<Set<string>> {
+    const set = new Set<string>();
+    let token: string | undefined;
+    do {
+      const r = await this.client.send(new ListUsersInGroupCommand({ UserPoolId: this.userPoolId, GroupName: "admin", NextToken: token, Limit: 60 }));
+      for (const u of r.Users ?? []) if (u.Username) set.add(u.Username);
+      token = r.NextToken;
+    } while (token);
+    return set;
+  }
+
+  async setRole(id: string, role: Role): Promise<void> {
+    const username = await this.usernameFor(id);
+    await this.client.send(new AdminAddUserToGroupCommand({ UserPoolId: this.userPoolId, Username: username, GroupName: "staff" }));
+    if (role === "admin") await this.client.send(new AdminAddUserToGroupCommand({ UserPoolId: this.userPoolId, Username: username, GroupName: "admin" }));
+    else await this.client.send(new AdminRemoveUserFromGroupCommand({ UserPoolId: this.userPoolId, Username: username, GroupName: "admin" })).catch(() => {});
+    // Roles come from the ID token at sign-in: sign the user out everywhere so the change applies now.
+    await this.client.send(new AdminUserGlobalSignOutCommand({ UserPoolId: this.userPoolId, Username: username })).catch(() => {});
   }
 
   async create(input: { email: string; name: string; role: Role }): Promise<DirectoryUser> {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AdminUser, Me, Role, UsageRow } from "../lib/types";
-import { ApiError, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminUsage } from "../lib/api";
+import { ApiError, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminSetRole, adminUsage } from "../lib/api";
 import { modelLabel } from "../lib/models";
 
 interface Props {
@@ -59,6 +59,18 @@ export function AdminPage({ me, onBack }: Props) {
   useEffect(() => {
     void loadUsage(day);
   }, [day, loadUsage]);
+
+  const changeRole = async (u: AdminUser, role: Role) => {
+    if (role === u.role) return;
+    if (!window.confirm(`Change ${u.email} to ${role === "admin" ? "administrator" : "staff"}? They will be signed out and must sign in again.`)) return;
+    setUsersError(null);
+    try {
+      await adminSetRole(u.id, role);
+      setUsers((prev) => prev?.map((x) => (x.id === u.id ? { ...x, role } : x)) ?? prev);
+    } catch (e) {
+      setUsersError(errMsg(e));
+    }
+  };
 
   const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -166,7 +178,12 @@ export function AdminPage({ me, onBack }: Props) {
                   <tr key={u.id}>
                     <td>{u.name}</td>
                     <td>{u.email}</td>
-                    <td>{u.role}</td>
+                    <td>
+                      <select className="role-select" value={u.role} aria-label={`Role for ${u.email}`} disabled={u.id === me.user.id} onChange={(e) => void changeRole(u, e.target.value as Role)}>
+                        <option value="staff">staff</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </td>
                     <td>{u.enabled ? "Active" : "Disabled"}</td>
                     <td>{dateFmt.format(new Date(u.createdAt))}</td>
                     <td>

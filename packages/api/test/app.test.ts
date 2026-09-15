@@ -206,3 +206,23 @@ describe("Cognito login flow (signed OIDC cookie)", () => {
     await app.close();
   });
 });
+
+describe("Admin: roles", () => {
+  it("an admin can change a user's role; not their own; staff cannot", async () => {
+    const { app } = await makeApp();
+    const adm = await login(app, "root", "admin");
+    const created = await app.inject({ method: "POST", url: "/api/admin/users", headers: { ...H, cookie: adm.cookie }, payload: { email: "luz@example.test", name: "Luz", role: "staff" } });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().id as string;
+    const r = await app.inject({ method: "POST", url: `/api/admin/users/${id}/role`, headers: { ...H, cookie: adm.cookie }, payload: { role: "admin" } });
+    expect(r.json()).toEqual({ ok: true });
+    const list = await app.inject({ method: "GET", url: "/api/admin/users", headers: { cookie: adm.cookie } });
+    expect(list.json().items.find((u: { id: string }) => u.id === id).role).toBe("admin");
+    const self = await app.inject({ method: "POST", url: "/api/admin/users/dev-root/role", headers: { ...H, cookie: adm.cookie }, payload: { role: "staff" } });
+    expect(self.statusCode).toBe(400);
+    const staff = await login(app, "pepe", "staff");
+    const denied = await app.inject({ method: "POST", url: `/api/admin/users/${id}/role`, headers: { ...H, cookie: staff.cookie }, payload: { role: "staff" } });
+    expect(denied.statusCode).toBe(403);
+    await app.close();
+  });
+});

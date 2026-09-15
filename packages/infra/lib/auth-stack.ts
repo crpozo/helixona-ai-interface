@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
+import { NagSuppressions } from 'cdk-nag';
 import { Construct } from 'constructs';
 import { DeployConfig, resourceName } from './config.js';
 import { addWafLogging, managedRule, rateLimitRule } from './waf.js';
@@ -12,7 +13,7 @@ export interface AuthStackProps extends cdk.StackProps {
 }
 
 /**
- * Identidad: Cognito User Pool sin autoregistro, MFA TOTP obligatoria, app client confidencial
+ * Identidad: Cognito User Pool sin autoregistro, MFA TOTP opcional (decisión del titular), app client confidencial
  * (Authorization Code) y WAF regional asociado al pool (sus endpoints son públicos).
  */
 export class AuthStack extends cdk.Stack {
@@ -45,7 +46,9 @@ export class AuthStack extends cdk.Stack {
         tempPasswordValidity: cdk.Duration.days(3),
         passwordHistorySize: 12,
       },
-      mfa: cognito.Mfa.REQUIRED,
+      // Owner's decision (2026-09-15): MFA optional so staff can sign in with password only; users may
+      // still enroll an authenticator app. Switch back to REQUIRED to enforce it for everyone.
+      mfa: cognito.Mfa.OPTIONAL,
       mfaSecondFactor: { sms: false, otp: true },
       featurePlan: cognito.FeaturePlan.PLUS,
       standardThreatProtectionMode: cognito.StandardThreatProtectionMode.FULL_FUNCTION,
@@ -56,10 +59,14 @@ export class AuthStack extends cdk.Stack {
         emailSubject: 'Your Helixona AI Assistant account',
         emailBody:
           'Hello {username}. Your account for the Helixona AI Assistant has been created. Your temporary password is {####}. ' +
-          'You will be asked to change it and set up an authenticator app on first sign-in.',
+          'You will be asked to change it on first sign-in.',
       },
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
+    NagSuppressions.addResourceSuppressions(this.userPool, [
+      { id: 'AwsSolutions-COG2', reason: 'MFA is optional by decision of the clinic owner (password-only sign-in requested); users can still enroll TOTP. Documented risk; set REQUIRED before handling PHI at scale.' },
+      { id: 'HIPAA.Security-CognitoUserPoolMFA', reason: 'MFA is optional by decision of the clinic owner; see AwsSolutions-COG2.' },
+    ]);
 
     this.userPool.addGroup('StaffGroup', { groupName: 'staff', description: 'Staff: uses the chat' });
     this.userPool.addGroup('AdminGroup', { groupName: 'admin', description: 'Administration: staff plus user management and audit' });

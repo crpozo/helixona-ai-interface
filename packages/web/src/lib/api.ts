@@ -199,6 +199,10 @@ export function adminEnableUser(id: string): Promise<{ ok: true }> {
   return request(`/api/admin/users/${encodeURIComponent(id)}/enable`, { method: "POST" });
 }
 
+export function adminSetRole(id: string, role: Role): Promise<{ ok: true }> {
+  return request(`/api/admin/users/${encodeURIComponent(id)}/role`, { method: "POST", body: { role } });
+}
+
 export async function adminUsage(day: string): Promise<UsageRow[]> {
   const r = await request<{ items: UsageRow[] }>(`/api/admin/usage?day=${encodeURIComponent(day)}`);
   return r.items;

@@ -88,6 +88,8 @@ export interface UserDirectory {
   list(): Promise<DirectoryUser[]>;
   create(input: { email: string; name: string; role: Role }): Promise<DirectoryUser>;
   setEnabled(id: string, enabled: boolean): Promise<void>;
+  /** Changes the role (admin group membership). Takes effect at the user's next sign-in. */
+  setRole(id: string, role: Role): Promise<void>;
 }
 
 export interface Repos { conversations: ConversationRepo; messages: MessageRepo; sessions: SessionRepo; audit: AuditRepo; usage: UsageRepo }

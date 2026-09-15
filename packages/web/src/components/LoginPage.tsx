@@ -31,18 +31,23 @@ export function LoginPage({ onDevLoggedIn, reason }: Props) {
 
   return (
     <main className="login">
-      <div className="login-card">
-        <div className="login-logo"><Logo variant="login" /></div>
-        <h1>{brand.productName}</h1>
-        <p className="muted">Restricted to authorized staff. Sign in with your work account.</p>
+      <header className="login-bar">
+        <Logo variant="login" />
+        <span className="login-bar-note">{brand.tagline}</span>
+      </header>
+      <section className="login-hero">
+        <p className="eyebrow">Internal AI assistant</p>
+        <h1 className="login-title">{brand.productName}</h1>
+        <p className="login-sub">Private Claude workspace for the Helixona team: drafting, summaries, translations and patient-facing documents, with every conversation kept inside the clinic's own cloud.</p>
         {reason && (
           <p className="notice" role="status">
             {reason}
           </p>
         )}
-        <a href="/api/auth/login" className="btn btn-primary block">
+        <a href="/api/auth/login" className="btn btn-primary btn-cta">
           Sign in
         </a>
+        <p className="login-foot">Restricted to authorized staff. Sign in with your work account.</p>
 
         {import.meta.env.DEV && (
           <form className="dev-login" onSubmit={submitDev}>
@@ -65,7 +70,7 @@ export function LoginPage({ onDevLoggedIn, reason }: Props) {
             </button>
           </form>
         )}
-      </div>
+      </section>
     </main>
   );
 }
