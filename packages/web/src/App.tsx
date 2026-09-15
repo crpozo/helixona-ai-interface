@@ -31,6 +31,15 @@ type Auth =
 let localSeq = 0;
 const localId = (p: string) => `local-${p}-${++localSeq}`;
 
+
+/** Message for the login page when the OIDC callback redirected here with `?error=`. */
+function signInErrorReason(): string | null {
+  const err = new URLSearchParams(window.location.search).get("error");
+  if (!err) return null;
+  if (err === "login") return "Sign-in could not be completed. Please try again.";
+  return "The sign-in request was invalid or expired. Please try again.";
+}
+
 export function App() {
   const route = useRoute();
   const [auth, setAuth] = useState<Auth>({ status: "loading" });
@@ -65,8 +74,10 @@ export function App() {
     [abortStream],
   );
 
+  // A 401 only means "expired" if this tab had a session; a first visit just lands on the login page.
+  const hadSession = useRef(false);
   useEffect(() => {
-    setUnauthorizedHandler(() => clearAll("Your session has expired. Please sign in again."));
+    setUnauthorizedHandler(() => clearAll(hadSession.current ? "Your session has expired. Please sign in again." : signInErrorReason()));
     return () => setUnauthorizedHandler(null);
   }, [clearAll]);
 
@@ -83,6 +94,7 @@ export function App() {
     setAuth({ status: "loading" });
     try {
       const me = await getMe();
+      hadSession.current = true;
       setAuth({ status: "authed", me });
       await refreshConversations();
     } catch (e) {

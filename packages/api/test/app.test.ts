@@ -7,6 +7,7 @@ import { DevIdentityProvider } from "../src/auth/dev.js";
 import { SessionService } from "../src/auth/session.js";
 import { memoryRepos, MemoryUserDirectory } from "../src/repos/memory.js";
 import type { Deps } from "../src/deps.js";
+import type { IdentityProvider } from "../src/auth/cognito.js";
 
 const H = { "x-requested-with": "helixona", "content-type": "application/json" };
 
@@ -18,14 +19,14 @@ function parseSse(body: string): { event: string; data: Record<string, unknown> 
   });
 }
 
-async function makeApp(extraEnv: Record<string, string> = {}) {
+async function makeApp(extraEnv: Record<string, string> = {}, identity?: IdentityProvider) {
   const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "1", WEB_DIST: "/nonexistent", ...extraEnv });
   const repos = memoryRepos();
   const provider = new FakeProvider({ refusalFallbacks: Object.fromEntries(DEFAULT_CATALOG.models.map((m) => [m.modelId, m.refusalFallbacks])), delayMs: 0 });
   const deps: Deps = {
     config, log: noopLogger, catalog: DEFAULT_CATALOG, repos,
     sessions: new SessionService({ repo: repos.sessions, secret: config.SESSION_SECRET!, idleSeconds: config.SESSION_IDLE_SECONDS, absoluteSeconds: config.SESSION_ABSOLUTE_SECONDS }),
-    identity: new DevIdentityProvider(), directory: new MemoryUserDirectory(), provider,
+    identity: identity ?? new DevIdentityProvider(), directory: new MemoryUserDirectory(), provider,
     router: new ModelRouter({ catalog: DEFAULT_CATALOG, provider, breaker: new CircuitBreaker(), firstEventTimeoutMs: 300 }),
     systemPrompt: { text: "prompt de sistema de prueba", version: "v1" },
   };
@@ -173,5 +174,35 @@ describe("API", () => {
 
   it("modo dev bloqueado en producción", () => {
     expect(() => loadConfig({ NODE_ENV: "production", AUTH_MODE: "dev", STORE_MODE: "dynamo", LLM_MODE: "bedrock", APP_BASE_URL: "https://x.y", SESSION_SECRET: "1234567890123456", AWS_REGION: "us-east-1", TABLE_CONVERSATIONS: "a", TABLE_MESSAGES: "b", TABLE_SESSIONS: "c", TABLE_AUDIT: "d", TABLE_USAGE: "e" })).toThrow(/AUTH_MODE=dev/);
+  });
+});
+
+describe("Cognito login flow (signed OIDC cookie)", () => {
+  const COGNITO_ENV = { AUTH_MODE: "cognito", COGNITO_REGION: "us-east-1", COGNITO_USER_POOL_ID: "us-east-1_test", COGNITO_CLIENT_ID: "client", COGNITO_CLIENT_SECRET: "secret", COGNITO_DOMAIN: "https://example.auth.us-east-1.amazoncognito.com" };
+  const identity: IdentityProvider = {
+    beginLogin: () => ({ url: "https://example.auth.us-east-1.amazoncognito.com/oauth2/authorize?state=abc", pending: { state: "abc", verifier: "v", exp: Date.now() + 60_000 } }),
+    completeLogin: async () => ({ id: "u1", email: "u1@example.test", name: "U1", roles: ["staff"], refreshToken: null }),
+    revoke: async () => {},
+    logoutUrl: () => "https://example.auth.us-east-1.amazoncognito.com/logout",
+  };
+
+  it("GET /api/auth/login redirects to Cognito and sets a signed hx_oidc cookie", async () => {
+    const { app } = await makeApp(COGNITO_ENV, identity);
+    const r = await app.inject({ method: "GET", url: "/api/auth/login" });
+    expect(r.statusCode).toBe(302);
+    expect(r.headers.location).toContain("/oauth2/authorize");
+    const oidc = r.cookies.find((c) => c.name === "hx_oidc");
+    expect(oidc).toBeDefined();
+    expect(oidc!.value).toContain("."); // signed value: payload.signature
+    // Callback with a mismatched state must be rejected (exercises unsignCookie), not 500.
+    const cb = await app.inject({ method: "GET", url: "/api/auth/callback?code=x&state=wrong", headers: { cookie: `hx_oidc=${oidc!.value}` } });
+    expect(cb.statusCode).toBe(302);
+    expect(cb.headers.location).toBe("/login?error=state");
+    // Matching state completes the login and creates a session.
+    const ok = await app.inject({ method: "GET", url: "/api/auth/callback?code=x&state=abc", headers: { cookie: `hx_oidc=${oidc!.value}` } });
+    expect(ok.statusCode).toBe(302);
+    expect(ok.headers.location).toBe("/");
+    expect(ok.cookies.find((c) => c.name === "hx_session")).toBeDefined();
+    await app.close();
   });
 });

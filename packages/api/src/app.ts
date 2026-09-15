@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ulid, type Role } from "@helixona/core";
@@ -43,7 +44,10 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, trustProxy: true, bodyLimit: 256 * 1024, genReqId: () => ulid() });
   const secure = config.APP_BASE_URL.startsWith("https://");
 
-  await app.register(cookie);
+  // Signing secret for the short-lived OIDC cookie (`signed: true` in routes/auth.ts). Without it
+  // @fastify/cookie throws on setCookie and the Cognito login returns 500. Production requires
+  // SESSION_SECRET; dev/test fall back to a per-process random secret (dev mode never signs).
+  await app.register(cookie, { secret: config.SESSION_SECRET ?? randomBytes(32).toString("hex") });
 
   // Cuerpos JSON vacíos (p. ej. POST sin payload con content-type application/json) se aceptan.
   app.removeContentTypeParser("application/json");
