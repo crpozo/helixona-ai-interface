@@ -47,6 +47,15 @@ export function registerAdminRoutes(app: FastifyInstance, deps: Deps): void {
     return { ok: true };
   });
 
+  // Lost or replaced phone: forget the authenticator; the user enrolls a new one at the next sign-in.
+  app.post("/api/admin/users/:id/mfa/reset", { preHandler: admin }, async (req) => {
+    const { id } = req.params as { id: string };
+    await deps.directory.resetMfa(id);
+    const n = await deps.repos.sessions.deleteAllForUser(id);
+    await audit(deps, req, { action: "admin_user_mfa_reset", meta: { targetUserId: id, sessionsRevoked: n } });
+    return { ok: true };
+  });
+
   app.get("/api/admin/audit", { preHandler: admin }, async (req, reply) => {
     const q = z.object({ day: Day.default(today(now)) }).safeParse(req.query);
     if (!q.success) return apiError(reply, 400, "bad_request", "Invalid request");

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AdminUser, Me, Role, UsageRow } from "../lib/types";
-import { ApiError, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminSetRole, adminUsage } from "../lib/api";
+import { ApiError, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminResetMfa, adminSetRole, adminUsage } from "../lib/api";
 import { modelLabel } from "../lib/models";
 
 interface Props {
@@ -85,6 +85,18 @@ export function AdminPage({ me, onBack }: Props) {
       setFormMsg(errMsg(err));
     } finally {
       setFormBusy(false);
+    }
+  };
+
+  const resetMfa = async (u: AdminUser) => {
+    if (!window.confirm(`Reset the authenticator for ${u.email}? They will be signed out and asked to set up a new authenticator app at their next sign-in.`)) return;
+    setUsersError(null);
+    try {
+      await adminResetMfa(u.id);
+      setFormMsg(null);
+      window.alert(`Authenticator reset for ${u.email}. Their next sign-in will show a new QR code.`);
+    } catch (err) {
+      setUsersError(errMsg(err));
     }
   };
 
@@ -187,9 +199,14 @@ export function AdminPage({ me, onBack }: Props) {
                     <td>{u.enabled ? "Active" : "Disabled"}</td>
                     <td>{dateFmt.format(new Date(u.createdAt))}</td>
                     <td>
-                      <button type="button" className="btn btn-small" onClick={() => void toggle(u)} disabled={u.id === me.user.id}>
-                        {u.enabled ? "Disable" : "Enable"}
-                      </button>
+                      <div className="row gap wrap">
+                        <button type="button" className="btn btn-small" onClick={() => void toggle(u)} disabled={u.id === me.user.id}>
+                          {u.enabled ? "Disable" : "Enable"}
+                        </button>
+                        <button type="button" className="btn btn-small" onClick={() => void resetMfa(u)} title="Lost or replaced phone: they enroll a new authenticator at the next sign-in">
+                          Reset MFA
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

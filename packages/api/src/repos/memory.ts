@@ -73,6 +73,7 @@ export class MemoryUserDirectory implements UserDirectory {
   }
   async setEnabled(id: string, enabled: boolean) { const u = this.users.find((x) => x.id === id); if (u) u.enabled = enabled; }
   async setRole(id: string, role: "staff" | "admin") { const u = this.users.find((x) => x.id === id); if (u) u.role = role; }
+  async resetMfa() {} // no authenticator in dev mode
 }
 
 export function memoryRepos(): Repos & { audit: MemoryAuditRepo } {

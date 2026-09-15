@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import qrcode from "qrcode-generator";
 import type { Role } from "../lib/types";
 import { ApiError, devLogin, forgotPassword, passwordChallenge, passwordSignIn, resetPassword, type PasswordResult } from "../lib/api";
 import { Logo } from "./Logo";
@@ -13,10 +14,40 @@ type Step =
   | { kind: "signin" }
   | { kind: "new-password"; session: string }
   | { kind: "mfa"; session: string }
+  | { kind: "mfa-setup"; session: string; secret: string; otpauthUrl: string }
   | { kind: "forgot" }
   | { kind: "reset" };
 
 const PASSWORD_HINT = "At least 12 characters with upper and lower case letters, a number and a symbol.";
+
+/** QR code as inline SVG (white tile so phone cameras read it on the dark theme). */
+function QrCode({ value, label }: { value: string; label: string }) {
+  const svg = useMemo(() => {
+    const qr = qrcode(0, "M");
+    qr.addData(value);
+    qr.make();
+    return qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+  }, [value]);
+  return <div className="qr" role="img" aria-label={label} dangerouslySetInnerHTML={{ __html: svg }} />;
+}
+
+/** Password input with a show/hide toggle; it stays a real password field for password managers. */
+function PasswordInput({ id, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { id: string }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="pw-field">
+      <input id={id} {...props} type={shown ? "text" : "password"} />
+      <button type="button" className="pw-toggle" onClick={() => setShown((s) => !s)} aria-pressed={shown} aria-controls={id} aria-label={shown ? "Hide password" : "Show password"} disabled={props.disabled}>
+        {shown ? "Hide" : "Show"}
+      </button>
+    </div>
+  );
+}
+
+/** Manual-entry key in groups of four, easier to type from a screen. */
+function groupSecret(secret: string): string {
+  return secret.replace(/(.{4})/g, "$1 ").trim();
+}
 
 export function LoginPage({ onSignedIn, reason }: Props) {
   const [step, setStep] = useState<Step>({ kind: "signin" });
@@ -49,6 +80,8 @@ export function LoginPage({ onSignedIn, reason }: Props) {
     if (r.challenge === "NEW_PASSWORD_REQUIRED") {
       go({ kind: "new-password", session: r.session });
       setInfo("Your temporary password must be replaced before you continue.");
+    } else if (r.challenge === "MFA_SETUP") {
+      go({ kind: "mfa-setup", session: r.session, secret: r.secret, otpauthUrl: r.otpauthUrl });
     } else {
       go({ kind: "mfa", session: r.session });
     }
@@ -88,6 +121,12 @@ export function LoginPage({ onSignedIn, reason }: Props) {
     const session = step.session;
     void run(async () => handleResult(await passwordChallenge({ email: email.trim(), session, challenge: "MFA", code: code.trim() })));
   };
+  const submitMfaSetup = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (step.kind !== "mfa-setup") return;
+    const session = step.session;
+    void run(async () => handleResult(await passwordChallenge({ email: email.trim(), session, challenge: "MFA_SETUP", code: code.trim() })));
+  };
   const submitForgot = (e: React.FormEvent) => {
     e.preventDefault();
     void run(async () => {
@@ -123,9 +162,9 @@ export function LoginPage({ onSignedIn, reason }: Props) {
   const newPasswordFields = (
     <>
       <label htmlFor="login-new">New password</label>
-      <input id="login-new" type="password" autoComplete="new-password" required minLength={12} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} disabled={busy} aria-describedby="login-hint" />
+      <PasswordInput id="login-new" autoComplete="new-password" required minLength={12} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} disabled={busy} aria-describedby="login-hint" />
       <label htmlFor="login-confirm">Confirm new password</label>
-      <input id="login-confirm" type="password" autoComplete="new-password" required minLength={12} value={confirm} onChange={(e) => setConfirm(e.target.value)} disabled={busy} />
+      <PasswordInput id="login-confirm" autoComplete="new-password" required minLength={12} value={confirm} onChange={(e) => setConfirm(e.target.value)} disabled={busy} />
       <p id="login-hint" className="login-hint">{PASSWORD_HINT}</p>
     </>
   );
@@ -141,7 +180,7 @@ export function LoginPage({ onSignedIn, reason }: Props) {
           <p className="eyebrow">Internal AI assistant</p>
           <h1 className="login-title">{brand.productName}</h1>
           <p className="login-sub">Private Claude workspace for the Helixona team: drafting, summaries, translations and document analysis, with every conversation and file kept inside the clinic's own cloud.</p>
-          <p className="login-foot">Restricted to authorized staff.</p>
+          <p className="login-foot">Restricted to authorized staff. Sign-in requires a password and an authenticator app; activity is logged for security and HIPAA compliance.</p>
         </div>
 
         <div className="login-panel" aria-live="polite">
@@ -152,7 +191,7 @@ export function LoginPage({ onSignedIn, reason }: Props) {
               {info && <p className="notice" role="status">{info}</p>}
               {emailField}
               <label htmlFor="login-password">Password</label>
-              <input id="login-password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} />
+              <PasswordInput id="login-password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} />
               {error && <p className="notice notice-error" role="alert">{error}</p>}
               <button type="submit" className="btn btn-primary btn-cta block" disabled={busy || !email || !password}>
                 {busy ? "Signing in…" : "Sign in"}
@@ -187,6 +226,30 @@ export function LoginPage({ onSignedIn, reason }: Props) {
               {error && <p className="notice notice-error" role="alert">{error}</p>}
               <button type="submit" className="btn btn-primary btn-cta block" disabled={busy || code.trim().length < 6}>
                 {busy ? "Checking…" : "Continue"}
+              </button>
+              <div className="login-links">
+                <button type="button" className="link" onClick={() => go({ kind: "signin" })}>Back to sign in</button>
+              </div>
+            </form>
+          )}
+
+          {step.kind === "mfa-setup" && (
+            <form onSubmit={submitMfaSetup}>
+              <h2>Set up your authenticator</h2>
+              <p className="muted small">
+                Your account requires a second step at sign-in. Open an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password or Authy), scan this code, then enter the 6-digit code it shows.
+              </p>
+              <QrCode value={step.otpauthUrl} label="QR code for your authenticator app" />
+              <details className="login-manual">
+                <summary>Can't scan? Enter the key manually</summary>
+                <p className="secret-key" aria-label="Setup key">{groupSecret(step.secret)}</p>
+                <p className="muted small">Choose "time-based" if the app asks.</p>
+              </details>
+              <label htmlFor="login-setup-code">Code from the app</label>
+              <input id="login-setup-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" required value={code} onChange={(e) => setCode(e.target.value)} disabled={busy} />
+              {error && <p className="notice notice-error" role="alert">{error}</p>}
+              <button type="submit" className="btn btn-primary btn-cta block" disabled={busy || code.trim().length < 6}>
+                {busy ? "Verifying…" : "Finish setup"}
               </button>
               <div className="login-links">
                 <button type="button" className="link" onClick={() => go({ kind: "signin" })}>Back to sign in</button>

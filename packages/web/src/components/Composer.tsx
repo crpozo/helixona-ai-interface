@@ -12,6 +12,8 @@ interface Props {
   disabled?: boolean;
   onSend: (text: string, attachments: AttachmentMeta[]) => void;
   onStop: () => void;
+  /** Controls shown at the start of the bottom bar (the model picker lives here, like Claude.ai). */
+  leading?: React.ReactNode;
 }
 
 interface Pending {
@@ -26,7 +28,7 @@ interface Pending {
   abort: AbortController;
 }
 
-export function Composer({ conversationId, maxChars, attachments, streaming, disabled = false, onSend, onStop }: Props) {
+export function Composer({ conversationId, maxChars, attachments, streaming, disabled = false, onSend, onStop, leading }: Props) {
   const [text, setText] = useState("");
   const [pending, setPending] = useState<Pending[]>([]);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -154,7 +156,8 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
         }}
       />
       <div className="composer-bar">
-        <div className="row gap">
+        <div className="row gap wrap">
+          {leading}
           {attachments && (
             <>
               <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv,application/pdf,text/plain,text/markdown,text/csv" multiple hidden onChange={(e) => addFiles(e.target.files)} />

@@ -101,8 +101,12 @@ export function logout(): Promise<{ logoutUrl: string }> {
 
 // ---- Password sign-in inside the app ----
 
-export type PasswordChallenge = "NEW_PASSWORD_REQUIRED" | "MFA";
-export type PasswordResult = { ok: true } | { challenge: PasswordChallenge; session: string };
+export type PasswordChallenge = "NEW_PASSWORD_REQUIRED" | "MFA" | "MFA_SETUP";
+export type PasswordResult =
+  | { ok: true }
+  | { challenge: "NEW_PASSWORD_REQUIRED" | "MFA"; session: string }
+  /** Authenticator enrollment: show `otpauthUrl` as a QR code and `secret` as the manual key. */
+  | { challenge: "MFA_SETUP"; session: string; secret: string; otpauthUrl: string };
 
 export function passwordSignIn(email: string, password: string): Promise<PasswordResult> {
   return request<PasswordResult>("/api/auth/password/signin", { method: "POST", body: { email, password }, authFlow: true });
@@ -289,6 +293,11 @@ export function adminEnableUser(id: string): Promise<{ ok: true }> {
 
 export function adminSetRole(id: string, role: Role): Promise<{ ok: true }> {
   return request(`/api/admin/users/${encodeURIComponent(id)}/role`, { method: "POST", body: { role } });
+}
+
+/** Lost phone: forgets the user's authenticator so they enroll a new one at the next sign-in. */
+export function adminResetMfa(id: string): Promise<{ ok: true }> {
+  return request(`/api/admin/users/${encodeURIComponent(id)}/mfa/reset`, { method: "POST" });
 }
 
 export async function adminUsage(day: string): Promise<UsageRow[]> {

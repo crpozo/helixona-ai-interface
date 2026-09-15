@@ -33,6 +33,32 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
 
   const activeModel = conversation.pinnedModel ?? conversation.modelId;
 
+  // Model picker at the bottom of the chat, next to the composer (same place as Claude.ai).
+  const modelPicker = (
+    <>
+      <label htmlFor="chat-model" className="visually-hidden">
+        Model for this conversation
+      </label>
+      <select
+        id="chat-model"
+        className="model-switch"
+        value={conversation.modelAlias}
+        disabled={state.streaming || loading}
+        onChange={(e) => onChangeModel(e.target.value)}
+        title="Change the model for the next messages"
+      >
+        {available.map((m) => (
+          <option key={m.alias} value={m.alias}>
+            {m.label}
+          </option>
+        ))}
+      </select>
+      {conversation.pinnedModel && conversation.pinnedModel !== conversation.modelId && (
+        <span className="muted small">(answering with {modelLabel(models, activeModel)})</span>
+      )}
+    </>
+  );
+
   return (
     <section className="chat" aria-label="Conversation">
       <header className="chat-head">
@@ -43,26 +69,6 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
           <button type="button" className="badge badge-project" onClick={onOpenProject} title="Open project">
             {projectName}
           </button>
-        )}
-        <label htmlFor="chat-model" className="visually-hidden">
-          Model for this conversation
-        </label>
-        <select
-          id="chat-model"
-          className="model-switch"
-          value={conversation.modelAlias}
-          disabled={state.streaming || loading}
-          onChange={(e) => onChangeModel(e.target.value)}
-          title="Change the model for the next messages"
-        >
-          {available.map((m) => (
-            <option key={m.alias} value={m.alias}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-        {conversation.pinnedModel && conversation.pinnedModel !== conversation.modelId && (
-          <span className="muted small">(answering with {modelLabel(models, activeModel)})</span>
         )}
       </header>
 
@@ -89,6 +95,7 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
         disabled={loading}
         onSend={onSend}
         onStop={onStop}
+        leading={modelPicker}
       />
     </section>
   );

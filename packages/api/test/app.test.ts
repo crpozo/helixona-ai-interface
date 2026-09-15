@@ -226,6 +226,10 @@ describe("Admin: roles", () => {
     const self = await app.inject({ method: "POST", url: "/api/admin/users/dev-root/role", headers: { ...H, cookie: adm.cookie }, payload: { role: "staff" } });
     expect(self.statusCode).toBe(400);
     const staff = await login(app, "pepe", "staff");
+    const reset = await app.inject({ method: "POST", url: `/api/admin/users/${id}/mfa/reset`, headers: { ...H, cookie: adm.cookie } });
+    expect(reset.json()).toEqual({ ok: true });
+    const resetDenied = await app.inject({ method: "POST", url: `/api/admin/users/${id}/mfa/reset`, headers: { ...H, cookie: staff.cookie } });
+    expect(resetDenied.statusCode).toBe(403);
     const denied = await app.inject({ method: "POST", url: `/api/admin/users/${id}/role`, headers: { ...H, cookie: staff.cookie }, payload: { role: "staff" } });
     expect(denied.statusCode).toBe(403);
     await app.close();
@@ -280,12 +284,14 @@ describe("Password sign-in (in-app)", () => {
     signIn: async (email, password) => {
       if (email === "temp@example.test") return { kind: "challenge", challenge: "NEW_PASSWORD_REQUIRED", session: "sess-1" };
       if (email === "mfa@example.test") return { kind: "challenge", challenge: "MFA", session: "sess-2" };
+      if (email === "new@example.test") return { kind: "challenge", challenge: "MFA_SETUP", session: "sess-3", secret: "JBSWY3DPEHPK3PXP", otpauthUrl: "otpauth://totp/Helixona%20Assistant:new%40example.test?secret=JBSWY3DPEHPK3PXP&issuer=Helixona%20Assistant" };
       if (password !== "Correct-Horse-1!") throw new PasswordAuthError("invalid_credentials", 401, "Incorrect email or password.");
       return { kind: "ok", identity: { id: "u-pw", email, name: "Pat", roles: ["staff", "admin"], refreshToken: "rt" } };
     },
     respond: async (email, session, challenge, answer) => {
       if (challenge === "MFA" && answer.code === "123456" && session === "sess-2") return { kind: "ok", identity: { id: "u-mfa", email, name: "M", roles: ["staff"], refreshToken: null } };
       if (challenge === "NEW_PASSWORD_REQUIRED" && session === "sess-1") return { kind: "ok", identity: { id: "u-temp", email, name: "T", roles: ["staff"], refreshToken: null } };
+      if (challenge === "MFA_SETUP" && answer.code === "654321" && session === "sess-3") return { kind: "ok", identity: { id: "u-new", email, name: "N", roles: ["staff"], refreshToken: null } };
       throw new PasswordAuthError("invalid_code", 400, "The code is incorrect or has expired.");
     },
     forgotPassword: async () => {},
@@ -320,6 +326,20 @@ describe("Password sign-in (in-app)", () => {
     expect(right.cookies.some((c) => c.name === "hx_session")).toBe(true);
     const forgot = await app.inject({ method: "POST", url: "/api/auth/password/forgot", headers: H, payload: { email: "anyone@example.test" } });
     expect(forgot.json()).toEqual({ ok: true });
+    await app.close();
+  });
+
+  it("enrolls an authenticator when the pool requires MFA and the user has none (MFA_SETUP)", async () => {
+    const { app } = await makeApp(COGNITO_ENV, identity, stub);
+    const first = await app.inject({ method: "POST", url: "/api/auth/password/signin", headers: H, payload: { email: "new@example.test", password: "x" } });
+    expect(first.json()).toEqual({ challenge: "MFA_SETUP", session: "sess-3", secret: "JBSWY3DPEHPK3PXP", otpauthUrl: expect.stringMatching(/^otpauth:\/\/totp\//) });
+    const missing = await app.inject({ method: "POST", url: "/api/auth/password/challenge", headers: H, payload: { email: "new@example.test", session: "sess-3", challenge: "MFA_SETUP" } });
+    expect(missing.statusCode).toBe(400);
+    const wrong = await app.inject({ method: "POST", url: "/api/auth/password/challenge", headers: H, payload: { email: "new@example.test", session: "sess-3", challenge: "MFA_SETUP", code: "111111" } });
+    expect(wrong.json().error.code).toBe("invalid_code");
+    const done = await app.inject({ method: "POST", url: "/api/auth/password/challenge", headers: H, payload: { email: "new@example.test", session: "sess-3", challenge: "MFA_SETUP", code: "654321" } });
+    expect(done.json()).toEqual({ ok: true });
+    expect(done.cookies.some((c) => c.name === "hx_session")).toBe(true);
     await app.close();
   });
 

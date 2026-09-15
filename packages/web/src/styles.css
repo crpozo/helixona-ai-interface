@@ -316,6 +316,36 @@ label {
   font-size: 0.78rem;
   color: var(--muted);
 }
+/* Password field with a show/hide toggle inside the box. */
+.pw-field {
+  position: relative;
+}
+.pw-field input {
+  width: 100%;
+  padding-right: 4.4rem;
+}
+.pw-toggle {
+  position: absolute;
+  right: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: 0;
+  padding: 0.35rem 0.4rem;
+  font: inherit;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brand-primary);
+  cursor: pointer;
+}
+.pw-toggle:hover {
+  color: var(--brand-accent-soft);
+}
+.pw-toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .login-links {
   display: flex;
   justify-content: space-between;
@@ -336,6 +366,38 @@ label {
 }
 .login-links .link:hover {
   color: var(--brand-accent-soft);
+}
+/* Authenticator enrollment: the QR must stay dark-on-white for phone cameras. */
+.qr {
+  width: 176px;
+  height: 176px;
+  margin: 0.9rem auto;
+  padding: 10px;
+  background: #fff;
+  border-radius: 6px;
+  box-sizing: content-box;
+}
+.qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.login-manual {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.85rem;
+}
+.login-manual summary {
+  cursor: pointer;
+  color: var(--link);
+}
+.secret-key {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  word-break: break-all;
+  user-select: all;
+  margin: 0.5rem 0 0.25rem;
+  color: var(--brand-ink);
 }
 @media (max-width: 880px) {
   .login-hero {

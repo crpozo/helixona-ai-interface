@@ -110,6 +110,8 @@ export interface UserDirectory {
   setEnabled(id: string, enabled: boolean): Promise<void>;
   /** Changes the role (admin group membership). Takes effect at the user's next sign-in. */
   setRole(id: string, role: Role): Promise<void>;
+  /** Forgets the user's authenticator (lost phone): they enroll a new one at the next sign-in. */
+  resetMfa(id: string): Promise<void>;
 }
 
 export interface Repos { conversations: ConversationRepo; messages: MessageRepo; sessions: SessionRepo; audit: AuditRepo; usage: UsageRepo; projects: ProjectRepo }

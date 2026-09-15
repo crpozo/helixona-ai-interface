@@ -142,6 +142,11 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
   if (path === "/api/health") return json({ ok: true, version: "demo" });
   if (path === "/api/auth/dev-login" && method === "POST") { state.loggedIn = true; return json({ ok: true }); }
   if (path === "/api/auth/logout" && method === "POST") { state.loggedIn = false; return json({ logoutUrl: "#/login" }); }
+  // Password sign-in is the way in: it must work while signed out.
+  if (path === "/api/auth/password/signin" && method === "POST") { const pw = String(body["password"] ?? ""); if (pw === "temp") return json({ challenge: "NEW_PASSWORD_REQUIRED", session: "demo" }); if (pw === "mfa") return json({ challenge: "MFA", session: "demo" }); if (pw === "setup") return json({ challenge: "MFA_SETUP", session: "demo", secret: "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP", otpauthUrl: "otpauth://totp/Helixona%20Assistant:demo%40helixona.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Helixona%20Assistant" }); if (pw.length < 4) return error(401, "invalid_credentials", "Incorrect email or password."); state.loggedIn = true; return json({ ok: true }); }
+  if (path === "/api/auth/password/challenge" && method === "POST") { state.loggedIn = true; return json({ ok: true }); }
+  if (path === "/api/auth/password/forgot" && method === "POST") return json({ ok: true });
+  if (path === "/api/auth/password/reset" && method === "POST") return json({ ok: true });
   if (!state.loggedIn) return error(401, "unauthenticated", "Sign in to continue");
   if (path === "/api/me") return json(me());
   if (path === "/api/conversations" && method === "GET") return json({ items: [...state.conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(publicConv) });
@@ -166,10 +171,6 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     state.conversations.push(c);
     return json(publicConv(c), 201);
   }
-  if (path === "/api/auth/password/signin" && method === "POST") { const pw = String(body["password"] ?? ""); if (pw === "temp") return json({ challenge: "NEW_PASSWORD_REQUIRED", session: "demo" }); if (pw === "mfa") return json({ challenge: "MFA", session: "demo" }); if (pw.length < 4) return error(401, "invalid_credentials", "Incorrect email or password."); return json({ ok: true }); }
-  if (path === "/api/auth/password/challenge" && method === "POST") return json({ ok: true });
-  if (path === "/api/auth/password/forgot" && method === "POST") return json({ ok: true });
-  if (path === "/api/auth/password/reset" && method === "POST") return json({ ok: true });
   const mAtt = path.match(/^\/api\/conversations\/([^/]+)\/attachments$/);
   if (mAtt && method === "POST") return json({ id: id(), name: String(body["name"] ?? "file.pdf"), contentType: String(body["contentType"] ?? "application/pdf"), size: Number(body["size"] ?? 0), upload: { url: "mock://upload", method: "PUT", headers: {}, expiresAt: now() } }, 201);
   const mConv = path.match(/^\/api\/conversations\/([^/]+)(\/messages)?$/);
@@ -191,6 +192,7 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
   if (path === "/api/admin/users" && method === "POST") { const u: AdminUser = { id: id(), email: String(body["email"]), name: String(body["name"]), role: body["role"] === "admin" ? "admin" : "staff", enabled: true, createdAt: now() }; state.users.push(u); return json(u, 201); }
   const mRole = path.match(/^\/api\/admin\/users\/([^/]+)\/role$/);
   if (mRole && method === "POST") { const u = state.users.find((x) => x.id === decodeURIComponent(mRole[1]!)); if (u) u.role = body["role"] === "admin" ? "admin" : "staff"; return json({ ok: true }); }
+  if (/^\/api\/admin\/users\/[^/]+\/mfa\/reset$/.test(path) && method === "POST") return json({ ok: true });
   const mUser = path.match(/^\/api\/admin\/users\/([^/]+)\/(disable|enable)$/);
   if (mUser && method === "POST") { const u = state.users.find((x) => x.id === mUser[1]); if (u) u.enabled = mUser[2] === "enable"; return json({ ok: true }); }
   if (path === "/api/admin/usage") return json({ items: state.usage.filter((u) => u.day === (url.searchParams.get("day") ?? today())) });

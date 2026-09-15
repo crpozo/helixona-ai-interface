@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
-import { AdminCreateUserCommand, AdminDisableUserCommand, AdminEnableUserCommand, AdminAddUserToGroupCommand, AdminRemoveUserFromGroupCommand, CognitoIdentityProviderClient, ListUsersCommand, ListUsersInGroupCommand, AdminUserGlobalSignOutCommand } from "@aws-sdk/client-cognito-identity-provider";
+import { AdminCreateUserCommand, AdminDisableUserCommand, AdminEnableUserCommand, AdminAddUserToGroupCommand, AdminRemoveUserFromGroupCommand, AdminSetUserMFAPreferenceCommand, CognitoIdentityProviderClient, ListUsersCommand, ListUsersInGroupCommand, AdminUserGlobalSignOutCommand } from "@aws-sdk/client-cognito-identity-provider";
 import type { Role } from "@helixona/core";
 import type { DirectoryUser, UserDirectory } from "../repos/types.js";
 
@@ -112,6 +112,13 @@ export class CognitoUserDirectory implements UserDirectory {
     if (role === "admin") await this.client.send(new AdminAddUserToGroupCommand({ UserPoolId: this.userPoolId, Username: username, GroupName: "admin" }));
     else await this.client.send(new AdminRemoveUserFromGroupCommand({ UserPoolId: this.userPoolId, Username: username, GroupName: "admin" })).catch(() => {});
     // Roles come from the ID token at sign-in: sign the user out everywhere so the change applies now.
+    await this.client.send(new AdminUserGlobalSignOutCommand({ UserPoolId: this.userPoolId, Username: username })).catch(() => {});
+  }
+
+  async resetMfa(id: string): Promise<void> {
+    const username = await this.usernameFor(id);
+    // Disabling the software token makes the pool (MFA required) ask for enrollment again at sign-in.
+    await this.client.send(new AdminSetUserMFAPreferenceCommand({ UserPoolId: this.userPoolId, Username: username, SoftwareTokenMfaSettings: { Enabled: false, PreferredMfa: false } }));
     await this.client.send(new AdminUserGlobalSignOutCommand({ UserPoolId: this.userPoolId, Username: username })).catch(() => {});
   }
 

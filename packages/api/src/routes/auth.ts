@@ -55,7 +55,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
     if (!attempts.allow(req.ip)) return apiError(reply, 429, "rate_limited", "Too many attempts. Please wait a few minutes and try again.");
     try {
       const r = await step();
-      if (r.kind === "challenge") return { challenge: r.challenge, session: r.session };
+      if (r.kind === "challenge") return r.challenge === "MFA_SETUP" ? { challenge: r.challenge, session: r.session, secret: r.secret, otpauthUrl: r.otpauthUrl } : { challenge: r.challenge, session: r.session };
       return await finishSignIn(req, reply, r.identity);
     } catch (e) {
       if (e instanceof PasswordAuthError) {
@@ -76,11 +76,11 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
 
   app.post("/api/auth/password/challenge", async (req, reply) => {
     const body = z
-      .object({ email: Email, session: z.string().min(1).max(4096), challenge: z.enum(["NEW_PASSWORD_REQUIRED", "MFA"]), newPassword: Password.optional(), code: z.string().trim().regex(/^\d{6}$/).optional() })
+      .object({ email: Email, session: z.string().min(1).max(4096), challenge: z.enum(["NEW_PASSWORD_REQUIRED", "MFA", "MFA_SETUP"]), newPassword: Password.optional(), code: z.string().trim().regex(/^\d{6}$/).optional() })
       .safeParse(req.body);
     if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
     const { email, session, challenge, newPassword, code } = body.data;
-    if ((challenge === "MFA" && !code) || (challenge === "NEW_PASSWORD_REQUIRED" && !newPassword)) return apiError(reply, 400, "bad_request", "Invalid request");
+    if ((challenge !== "NEW_PASSWORD_REQUIRED" && !code) || (challenge === "NEW_PASSWORD_REQUIRED" && !newPassword)) return apiError(reply, 400, "bad_request", "Invalid request");
     return runPasswordStep(req, reply, () => deps.passwordAuth!.respond(email, session, challenge, { newPassword, code }));
   });
 

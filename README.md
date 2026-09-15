@@ -4,6 +4,7 @@ Interfaz web propia para que el personal de una clínica sujeta a HIPAA use Clau
 
 - Diseño y decisiones: [`docs/DISENO-ARQUITECTURA.md`](docs/DISENO-ARQUITECTURA.md)
 - Contrato técnico (rutas, eventos SSE, variables, tablas): [`docs/CONTRATO.md`](docs/CONTRATO.md)
+- HIPAA readiness guide (agreements, TLS, MFA, operating procedures): [`docs/HIPAA.md`](docs/HIPAA.md)
 - Infraestructura (CDK) y despliegue: [`packages/infra/README.md`](packages/infra/README.md)
 
 ## Paquetes

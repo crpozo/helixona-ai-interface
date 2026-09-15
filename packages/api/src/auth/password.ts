@@ -1,10 +1,12 @@
 import { createHmac } from "node:crypto";
 import {
+  AssociateSoftwareTokenCommand,
   CognitoIdentityProviderClient,
   ConfirmForgotPasswordCommand,
   ForgotPasswordCommand,
   InitiateAuthCommand,
   RespondToAuthChallengeCommand,
+  VerifySoftwareTokenCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 import type { Role } from "@helixona/core";
@@ -13,14 +15,21 @@ import type { IdentityResult } from "./cognito.js";
 /**
  * Password sign-in inside the app: the SPA posts email + password to the API, which runs Cognito's
  * USER_PASSWORD_AUTH flow with the confidential client (secret hash), handles the challenges Cognito
- * can return (temporary password change, authenticator code) and verifies the ID token before a
- * server-side session is created. This replaces the AWS-styled hosted sign-in page.
+ * can return (temporary password change, authenticator enrollment, authenticator code) and verifies
+ * the ID token before a server-side session is created. This replaces the AWS-styled hosted page.
+ *
+ * MFA is required by the user pool: a user without an authenticator gets the MFA_SETUP challenge,
+ * which the app turns into an enrollment step (QR code / secret key + first code) before the
+ * session is created. Losing the device is handled by an administrator ("Reset MFA"), after which
+ * the next sign-in enrolls again.
  */
-export type PasswordChallenge = "NEW_PASSWORD_REQUIRED" | "MFA";
+export type PasswordChallenge = "NEW_PASSWORD_REQUIRED" | "MFA" | "MFA_SETUP";
 
 export type PasswordAuthResult =
   | { kind: "ok"; identity: IdentityResult }
-  | { kind: "challenge"; challenge: PasswordChallenge; session: string };
+  | { kind: "challenge"; challenge: "NEW_PASSWORD_REQUIRED" | "MFA"; session: string }
+  /** Authenticator enrollment: `secret` is the base32 key, `otpauthUrl` the QR payload. */
+  | { kind: "challenge"; challenge: "MFA_SETUP"; session: string; secret: string; otpauthUrl: string };
 
 export class PasswordAuthError extends Error {
   constructor(readonly code: string, readonly status: number, message: string) {
@@ -37,15 +46,30 @@ export interface PasswordAuth {
   resetPassword(email: string, code: string, newPassword: string): Promise<void>;
 }
 
-export interface CognitoPasswordAuthConfig { region: string; userPoolId: string; clientId: string; clientSecret: string }
+export interface CognitoPasswordAuthConfig {
+  region: string;
+  userPoolId: string;
+  clientId: string;
+  clientSecret: string;
+  /** Name shown in the authenticator app next to the account (otpauth `issuer`). */
+  issuer?: string;
+}
+
+/** Payload for authenticator apps (Cognito TOTP: SHA1, 6 digits, 30 s). */
+export function otpauthUrl(issuer: string, account: string, secret: string): string {
+  const label = `${encodeURIComponent(issuer)}:${encodeURIComponent(account)}`;
+  return `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
+}
 
 export class CognitoPasswordAuth implements PasswordAuth {
   private readonly client: CognitoIdentityProviderClient;
   private readonly verifier;
+  private readonly issuer: string;
 
   constructor(private readonly cfg: CognitoPasswordAuthConfig) {
     this.client = new CognitoIdentityProviderClient({ region: cfg.region });
     this.verifier = CognitoJwtVerifier.create({ userPoolId: cfg.userPoolId, tokenUse: "id", clientId: cfg.clientId });
+    this.issuer = cfg.issuer ?? "Helixona Assistant";
   }
 
   private secretHash(username: string): string {
@@ -61,17 +85,18 @@ export class CognitoPasswordAuth implements PasswordAuth {
           AuthParameters: { USERNAME: email, PASSWORD: password, SECRET_HASH: this.secretHash(email) },
         }),
       );
-      return this.outcome(r);
+      return await this.outcome(email, r);
     } catch (e) {
       throw mapCognitoError(e);
     }
   }
 
   async respond(email: string, session: string, challenge: PasswordChallenge, answer: { newPassword?: string; code?: string }): Promise<PasswordAuthResult> {
-    const responses: Record<string, string> = { USERNAME: email, SECRET_HASH: this.secretHash(email) };
-    if (challenge === "MFA") responses["SOFTWARE_TOKEN_MFA_CODE"] = answer.code ?? "";
-    else responses["NEW_PASSWORD"] = answer.newPassword ?? "";
     try {
+      if (challenge === "MFA_SETUP") return await this.completeEnrollment(email, session, answer.code ?? "");
+      const responses: Record<string, string> = { USERNAME: email, SECRET_HASH: this.secretHash(email) };
+      if (challenge === "MFA") responses["SOFTWARE_TOKEN_MFA_CODE"] = answer.code ?? "";
+      else responses["NEW_PASSWORD"] = answer.newPassword ?? "";
       const r = await this.client.send(
         new RespondToAuthChallengeCommand({
           ClientId: this.cfg.clientId,
@@ -80,10 +105,28 @@ export class CognitoPasswordAuth implements PasswordAuth {
           ChallengeResponses: responses,
         }),
       );
-      return this.outcome(r);
+      return await this.outcome(email, r);
     } catch (e) {
       throw mapCognitoError(e);
     }
+  }
+
+  /**
+   * Second half of enrollment: the first code from the app proves the secret was captured, then the
+   * MFA_SETUP challenge is answered with the session VerifySoftwareToken returns.
+   */
+  private async completeEnrollment(email: string, session: string, code: string): Promise<PasswordAuthResult> {
+    const v = await this.client.send(new VerifySoftwareTokenCommand({ Session: session, UserCode: code, FriendlyDeviceName: "Authenticator app" }));
+    if (v.Status !== "SUCCESS" || !v.Session) throw new PasswordAuthError("invalid_code", 400, "The code is incorrect or has expired.");
+    const r = await this.client.send(
+      new RespondToAuthChallengeCommand({
+        ClientId: this.cfg.clientId,
+        ChallengeName: "MFA_SETUP",
+        Session: v.Session,
+        ChallengeResponses: { USERNAME: email, SECRET_HASH: this.secretHash(email) },
+      }),
+    );
+    return this.outcome(email, r);
   }
 
   async forgotPassword(email: string): Promise<void> {
@@ -104,7 +147,7 @@ export class CognitoPasswordAuth implements PasswordAuth {
     }
   }
 
-  private async outcome(r: { AuthenticationResult?: { IdToken?: string; RefreshToken?: string }; ChallengeName?: string; Session?: string }): Promise<PasswordAuthResult> {
+  private async outcome(email: string, r: { AuthenticationResult?: { IdToken?: string; RefreshToken?: string }; ChallengeName?: string; Session?: string }): Promise<PasswordAuthResult> {
     if (r.AuthenticationResult?.IdToken) {
       const payload = await this.verifier.verify(r.AuthenticationResult.IdToken);
       const groups = (payload["cognito:groups"] as string[] | undefined) ?? [];
@@ -122,7 +165,12 @@ export class CognitoPasswordAuth implements PasswordAuth {
     }
     if (r.ChallengeName === "NEW_PASSWORD_REQUIRED" && r.Session) return { kind: "challenge", challenge: "NEW_PASSWORD_REQUIRED", session: r.Session };
     if (r.ChallengeName === "SOFTWARE_TOKEN_MFA" && r.Session) return { kind: "challenge", challenge: "MFA", session: r.Session };
-    if (r.ChallengeName === "MFA_SETUP") throw new PasswordAuthError("mfa_setup_required", 400, "This account requires an authenticator app. Please contact an administrator.");
+    if (r.ChallengeName === "MFA_SETUP" && r.Session) {
+      // First half of enrollment: Cognito generates the secret; the user scans it and sends a code.
+      const a = await this.client.send(new AssociateSoftwareTokenCommand({ Session: r.Session }));
+      if (!a.SecretCode || !a.Session) throw new PasswordAuthError("unsupported_challenge", 400, "Sign-in could not be completed.");
+      return { kind: "challenge", challenge: "MFA_SETUP", session: a.Session, secret: a.SecretCode, otpauthUrl: otpauthUrl(this.issuer, email, a.SecretCode) };
+    }
     throw new PasswordAuthError("unsupported_challenge", 400, "Sign-in could not be completed.");
   }
 }
@@ -131,8 +179,12 @@ export class CognitoPasswordAuth implements PasswordAuth {
 export function mapCognitoError(e: unknown): PasswordAuthError {
   if (e instanceof PasswordAuthError) return e;
   const name = (e as { name?: string }).name ?? "";
+  const message = String((e as { message?: string }).message ?? "");
   switch (name) {
     case "NotAuthorizedException":
+      // Challenge sessions expire after a few minutes; that is not a bad password.
+      if (/session/i.test(message)) return new PasswordAuthError("session_expired", 401, "Your sign-in session has expired. Please start again.");
+      return new PasswordAuthError("invalid_credentials", 401, "Incorrect email or password.");
     case "UserNotFoundException":
       return new PasswordAuthError("invalid_credentials", 401, "Incorrect email or password.");
     case "PasswordResetRequiredException":
@@ -143,6 +195,7 @@ export function mapCognitoError(e: unknown): PasswordAuthError {
       return new PasswordAuthError("password_policy", 400, "Use at least 12 characters with upper and lower case letters, a number and a symbol.");
     case "CodeMismatchException":
     case "ExpiredCodeException":
+    case "EnableSoftwareTokenMFAException": // VerifySoftwareToken: the first code did not match the new secret
       return new PasswordAuthError("invalid_code", 400, "The code is incorrect or has expired.");
     case "LimitExceededException":
     case "TooManyRequestsException":

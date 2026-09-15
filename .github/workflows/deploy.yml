@@ -5,7 +5,9 @@
 #       APP_BASE_URL, COGNITO_DOMAIN_PREFIX, ALERT_EMAIL,
 #       DOMAIN_NAME + CERTIFICATE_ARN (van juntas; vacías = URL por defecto de CloudFront, ver
 #       packages/infra/README.md "Sin dominio propio"), MONTHLY_BUDGET_USD (opcional),
-#       CLOUDFRONT_PREFIX_LIST_ID (opcional), LLM_MODE (opcional, default anthropic).
+#       CLOUDFRONT_PREFIX_LIST_ID (opcional), LLM_MODE (opcional, default anthropic),
+#       ENABLE_CLOUDTRAIL (opcional, default true: trail propio con data events de S3/DynamoDB;
+#       poner "false" si la organización ya entrega un trail a la cuenta).
 # Orden: FoundationStack (crea el ECR) -> build+push de la imagen -> cdk deploy --all.
 name: Deploy
 
@@ -118,6 +120,7 @@ jobs:
             echo "-c monthlyBudgetUsd=${{ vars.MONTHLY_BUDGET_USD || '1500' }}"
             echo "-c cloudFrontPrefixListId=${{ vars.CLOUDFRONT_PREFIX_LIST_ID }}"
             echo "-c llmMode=${{ vars.LLM_MODE || 'anthropic' }}"
+            echo "-c enableCloudTrail=${{ vars.ENABLE_CLOUDTRAIL || 'true' }}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
         env:
