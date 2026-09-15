@@ -1,8 +1,9 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { modelsForRole, type Role } from "@helixona/core";
 import type { Deps } from "../deps.js";
-import type { OidcPending } from "../auth/cognito.js";
+import type { IdentityResult, OidcPending } from "../auth/cognito.js";
+import { AttemptLimiter, PasswordAuthError, type PasswordAuthResult } from "../auth/password.js";
 import { SESSION_COOKIE } from "../auth/session.js";
 import { apiError, audit, requireAuth } from "../app.js";
 import { ALLOWED_TYPES } from "../attachments/policy.js";
@@ -39,6 +40,78 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
       deps.log.warn("login_failed", { errorClass: e instanceof Error ? e.name : "unknown", reason: e instanceof Error ? e.message.slice(0, 80) : undefined });
       return reply.redirect("/login?error=login");
     }
+  });
+
+  // ---- Password sign-in inside the app (Cognito USER_PASSWORD_AUTH through the API) ----
+  const attempts = new AttemptLimiter(12, 5 * 60_000);
+  const finishSignIn = async (req: FastifyRequest, reply: FastifyReply, id: IdentityResult) => {
+    const { cookie } = await deps.sessions.create({ id: id.id, email: id.email, name: id.name, roles: id.roles }, id.refreshToken);
+    reply.setCookie(SESSION_COOKIE, cookie, deps.sessions.cookieOptions(secure));
+    await audit(deps, req, { action: "login", userId: id.id, meta: { mode: "password" } });
+    return { ok: true as const };
+  };
+  const runPasswordStep = async (req: FastifyRequest, reply: FastifyReply, step: () => Promise<PasswordAuthResult>) => {
+    if (config.AUTH_MODE === "dev" || !deps.passwordAuth) return apiError(reply, 404, "not_found", "Resource not found");
+    if (!attempts.allow(req.ip)) return apiError(reply, 429, "rate_limited", "Too many attempts. Please wait a few minutes and try again.");
+    try {
+      const r = await step();
+      if (r.kind === "challenge") return { challenge: r.challenge, session: r.session };
+      return await finishSignIn(req, reply, r.identity);
+    } catch (e) {
+      if (e instanceof PasswordAuthError) {
+        deps.log.warn("password_auth_failed", { errorClass: e.code, requestId: req.requestId });
+        return apiError(reply, e.status, e.code, e.message);
+      }
+      throw e;
+    }
+  };
+  const Email = z.string().trim().toLowerCase().email().max(120);
+  const Password = z.string().min(1).max(256);
+
+  app.post("/api/auth/password/signin", async (req, reply) => {
+    const body = z.object({ email: Email, password: Password }).safeParse(req.body);
+    if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
+    return runPasswordStep(req, reply, () => deps.passwordAuth!.signIn(body.data.email, body.data.password));
+  });
+
+  app.post("/api/auth/password/challenge", async (req, reply) => {
+    const body = z
+      .object({ email: Email, session: z.string().min(1).max(4096), challenge: z.enum(["NEW_PASSWORD_REQUIRED", "MFA"]), newPassword: Password.optional(), code: z.string().trim().regex(/^\d{6}$/).optional() })
+      .safeParse(req.body);
+    if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
+    const { email, session, challenge, newPassword, code } = body.data;
+    if ((challenge === "MFA" && !code) || (challenge === "NEW_PASSWORD_REQUIRED" && !newPassword)) return apiError(reply, 400, "bad_request", "Invalid request");
+    return runPasswordStep(req, reply, () => deps.passwordAuth!.respond(email, session, challenge, { newPassword, code }));
+  });
+
+  app.post("/api/auth/password/forgot", async (req, reply) => {
+    const body = z.object({ email: Email }).safeParse(req.body);
+    if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
+    if (config.AUTH_MODE === "dev" || !deps.passwordAuth) return apiError(reply, 404, "not_found", "Resource not found");
+    if (!attempts.allow(req.ip)) return apiError(reply, 429, "rate_limited", "Too many attempts. Please wait a few minutes and try again.");
+    try {
+      await deps.passwordAuth.forgotPassword(body.data.email);
+    } catch (e) {
+      if (e instanceof PasswordAuthError) return apiError(reply, e.status, e.code, e.message);
+      throw e;
+    }
+    await audit(deps, req, { action: "password_reset_requested" });
+    return { ok: true };
+  });
+
+  app.post("/api/auth/password/reset", async (req, reply) => {
+    const body = z.object({ email: Email, code: z.string().trim().min(4).max(12), newPassword: Password }).safeParse(req.body);
+    if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
+    if (config.AUTH_MODE === "dev" || !deps.passwordAuth) return apiError(reply, 404, "not_found", "Resource not found");
+    if (!attempts.allow(req.ip)) return apiError(reply, 429, "rate_limited", "Too many attempts. Please wait a few minutes and try again.");
+    try {
+      await deps.passwordAuth.resetPassword(body.data.email, body.data.code, body.data.newPassword);
+    } catch (e) {
+      if (e instanceof PasswordAuthError) return apiError(reply, e.status, e.code, e.message);
+      throw e;
+    }
+    await audit(deps, req, { action: "password_reset_completed" });
+    return { ok: true };
   });
 
   app.post("/api/auth/dev-login", async (req, reply) => {

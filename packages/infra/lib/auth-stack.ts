@@ -74,7 +74,9 @@ export class AuthStack extends cdk.Stack {
     this.userPoolClient = this.userPool.addClient('WebClient', {
       userPoolClientName: resourceName(stage, 'web'),
       generateSecret: true,
-      authFlows: { userSrp: false, userPassword: false, adminUserPassword: false, custom: false },
+      // USER_PASSWORD_AUTH: the API runs the password flow server-side (branded in-app sign-in, secret hash);
+      // the hosted OAuth code flow stays available as a fallback.
+      authFlows: { userSrp: false, userPassword: true, adminUserPassword: false, custom: false },
       oAuth: {
         flows: { authorizationCodeGrant: true, implicitCodeGrant: false, clientCredentials: false },
         scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],

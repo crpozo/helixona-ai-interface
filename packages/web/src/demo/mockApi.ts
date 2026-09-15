@@ -150,6 +150,10 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     state.conversations.push(c);
     return json(publicConv(c), 201);
   }
+  if (path === "/api/auth/password/signin" && method === "POST") { const pw = String(body["password"] ?? ""); if (pw === "temp") return json({ challenge: "NEW_PASSWORD_REQUIRED", session: "demo" }); if (pw === "mfa") return json({ challenge: "MFA", session: "demo" }); if (pw.length < 4) return error(401, "invalid_credentials", "Incorrect email or password."); return json({ ok: true }); }
+  if (path === "/api/auth/password/challenge" && method === "POST") return json({ ok: true });
+  if (path === "/api/auth/password/forgot" && method === "POST") return json({ ok: true });
+  if (path === "/api/auth/password/reset" && method === "POST") return json({ ok: true });
   const mAtt = path.match(/^\/api\/conversations\/([^/]+)\/attachments$/);
   if (mAtt && method === "POST") return json({ id: id(), name: String(body["name"] ?? "file.pdf"), contentType: String(body["contentType"] ?? "application/pdf"), size: Number(body["size"] ?? 0), upload: { url: "mock://upload", method: "PUT", headers: {}, expiresAt: now() } }, 201);
   const mConv = path.match(/^\/api\/conversations\/([^/]+)(\/messages)?$/);

@@ -57,7 +57,7 @@ async function parseError(res: Response): Promise<ApiError> {
 
 async function request<T>(
   path: string,
-  init: { method?: string; body?: unknown; signal?: AbortSignal } = {},
+  init: { method?: string; body?: unknown; signal?: AbortSignal; authFlow?: boolean } = {},
 ): Promise<T> {
   const method = init.method ?? "GET";
   const headers: Record<string, string> = { Accept: "application/json" };
@@ -74,7 +74,7 @@ async function request<T>(
     signal: init.signal,
   });
 
-  if (res.status === 401) {
+  if (res.status === 401 && !init.authFlow) {
     hooks.onUnauthorized?.();
     throw new ApiError(401, "unauthorized", "Invalid session.");
   }
@@ -95,6 +95,27 @@ export function devLogin(username: string, role: Role): Promise<{ ok: true }> {
 
 export function logout(): Promise<{ logoutUrl: string }> {
   return request<{ logoutUrl: string }>("/api/auth/logout", { method: "POST" });
+}
+
+// ---- Password sign-in inside the app ----
+
+export type PasswordChallenge = "NEW_PASSWORD_REQUIRED" | "MFA";
+export type PasswordResult = { ok: true } | { challenge: PasswordChallenge; session: string };
+
+export function passwordSignIn(email: string, password: string): Promise<PasswordResult> {
+  return request<PasswordResult>("/api/auth/password/signin", { method: "POST", body: { email, password }, authFlow: true });
+}
+
+export function passwordChallenge(input: { email: string; session: string; challenge: PasswordChallenge; newPassword?: string; code?: string }): Promise<PasswordResult> {
+  return request<PasswordResult>("/api/auth/password/challenge", { method: "POST", body: input, authFlow: true });
+}
+
+export function forgotPassword(email: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>("/api/auth/password/forgot", { method: "POST", body: { email }, authFlow: true });
+}
+
+export function resetPassword(email: string, code: string, newPassword: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>("/api/auth/password/reset", { method: "POST", body: { email, code, newPassword }, authFlow: true });
 }
 
 // ---- Conversaciones ----

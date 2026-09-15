@@ -262,11 +262,91 @@ label {
 .login-hero {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   justify-content: center;
-  align-items: flex-start;
-  max-width: 760px;
+  align-items: center;
+  gap: 3rem;
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
   padding: 3rem 2rem 4rem;
+}
+.login-copy {
+  flex: 1 1 380px;
+  min-width: 0;
+}
+.login-panel {
+  flex: 0 1 440px;
+  width: 100%;
+  background: rgba(21, 21, 21, 0.92);
+  border: 1px solid var(--brand-line-gold);
+  border-radius: 6px;
+  padding: 1.75rem;
+  box-shadow: var(--brand-shadow);
+}
+.login-panel h2 {
+  font-size: 1.4rem;
+  margin: 0 0 1rem;
+}
+.login-panel label {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 0.85rem;
+}
+.login-panel input {
+  background: #0f0f0f;
+  border-color: var(--brand-line);
+}
+.login-panel input:focus {
+  border-color: var(--brand-primary);
+  outline: none;
+}
+.login-panel .btn-cta.block {
+  width: 100%;
+  margin-top: 1.25rem;
+}
+.login-panel .notice {
+  display: block;
+  margin: 0.75rem 0 0;
+}
+.login-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.login-links {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+}
+.login-links .link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--link);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.login-links .link:hover {
+  color: var(--brand-accent-soft);
+}
+@media (max-width: 880px) {
+  .login-hero {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2rem;
+    padding: 2rem 1.25rem 3rem;
+  }
+  .login-panel {
+    flex-basis: auto;
+  }
 }
 .eyebrow {
   margin: 0 0 0.75rem;
@@ -306,7 +386,7 @@ label {
   box-shadow: 0 0 0 3px var(--brand-black), 0 0 0 4px var(--brand-primary-hover);
 }
 .login-foot {
-  margin: 1.5rem 0 0;
+  margin: 1.25rem 0 0;
   font-size: 0.8rem;
   color: var(--muted);
 }
@@ -862,26 +942,29 @@ td {
   font-size: 0.8rem;
   margin-top: 0.15rem;
 }
+/* Official Helixona wordmark: thin white tracked letters, hollow gold X taller than the letters, thin slash. */
 .wordmark {
   display: inline-flex;
   align-items: center;
   font-family: var(--brand-font);
-  font-weight: 500;
+  font-weight: 300;
   font-size: 1rem;
-  letter-spacing: 0.34em;
+  letter-spacing: 0.5em;
   text-transform: uppercase;
   color: #ffffff;
   line-height: 1;
   white-space: nowrap;
+  padding: 0.35em 0;
 }
 .wordmark-x {
-  height: 1.5em;
+  height: 2.1em;
   width: auto;
-  margin: 0 0.05em 0 -0.12em;
+  margin: -0.6em 0.1em -0.6em -0.35em;
   flex: none;
+  overflow: visible;
 }
 .logo-login .wordmark {
-  font-size: 1.35rem;
+  font-size: 1.3rem;
 }
 
 /* Banner de la vista previa (solo modo demo) */

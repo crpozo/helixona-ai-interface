@@ -4,7 +4,8 @@ interface Props { variant?: "sidebar" | "login"; showTagline?: boolean }
 
 /**
  * Brand logo. Renders the official image when `brand.logoImage` is set (same origin, allowed by
- * the CSP); otherwise the HELIXONA wordmark with the gold helix "X", as on helixona.com.
+ * the CSP); otherwise a vector recreation of the official HELIXONA wordmark: thin white letters with
+ * wide tracking and a hollow gold "X", taller than the letters, crossed by a thin diagonal slash.
  */
 export function Logo({ variant = "sidebar", showTagline = false }: Props) {
   return (
@@ -19,18 +20,24 @@ function Wordmark() {
   return (
     <span className="wordmark" role="img" aria-label={brand.name}>
       <span aria-hidden="true">HELI</span>
-      <svg className="wordmark-x" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+      <svg className="wordmark-x" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
         <defs>
           <linearGradient id="hx-gold" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stopColor="#f1d6a0" />
+            <stop offset="0.55" stopColor="#d6b981" />
             <stop offset="1" stopColor="#c9a227" />
           </linearGradient>
         </defs>
-        <g fill="none" stroke="url(#hx-gold)" strokeLinecap="round">
-          <path d="M6 4 C 20 13, 20 27, 34 36" strokeWidth="3.6" />
-          <path d="M34 4 C 20 13, 20 27, 6 36" strokeWidth="3.6" />
-          <path d="M13.5 11.5 H 26.5 M13.5 28.5 H 26.5" strokeWidth="2" opacity="0.75" />
-        </g>
+        {/* thin slash running through the X, longer than the letters */}
+        <line x1="21" y1="-6" x2="47" y2="70" stroke="url(#hx-gold)" strokeWidth="1.1" strokeLinecap="round" opacity="0.9" />
+        {/* hollow X */}
+        <polygon
+          points="12,12 21,12 32,27 43,12 52,12 37,32 52,52 43,52 32,37 21,52 12,52 27,32"
+          fill="none"
+          stroke="url(#hx-gold)"
+          strokeWidth="2.4"
+          strokeLinejoin="miter"
+        />
       </svg>
       <span aria-hidden="true">ONA</span>
     </span>

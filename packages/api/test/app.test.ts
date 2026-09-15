@@ -10,6 +10,7 @@ import { MemoryAttachmentStore } from "../src/attachments/store.js";
 import { PDFDocument } from "pdf-lib";
 import type { Deps } from "../src/deps.js";
 import type { IdentityProvider } from "../src/auth/cognito.js";
+import { PasswordAuthError, type PasswordAuth } from "../src/auth/password.js";
 
 const H = { "x-requested-with": "helixona", "content-type": "application/json" };
 
@@ -21,7 +22,7 @@ function parseSse(body: string): { event: string; data: Record<string, unknown> 
   });
 }
 
-async function makeApp(extraEnv: Record<string, string> = {}, identity?: IdentityProvider) {
+async function makeApp(extraEnv: Record<string, string> = {}, identity?: IdentityProvider, passwordAuth: PasswordAuth | null = null) {
   const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "1", WEB_DIST: "/nonexistent", ...extraEnv });
   const repos = memoryRepos();
   const provider = new FakeProvider({ refusalFallbacks: Object.fromEntries(DEFAULT_CATALOG.models.map((m) => [m.modelId, m.refusalFallbacks])), delayMs: 0 });
@@ -32,6 +33,7 @@ async function makeApp(extraEnv: Record<string, string> = {}, identity?: Identit
     router: new ModelRouter({ catalog: DEFAULT_CATALOG, provider, breaker: new CircuitBreaker(), firstEventTimeoutMs: 300 }),
     systemPrompt: { text: "prompt de sistema de prueba", version: "v1" },
     attachments: new MemoryAttachmentStore(),
+    passwordAuth,
   };
   const app = await buildApp(deps);
   return { app, repos, deps };
@@ -262,6 +264,69 @@ describe("Attachments", () => {
     expect(bad.json().error.code).toBe("attachment_missing");
     const unsupported = await app.inject({ method: "POST", url: `/api/conversations/${convId}/attachments`, headers: { ...H, cookie: s.cookie }, payload: { name: "virus.exe", size: 10, contentType: "application/octet-stream" } });
     expect(unsupported.json().error.code).toBe("unsupported_type");
+    await app.close();
+  });
+});
+
+describe("Password sign-in (in-app)", () => {
+  const COGNITO_ENV = { AUTH_MODE: "cognito", COGNITO_REGION: "us-east-1", COGNITO_USER_POOL_ID: "us-east-1_test", COGNITO_CLIENT_ID: "client", COGNITO_CLIENT_SECRET: "secret", COGNITO_DOMAIN: "https://example.auth.us-east-1.amazoncognito.com" };
+  const identity: IdentityProvider = {
+    beginLogin: () => ({ url: "https://example.test/authorize", pending: { state: "s", verifier: "v", exp: Date.now() + 60_000 } }),
+    completeLogin: async () => ({ id: "u1", email: "u1@example.test", name: "U1", roles: ["staff"], refreshToken: null }),
+    revoke: async () => {},
+    logoutUrl: () => "https://example.test/logout",
+  };
+  const stub: PasswordAuth = {
+    signIn: async (email, password) => {
+      if (email === "temp@example.test") return { kind: "challenge", challenge: "NEW_PASSWORD_REQUIRED", session: "sess-1" };
+      if (email === "mfa@example.test") return { kind: "challenge", challenge: "MFA", session: "sess-2" };
+      if (password !== "Correct-Horse-1!") throw new PasswordAuthError("invalid_credentials", 401, "Incorrect email or password.");
+      return { kind: "ok", identity: { id: "u-pw", email, name: "Pat", roles: ["staff", "admin"], refreshToken: "rt" } };
+    },
+    respond: async (email, session, challenge, answer) => {
+      if (challenge === "MFA" && answer.code === "123456" && session === "sess-2") return { kind: "ok", identity: { id: "u-mfa", email, name: "M", roles: ["staff"], refreshToken: null } };
+      if (challenge === "NEW_PASSWORD_REQUIRED" && session === "sess-1") return { kind: "ok", identity: { id: "u-temp", email, name: "T", roles: ["staff"], refreshToken: null } };
+      throw new PasswordAuthError("invalid_code", 400, "The code is incorrect or has expired.");
+    },
+    forgotPassword: async () => {},
+    resetPassword: async () => {},
+  };
+
+  it("signs in with email and password and creates a session; wrong password → 401 without the unauthorized hook", async () => {
+    const { app } = await makeApp(COGNITO_ENV, identity, stub);
+    const bad = await app.inject({ method: "POST", url: "/api/auth/password/signin", headers: H, payload: { email: "pat@example.test", password: "nope" } });
+    expect(bad.statusCode).toBe(401);
+    expect(bad.json().error.code).toBe("invalid_credentials");
+    const ok = await app.inject({ method: "POST", url: "/api/auth/password/signin", headers: H, payload: { email: "Pat@Example.test", password: "Correct-Horse-1!" } });
+    expect(ok.statusCode).toBe(200);
+    const cookie = ok.cookies.find((c) => c.name === "hx_session")!;
+    const me = await app.inject({ method: "GET", url: "/api/me", headers: { cookie: `hx_session=${cookie.value}` } });
+    expect(me.json().user).toMatchObject({ id: "u-pw", email: "pat@example.test", roles: ["staff", "admin"] });
+    await app.close();
+  });
+
+  it("handles the temporary-password and authenticator challenges", async () => {
+    const { app } = await makeApp(COGNITO_ENV, identity, stub);
+    const temp = await app.inject({ method: "POST", url: "/api/auth/password/signin", headers: H, payload: { email: "temp@example.test", password: "Temp-Pass-123!" } });
+    expect(temp.json()).toEqual({ challenge: "NEW_PASSWORD_REQUIRED", session: "sess-1" });
+    const set = await app.inject({ method: "POST", url: "/api/auth/password/challenge", headers: H, payload: { email: "temp@example.test", session: "sess-1", challenge: "NEW_PASSWORD_REQUIRED", newPassword: "Brand-New-Pass-9!" } });
+    expect(set.json()).toEqual({ ok: true });
+    const mfa = await app.inject({ method: "POST", url: "/api/auth/password/signin", headers: H, payload: { email: "mfa@example.test", password: "x" } });
+    expect(mfa.json()).toEqual({ challenge: "MFA", session: "sess-2" });
+    const wrong = await app.inject({ method: "POST", url: "/api/auth/password/challenge", headers: H, payload: { email: "mfa@example.test", session: "sess-2", challenge: "MFA", code: "000000" } });
+    expect(wrong.statusCode).toBe(400);
+    const right = await app.inject({ method: "POST", url: "/api/auth/password/challenge", headers: H, payload: { email: "mfa@example.test", session: "sess-2", challenge: "MFA", code: "123456" } });
+    expect(right.json()).toEqual({ ok: true });
+    expect(right.cookies.some((c) => c.name === "hx_session")).toBe(true);
+    const forgot = await app.inject({ method: "POST", url: "/api/auth/password/forgot", headers: H, payload: { email: "anyone@example.test" } });
+    expect(forgot.json()).toEqual({ ok: true });
+    await app.close();
+  });
+
+  it("is not available in dev mode", async () => {
+    const { app } = await makeApp();
+    const r = await app.inject({ method: "POST", url: "/api/auth/password/signin", headers: H, payload: { email: "a@b.test", password: "x" } });
+    expect(r.statusCode).toBe(404);
     await app.close();
   });
 });

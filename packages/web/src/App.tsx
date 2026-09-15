@@ -285,7 +285,7 @@ export function App() {
   }
 
   if (auth.status === "anon") {
-    return <LoginPage reason={auth.reason} onDevLoggedIn={() => void bootstrap()} />;
+    return <LoginPage reason={auth.reason} onSignedIn={() => void bootstrap()} />;
   }
 
   const me = auth.me;

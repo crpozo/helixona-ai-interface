@@ -4,6 +4,7 @@ import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { CognitoIdentityProvider, CognitoUserDirectory } from "./auth/cognito.js";
 import { MemoryAttachmentStore, S3AttachmentStore } from "./attachments/store.js";
+import { CognitoPasswordAuth } from "./auth/password.js";
 import { DevIdentityProvider } from "./auth/dev.js";
 import { SessionService } from "./auth/session.js";
 import { dynamoRepos } from "./repos/dynamo.js";
@@ -32,7 +33,10 @@ export async function createDeps(env: NodeJS.ProcessEnv = process.env): Promise<
   const attachments = config.ATTACHMENTS_BUCKET
     ? new S3AttachmentStore(config.AWS_REGION!, config.ATTACHMENTS_BUCKET)
     : config.STORE_MODE === "memory" ? new MemoryAttachmentStore() : null;
-  return { config, log, catalog, repos, sessions, identity, directory, provider, router, systemPrompt, attachments };
+  const passwordAuth = config.AUTH_MODE === "dev"
+    ? null
+    : new CognitoPasswordAuth({ region: config.COGNITO_REGION!, userPoolId: config.COGNITO_USER_POOL_ID!, clientId: config.COGNITO_CLIENT_ID!, clientSecret: config.COGNITO_CLIENT_SECRET! });
+  return { config, log, catalog, repos, sessions, identity, directory, provider, router, systemPrompt, attachments, passwordAuth };
 }
 
 async function main() {
