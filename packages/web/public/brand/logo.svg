@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 72" role="img" aria-label="Helixona">
-  <!-- Logo provisional: sustituir por el archivo oficial de helixona.com -->
+  <!-- Provisional logo in the helixona.com palette. Replace with the official file (Helixona-Logo.png) when available. -->
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0f5f8f"/>
-      <stop offset="1" stop-color="#3aa6c9"/>
+      <stop offset="0" stop-color="#c9a227"/>
+      <stop offset="1" stop-color="#d6b981"/>
     </linearGradient>
   </defs>
   <g fill="none" stroke="url(#g)" stroke-width="6" stroke-linecap="round">
@@ -11,5 +11,5 @@
     <path d="M54 10 C 34 10, 34 36, 54 36 S 34 62, 14 62"/>
     <path d="M22 23 H 46 M22 49 H 46" stroke-width="4" opacity="0.6"/>
   </g>
-  <text x="76" y="48" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="34" font-weight="700" fill="#1c2330" letter-spacing="0.5">Helixona</text>
+  <text x="76" y="49" font-family="'Playfair Display', Georgia, 'Times New Roman', serif" font-size="36" font-weight="600" fill="#1a1a1a" letter-spacing="1">Helixona</text>
 </svg>

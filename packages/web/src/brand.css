@@ -1,33 +1,87 @@
 /*
- * Tokens de marca (edita SOLO este archivo para cambiar la identidad visual).
- * Valores actuales: paleta provisional hasta recibir la guía de estilo de helixona.com.
- * Los tokens de la app (styles.css) derivan de estos.
+ * Brand tokens (edit ONLY this file to change the visual identity).
+ * Values taken from helixona.com (September 2026): warm off-white canvas, near-black ink,
+ * champagne/gold accents, serif headings and Montserrat body text. The site's heading face
+ * (TT Ramillas) is a commercial trial font, so headings use Playfair Display (OFL) instead.
+ * Fonts are self-hosted from /fonts because the CSP only allows same-origin fonts.
  */
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/montserrat-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/montserrat-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/montserrat-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/montserrat-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Playfair Display";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/playfair-display-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Playfair Display";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/playfair-display-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Playfair Display";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/playfair-display-latin-700-normal.woff2") format("woff2");
+}
+
 :root {
-  /* Colores de marca */
-  --brand-primary: #0f5f8f;        /* color principal: botones, enlaces, acentos */
-  --brand-primary-hover: #0c4d74;  /* estado hover/activo del principal */
-  --brand-primary-contrast: #ffffff;
-  --brand-accent: #ffb100;         /* acento secundario: foco, destacados */
-  --brand-ink: #1c2330;            /* texto principal */
-  --brand-ink-muted: #5b6573;      /* texto secundario */
-  --brand-canvas: #f6f7f9;         /* fondo de la página */
-  --brand-surface: #ffffff;        /* tarjetas y paneles */
-  --brand-surface-2: #eef1f5;      /* superficies secundarias */
-  --brand-line: #d9dee5;           /* bordes */
-  --brand-user-bubble: #e4eef7;    /* burbuja del usuario */
+  /* Brand colors (helixona.com palette) */
+  --brand-primary: #c9a227;          /* deep gold: primary buttons, active states */
+  --brand-primary-hover: #b8960f;    /* hover/pressed gold */
+  --brand-primary-contrast: #1a1a1a; /* dark text on gold (gold on white fails contrast) */
+  --brand-accent: #d6b981;           /* champagne: focus ring, highlights, selected borders */
+  --brand-accent-soft: #f1d6a0;      /* light champagne tint */
+  --brand-link: #8b7355;             /* bronze: links and gold-toned text on white (readable) */
+  --brand-ink: #1a1a1a;              /* primary text */
+  --brand-ink-muted: #666666;        /* secondary text */
+  --brand-canvas: #f9f7f2;           /* page background (warm off-white) */
+  --brand-surface: #ffffff;          /* cards and panels */
+  --brand-surface-2: #f3efe6;        /* secondary surfaces (warm) */
+  --brand-line: #e0e0e0;             /* borders */
+  --brand-user-bubble: #f6efe0;      /* user message bubble (champagne tint) */
 
-  /* Tipografía */
-  --brand-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --brand-font-heading: var(--brand-font);
-  --brand-heading-weight: 700;
+  /* Typography */
+  --brand-font: "Montserrat", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --brand-font-heading: "Playfair Display", Georgia, "Times New Roman", serif;
+  --brand-heading-weight: 600;
 
-  /* Forma */
-  --brand-radius: 10px;
+  /* Shape */
+  --brand-radius: 8px;
   --brand-radius-pill: 999px;
-  --brand-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 24px rgba(16, 24, 40, 0.06);
+  --brand-shadow: 0 1px 2px rgba(26, 26, 26, 0.06), 0 8px 24px rgba(139, 115, 85, 0.1);
 
   /* Logo */
-  --brand-logo-height: 28px;
-  --brand-logo-height-login: 44px;
+  --brand-logo-height: 30px;
+  --brand-logo-height-login: 48px;
 }
