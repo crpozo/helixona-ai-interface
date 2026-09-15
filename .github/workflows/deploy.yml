@@ -68,16 +68,28 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import base64, json, os, re, sys, urllib.request
+          import base64, json, os, re, sys, time, urllib.request
+          # Diagnostic only: GitHub's token service occasionally answers 503. Retry, then carry on
+          # without the claims rather than failing the deploy before it has started.
           url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"] + "&audience=sts.amazonaws.com"
           req = urllib.request.Request(url, headers={"Authorization": "bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]})
-          jwt = json.load(urllib.request.urlopen(req))["value"]
-          payload = jwt.split(".")[1]
-          payload += "=" * (-len(payload) % 4)
-          claims = json.loads(base64.urlsafe_b64decode(payload))
-          print("OIDC token claims AWS receives:")
-          for k in ("iss", "aud", "sub", "repository", "repository_owner", "environment", "ref", "event_name"):
-              print(f"  {k}: {claims.get(k)}")
+          claims = {}
+          for attempt in range(5):
+              try:
+                  jwt = json.load(urllib.request.urlopen(req, timeout=20))["value"]
+                  payload = jwt.split(".")[1]
+                  payload += "=" * (-len(payload) % 4)
+                  claims = json.loads(base64.urlsafe_b64decode(payload))
+                  break
+              except Exception as e:  # noqa: BLE001
+                  print(f"OIDC token request failed (attempt {attempt + 1}/5): {e}")
+                  time.sleep(2 ** attempt)
+          if claims:
+              print("OIDC token claims AWS receives:")
+              for k in ("iss", "aud", "sub", "repository", "repository_owner", "environment", "ref", "event_name"):
+                  print(f"  {k}: {claims.get(k)}")
+          else:
+              print("::warning::Could not read the OIDC token for diagnostics; the credentials step below will still try to assume the role.")
           arn = os.environ.get("ROLE_ARN", "")
           m = re.fullmatch(r"arn:aws:iam::(\d{12}):role/([A-Za-z0-9+=,.@_/-]+)", arn)
           if not m:
@@ -85,9 +97,10 @@ jobs:
                     f"{'with' if arn != arn.strip() else 'without'} leading/trailing whitespace).")
               sys.exit(1)
           print(f"AWS_DEPLOY_ROLE_ARN: valid format (account {m.group(1)}, role {m.group(2)})")
-          print("The role trust policy must allow exactly:")
-          print(f"  token.actions.githubusercontent.com:sub = {claims.get('sub')}")
-          print(f"  token.actions.githubusercontent.com:aud = sts.amazonaws.com")
+          if claims:
+              print("The role trust policy must allow exactly:")
+              print(f"  token.actions.githubusercontent.com:sub = {claims.get('sub')}")
+              print(f"  token.actions.githubusercontent.com:aud = sts.amazonaws.com")
           PY
 
       # TODO: anclar por SHA (verificar el commit del tag v4 en github.com/aws-actions/configure-aws-credentials).
