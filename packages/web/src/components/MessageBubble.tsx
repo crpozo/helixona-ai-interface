@@ -3,6 +3,7 @@ import type { ChatMessage, Notice } from "../lib/chatReducer";
 import type { CatalogModel } from "../lib/types";
 import { modelLabel } from "../lib/models";
 import { Markdown } from "./Markdown";
+import { formatSize } from "../lib/files";
 
 interface Props {
   message: ChatMessage;
@@ -65,6 +66,21 @@ export function MessageBubble({ message: m, models, onRetry }: Props) {
           <summary>Reasoning</summary>
           <pre className="thinking-body">{m.thinking}</pre>
         </details>
+      )}
+
+      {m.attachments.length > 0 && (
+        <ul className="attach-list" aria-label="Attached files">
+          {m.attachments.map((a) => (
+            <li key={a.id} className="attach-chip" title={a.name}>
+              <span className="attach-icon" aria-hidden="true">📄</span>
+              <span className="attach-name">{a.name}</span>
+              <span className="attach-meta">
+                {a.pages ? `${a.pages} p · ` : ""}
+                {formatSize(a.size)}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
 
       <div className="msg-body">

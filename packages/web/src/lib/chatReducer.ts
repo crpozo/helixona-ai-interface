@@ -1,4 +1,4 @@
-import type { ChatSseEvent, ContentBlock, FallbackReason, Message, SseError } from "./types";
+import type { AttachmentMeta, ChatSseEvent, ContentBlock, FallbackReason, Message, SseError } from "./types";
 
 export type MessageStatus =
   | "pending" // enviado, esperando message_start / primer texto
@@ -27,6 +27,10 @@ export interface ChatMessage {
   stopReason: string | null;
   /** Texto del usuario que originó este turno, para "Retry". */
   retryText: string | null;
+  /** Files attached to this user turn (empty for assistant turns). */
+  attachments: AttachmentMeta[];
+  /** Attachments of the user turn that produced this response, for "Retry". */
+  retryAttachments: AttachmentMeta[];
 }
 
 export interface ChatState {
@@ -51,7 +55,7 @@ export const initialChatState: ChatState = {
 export type ChatAction =
   | { type: "reset" }
   | { type: "load"; conversationId: string; messages: Message[] }
-  | { type: "send"; text: string; userId: string; assistantId: string }
+  | { type: "send"; text: string; userId: string; assistantId: string; attachments?: AttachmentMeta[] }
   | { type: "sse"; event: ChatSseEvent }
   | { type: "stopped" }
   | { type: "transport_error"; message: string }
@@ -92,6 +96,8 @@ export function fromServerMessage(m: Message): ChatMessage {
     refusalCategory: null,
     stopReason: m.stopReason,
     retryText: null,
+    attachments: m.attachments ?? [],
+    retryAttachments: [],
   };
 }
 
@@ -207,6 +213,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         refusalCategory: null,
         stopReason: null,
         retryText: null,
+        attachments: action.attachments ?? [],
+        retryAttachments: [],
       };
       const assistant: ChatMessage = {
         id: action.assistantId,
@@ -220,6 +228,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         refusalCategory: null,
         stopReason: null,
         retryText: action.text,
+        attachments: [],
+        retryAttachments: action.attachments ?? [],
       };
       return {
         ...state,

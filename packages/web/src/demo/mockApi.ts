@@ -2,7 +2,7 @@
  * API simulada para la vista previa publicada (modo `demo`): intercepta `fetch` a `/api/*`
  * y responde en memoria, incluido el streaming SSE. Datos de ejemplo, sin Bedrock ni PHI real.
  */
-import type { AdminUser, AuditEvent, Conversation, Me, Message, UsageRow } from "../lib/types";
+import type { AttachmentMeta, AdminUser, AuditEvent, Conversation, Me, Message, UsageRow } from "../lib/types";
 
 const MODELS = [
   { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, available: true },
@@ -64,7 +64,7 @@ function me(): Me {
     user: { id: "u-ana", email: "ana@helixona.com", name: "Ana Perez", roles: ["staff", "admin"] },
     session: { expiresAt: new Date(Date.now() + 12 * 3600_000).toISOString(), idleTimeoutSeconds: 900 },
     catalog: { defaultAlias: "opus", effort: "medium", models: MODELS },
-    limits: { maxMessageChars: 20000, contextLimitTokens: 150000 },
+    limits: { maxMessageChars: 20000, contextLimitTokens: 150000, attachments: { enabled: true, maxMb: 20, maxPerMessage: 5, accept: ["application/pdf", "text/plain", "text/markdown", "text/csv"] } },
   };
 }
 
@@ -79,7 +79,7 @@ function reply(userText: string, model: string): string {
   return `This is a **preview** of the interface: there is no connection to Bedrock and the responses are samples.\n\nI received your message (${t.length} characters) and would have processed it with **${label}** at \`medium\` effort.\n\nTry starting your message with:\n\n- \`/refuse\` to see a classifier refusal continued by the fallback model\n- \`/refuse-all\` to see a refusal across the entire model chain\n- \`/throttle\` to see a switch due to unavailability\n- \`/long\` to see a truncated response`;
 }
 
-function sse(conv: Conv, text: string, signal: AbortSignal | null | undefined): Response {
+function sse(conv: Conv, text: string, signal: AbortSignal | null | undefined, attachments: AttachmentMeta[] = []): Response {
   const cmd = text.match(/^\/(refuse-all|refuse-mid|refuse|throttle|long)\b/)?.[1] ?? null;
   const enc = new TextEncoder();
   const userMessageId = id();
@@ -117,7 +117,7 @@ function sse(conv: Conv, text: string, signal: AbortSignal | null | undefined): 
         const usage = { inputTokens: 900 + Math.ceil(text.length / 4), outputTokens: Math.ceil(emitted.length / 4), cacheReadTokens: 620, cacheWriteTokens: 0, estimatedUsd: 0 };
         usage.estimatedUsd = Math.round(((usage.inputTokens * pin + usage.outputTokens * pout) / 1e6) * 1e6) / 1e6;
         const stopReason = cmd === "long" ? "max_tokens" : "end_turn";
-        conv.messages.push({ id: userMessageId, role: "user", content: [{ type: "text", text }], model: null, fallbackReason: null, stopReason: null, usage: null, createdAt: now() });
+        conv.messages.push({ id: userMessageId, role: "user", content: [{ type: "text", text }], model: null, fallbackReason: null, stopReason: null, usage: null, createdAt: now(), ...(attachments.length > 0 ? { attachments } : {}) });
         conv.messages.push({ id: assistantMessageId, role: "assistant", content: [{ type: "text", text: emitted }], model, fallbackReason, stopReason, usage, createdAt: now() });
         conv.messageCount = conv.messages.length; conv.updatedAt = now();
         if (model !== conv.modelId) { conv.pinnedModel = model; conv.pinReason = fallbackReason ?? "availability"; }
@@ -150,11 +150,19 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     state.conversations.push(c);
     return json(publicConv(c), 201);
   }
+  const mAtt = path.match(/^\/api\/conversations\/([^/]+)\/attachments$/);
+  if (mAtt && method === "POST") return json({ id: id(), name: String(body["name"] ?? "file.pdf"), contentType: String(body["contentType"] ?? "application/pdf"), size: Number(body["size"] ?? 0), upload: { url: "mock://upload", method: "PUT", headers: {}, expiresAt: now() } }, 201);
   const mConv = path.match(/^\/api\/conversations\/([^/]+)(\/messages)?$/);
   if (mConv) {
     const c = state.conversations.find((x) => x.id === mConv[1]);
     if (!c) return error(404, "not_found", "Conversation not found");
-    if (mConv[2] && method === "POST") { const text = String(body["text"] ?? ""); if (!text) return error(400, "bad_request", "Invalid request"); return sse(c, text, init?.signal); }
+    if (mConv[2] && method === "POST") {
+      const raw = Array.isArray(body["attachments"]) ? (body["attachments"] as { id: string; name: string }[]) : [];
+      const attachments: AttachmentMeta[] = raw.map((a) => ({ id: String(a.id), name: String(a.name), contentType: String(a.name).toLowerCase().endsWith(".pdf") ? "application/pdf" : "text/plain", size: 245_760, pages: String(a.name).toLowerCase().endsWith(".pdf") ? 12 : null }));
+      const text = String(body["text"] ?? "");
+      if (!text && attachments.length === 0) return error(400, "bad_request", "Invalid request");
+      return sse(c, text || "Please review the attached document.", init?.signal, attachments);
+    }
     if (method === "GET") return json({ conversation: publicConv(c), messages: c.messages });
     if (method === "PATCH") { c.title = String(body["title"] ?? c.title).slice(0, 80); c.updatedAt = now(); return json(publicConv(c)); }
     if (method === "DELETE") { state.conversations = state.conversations.filter((x) => x.id !== c.id); return new Response(null, { status: 204 }); }

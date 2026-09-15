@@ -1,4 +1,4 @@
-import type { BetaContentBlock, BetaMessageParam, BetaTextBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type { BetaContentBlock, BetaContentBlockParam, BetaMessageParam, BetaTextBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { estimateUsd, modelByAlias, type Catalog, type CatalogModel } from "../catalog.js";
 import { CircuitBreaker } from "../breaker.js";
 import { classifyError, FirstEventTimeoutError, type ClassifiedError } from "../errors.js";
@@ -23,6 +23,8 @@ export interface TurnInput {
   conversation: Conversation;
   history: StoredMessage[];
   userText: string;
+  /** Full content of the new user turn (documents + text). Defaults to a single text block with `userText`. */
+  userContent?: BetaContentBlockParam[];
   systemPrompt: string;
   signal?: AbortSignal;
   emit: (ev: TurnEvent) => void;
@@ -78,9 +80,9 @@ export class ModelRouter {
     return { model, entry, switchedFrom: null };
   }
 
-  buildParams(model: string, systemPrompt: string, history: StoredMessage[], userText: string): StreamParams {
+  buildParams(model: string, systemPrompt: string, history: StoredMessage[], userText: string, userContent?: BetaContentBlockParam[]): StreamParams {
     const system: BetaTextBlockParam[] = [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral", ttl: "1h" } }];
-    const messages: BetaMessageParam[] = [...toMessageParams(history), { role: "user", content: [{ type: "text", text: userText }] }];
+    const messages: BetaMessageParam[] = [...toMessageParams(history), { role: "user", content: userContent ?? [{ type: "text", text: userText }] }];
     const params: StreamParams = {
       model,
       maxTokens: this.opts.maxTokens ?? 64_000,
@@ -105,7 +107,7 @@ export class ModelRouter {
     for (let ci = 0; ci < candidates.length; ci++) {
       const model = candidates[ci]!;
       attempt++;
-      const params = this.buildParams(model, input.systemPrompt, input.history, input.userText);
+      const params = this.buildParams(model, input.systemPrompt, input.history, input.userText, input.userContent);
       const controller = new AbortController();
       const onAbort = () => controller.abort();
       input.signal?.addEventListener("abort", onAbort, { once: true });

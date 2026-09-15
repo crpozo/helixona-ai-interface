@@ -39,6 +39,10 @@ const Env = z.object({
   MAX_MESSAGE_CHARS: z.coerce.number().int().positive().default(20000),
   WEB_DIST: z.string().optional(),
   RATE_LIMIT_TURNS_PER_HOUR: z.coerce.number().int().positive().default(120),
+  /** S3 bucket for attachments; unset = uploads disabled (dev with STORE_MODE=memory keeps them in memory). */
+  ATTACHMENTS_BUCKET: z.string().optional(),
+  MAX_ATTACHMENT_MB: z.coerce.number().positive().default(20),
+  MAX_ATTACHMENTS_PER_MESSAGE: z.coerce.number().int().positive().default(5),
 });
 
 export type Config = z.infer<typeof Env>;
@@ -61,6 +65,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
   }
   if (cfg.LLM_MODE === "bedrock" && !cfg.AWS_REGION) throw new Error("AWS_REGION is required for LLM_MODE=bedrock");
+  if (cfg.ATTACHMENTS_BUCKET && !cfg.AWS_REGION) throw new Error("AWS_REGION is required when ATTACHMENTS_BUCKET is set");
   if (cfg.LLM_MODE === "anthropic" && !cfg.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is required for LLM_MODE=anthropic");
   if (cfg.LLM_MODE === "claude-platform-aws" && (!cfg.AWS_REGION || !cfg.ANTHROPIC_AWS_WORKSPACE_ID)) throw new Error("AWS_REGION and ANTHROPIC_AWS_WORKSPACE_ID are required for LLM_MODE=claude-platform-aws");
   if (!cfg.SESSION_SECRET) {

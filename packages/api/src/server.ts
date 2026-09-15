@@ -3,6 +3,7 @@ import { CircuitBreaker, createSafeLogger, FakeProvider, ModelRouter, parseCatal
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { CognitoIdentityProvider, CognitoUserDirectory } from "./auth/cognito.js";
+import { MemoryAttachmentStore, S3AttachmentStore } from "./attachments/store.js";
 import { DevIdentityProvider } from "./auth/dev.js";
 import { SessionService } from "./auth/session.js";
 import { dynamoRepos } from "./repos/dynamo.js";
@@ -28,7 +29,10 @@ export async function createDeps(env: NodeJS.ProcessEnv = process.env): Promise<
     : new SdkProvider({ mode: config.LLM_MODE, catalog, awsRegion: config.AWS_REGION, apiKey: config.ANTHROPIC_API_KEY, workspaceId: config.ANTHROPIC_AWS_WORKSPACE_ID, timeoutMs: config.LLM_TIMEOUT_MS, logger: log });
   const router = new ModelRouter({ catalog, provider, breaker: new CircuitBreaker(), logger: log, maxTokens: config.MAX_TOKENS, thinkingDisplay: config.THINKING_DISPLAY, firstEventTimeoutMs: config.FIRST_EVENT_TIMEOUT_MS });
   const systemPrompt = loadSystemPrompt(config.SYSTEM_PROMPT_FILE, new URL("..", import.meta.url).pathname);
-  return { config, log, catalog, repos, sessions, identity, directory, provider, router, systemPrompt };
+  const attachments = config.ATTACHMENTS_BUCKET
+    ? new S3AttachmentStore(config.AWS_REGION!, config.ATTACHMENTS_BUCKET)
+    : config.STORE_MODE === "memory" ? new MemoryAttachmentStore() : null;
+  return { config, log, catalog, repos, sessions, identity, directory, provider, router, systemPrompt, attachments };
 }
 
 async function main() {

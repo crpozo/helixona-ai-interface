@@ -170,10 +170,14 @@ export class AppStack extends cdk.Stack {
         EFFORT: 'medium',
         MAX_TOKENS: '64000',
         THINKING_DISPLAY: 'omitted',
-        CONTEXT_LIMIT_TOKENS: '150000',
+        // Claude Sonnet 5 / Opus 5 / Fable 5.1 have a 1M-token context; leave headroom for output and thinking.
+        CONTEXT_LIMIT_TOKENS: '900000',
+        // Large PDFs take longer before the first token arrives.
+        FIRST_EVENT_TIMEOUT_MS: '180000',
+        MAX_ATTACHMENT_MB: '20',
+        MAX_ATTACHMENTS_PER_MESSAGE: '5',
         DAILY_QUOTA_USD: '10',
         RETENTION_DAYS: String(cfg.retentionDays),
-        FIRST_EVENT_TIMEOUT_MS: '60000',
         LLM_TIMEOUT_MS: '600000',
         LOG_LEVEL: 'info',
         ATTACHMENTS_BUCKET: props.attachmentsBucket.bucketName,
@@ -503,7 +507,16 @@ export class AppStack extends cdk.Stack {
       }),
     );
 
-    // Adjuntos (fase 2): solo objetos del bucket propio.
+    // Deleting a conversation removes its attachments (list by prefix, then delete).
+    this.taskRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'AttachmentsList',
+        actions: ['s3:ListBucket'],
+        resources: [props.attachmentsBucket.bucketArn],
+        conditions: { StringLike: { 's3:prefix': ['conversations/*'] } },
+      }),
+    );
+    // Adjuntos: solo objetos del bucket propio.
     this.taskRole.addToPolicy(
       new iam.PolicyStatement({
         sid: 'AttachmentsObjects',

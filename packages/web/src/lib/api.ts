@@ -126,6 +126,38 @@ export function deleteConversation(id: string): Promise<void> {
   return request<void>(`/api/conversations/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+// ---- Attachments ----
+
+export interface UploadTarget { url: string; method: "PUT"; headers: Record<string, string>; expiresAt: string }
+export interface AttachmentUpload { id: string; name: string; contentType: string; size: number; upload: UploadTarget }
+
+export function createAttachment(conversationId: string, input: { name: string; size: number; contentType: string }): Promise<AttachmentUpload> {
+  return request<AttachmentUpload>(`/api/conversations/${encodeURIComponent(conversationId)}/attachments`, { method: "POST", body: input });
+}
+
+/** PUTs the file to the presigned URL (S3 in production, the API itself in development) with progress. */
+export function uploadFile(target: UploadTarget, file: File, onProgress: (fraction: number) => void, signal?: AbortSignal): Promise<void> {
+  hooks.onActivity?.();
+  if (target.url.startsWith("mock:")) {
+    onProgress(1);
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(target.method, target.url, true);
+    for (const [k, v] of Object.entries(target.headers)) xhr.setRequestHeader(k, v);
+    if (target.url.startsWith("/")) xhr.setRequestHeader(CSRF_HEADER, CSRF_VALUE);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new ApiError(xhr.status, "upload_failed", "The file could not be uploaded.")));
+    xhr.onerror = () => reject(new ApiError(0, "network", "The file could not be uploaded."));
+    xhr.onabort = () => reject(new ApiError(0, "aborted", "Upload canceled."));
+    signal?.addEventListener("abort", () => xhr.abort());
+    xhr.send(file);
+  });
+}
+
 const KNOWN_EVENTS = new Set<ChatSseEvent["type"]>([
   "message_start",
   "text_delta",
@@ -145,6 +177,7 @@ export async function* sendMessage(
   conversationId: string,
   text: string,
   signal: AbortSignal,
+  attachments: { id: string; name: string }[] = [],
 ): AsyncGenerator<ChatSseEvent, void, undefined> {
   hooks.onActivity?.();
   const res = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
@@ -156,7 +189,7 @@ export async function* sendMessage(
     },
     credentials: "same-origin",
     cache: "no-store",
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(attachments.length > 0 ? { text, attachments } : { text }),
     signal,
   });
 

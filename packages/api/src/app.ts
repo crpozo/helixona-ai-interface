@@ -11,6 +11,7 @@ import { SESSION_COOKIE } from "./auth/session.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerChatRoute } from "./routes/chat.js";
+import { registerAttachmentRoutes } from "./routes/attachments.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 
 declare module "fastify" {
@@ -18,6 +19,11 @@ declare module "fastify" {
 }
 
 export const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'";
+
+/** The browser uploads attachments straight to storage, so that origin must be allowed in `connect-src`. */
+export function buildCsp(uploadOrigin: string | null): string {
+  return uploadOrigin ? CSP.replace("connect-src 'self'", `connect-src 'self' ${uploadOrigin}`) : CSP;
+}
 
 export function apiError(reply: FastifyReply, status: number, code: string, message: string) {
   return reply.code(status).send({ error: { code, message } });
@@ -43,6 +49,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   const { config } = deps;
   const app = Fastify({ logger: false, trustProxy: true, bodyLimit: 256 * 1024, genReqId: () => ulid() });
   const secure = config.APP_BASE_URL.startsWith("https://");
+  const csp = buildCsp(deps.attachments?.uploadOrigin ?? null);
 
   // Signing secret for the short-lived OIDC cookie (`signed: true` in routes/auth.ts). Without it
   // @fastify/cookie throws on setCookie and the Cognito login returns 500. Production requires
@@ -59,7 +66,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
 
   // Cabeceras de seguridad en todas las respuestas; nada cacheable en /api.
   app.addHook("onSend", async (req, reply, payload) => {
-    reply.header("content-security-policy", CSP);
+    reply.header("content-security-policy", csp);
     if (secure) reply.header("strict-transport-security", "max-age=63072000; includeSubDomains; preload");
     reply.header("x-content-type-options", "nosniff");
     reply.header("x-frame-options", "DENY");
@@ -101,6 +108,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   registerAuthRoutes(app, deps, secure);
   registerConversationRoutes(app, deps);
   registerChatRoute(app, deps);
+  registerAttachmentRoutes(app, deps);
   registerAdminRoutes(app, deps);
 
   // SPA compilada (mismo origen, sin CORS). Cualquier ruta no-API devuelve index.html.

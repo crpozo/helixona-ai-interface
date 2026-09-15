@@ -21,7 +21,7 @@ export interface Me {
     effort: "low" | "medium" | "high" | "xhigh" | "max";
     models: CatalogModel[];
   };
-  limits: { maxMessageChars: number; contextLimitTokens: number };
+  limits: { maxMessageChars: number; contextLimitTokens: number; attachments?: AttachmentLimits };
 }
 
 export type FallbackReason = "refusal" | "availability";
@@ -71,6 +71,23 @@ export interface Message {
   stopReason: string | null;
   usage: Usage | null;
   createdAt: string;
+  attachments?: AttachmentMeta[];
+}
+
+/** A file attached to a user turn (metadata only; bytes stay in the clinic's storage). */
+export interface AttachmentMeta {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+  pages: number | null;
+}
+
+export interface AttachmentLimits {
+  enabled: boolean;
+  maxMb: number;
+  maxPerMessage: number;
+  accept: string[];
 }
 
 export interface AdminUser {

@@ -14,7 +14,7 @@ import {
 import { chatReducer, initialChatState, type ChatMessage } from "./lib/chatReducer";
 import { useIdleTimeout } from "./lib/idle";
 import { navigate, useRoute } from "./lib/router";
-import type { Conversation, Me } from "./lib/types";
+import type { AttachmentMeta, Conversation, Me } from "./lib/types";
 import { AdminPage } from "./components/AdminPage";
 import { ChatPanel } from "./components/ChatPanel";
 import { IdleWarning } from "./components/IdleWarning";
@@ -213,14 +213,14 @@ export function App() {
     }
   };
 
-  const send = async (text: string) => {
+  const send = async (text: string, attachments: AttachmentMeta[] = []) => {
     if (!selected || chat.streaming) return;
     const conv = selected;
     const ac = new AbortController();
     abortRef.current = ac;
-    dispatch({ type: "send", text, userId: localId("u"), assistantId: localId("a") });
+    dispatch({ type: "send", text, attachments, userId: localId("u"), assistantId: localId("a") });
     try {
-      for await (const ev of sendMessage(conv.id, text, ac.signal)) {
+      for await (const ev of sendMessage(conv.id, text, ac.signal, attachments.map((a) => ({ id: a.id, name: a.name })))) {
         dispatch({ type: "sse", event: ev });
       }
       dispatch({ type: "finish" });
@@ -258,9 +258,9 @@ export function App() {
 
   const retry = (m: ChatMessage) => {
     const text = m.retryText;
-    if (!text || chat.streaming) return;
+    if (text === null || chat.streaming) return;
     if (m.status === "error") dispatch({ type: "remove_failed_turn", assistantId: m.id });
-    void send(text);
+    void send(text, m.retryAttachments);
   };
 
   // ---- Render ----
@@ -341,7 +341,7 @@ export function App() {
                 conversation={selected}
                 state={chat}
                 loading={loadingConv}
-                onSend={(t) => void send(t)}
+                onSend={(t, a) => void send(t, a)}
                 onStop={stop}
                 onRetry={retry}
               />

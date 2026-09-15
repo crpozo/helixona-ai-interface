@@ -66,6 +66,7 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
     // Borrado explícito (no se espera al TTL).
     await deps.repos.messages.deleteAll(id);
     await deps.repos.conversations.delete(req.session!.userId, id);
+    if (deps.attachments) await deps.attachments.deletePrefix(`conversations/${id}/`).catch(() => deps.log.warn("attachments_delete_failed", { conversationId: id }));
     await audit(deps, req, { action: "conversation_delete", conversationId: id });
     return reply.code(204).send();
   });

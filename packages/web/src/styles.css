@@ -896,3 +896,66 @@ td {
   padding: 0.35rem 1rem;
   border-bottom: 1px solid var(--border);
 }
+
+/* Attachments */
+.attach-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--brand-line-gold);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 0.82rem;
+}
+.attach-chip.error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.attach-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+.attach-meta {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.attach-progress {
+  position: relative;
+  width: 64px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--brand-line);
+  overflow: hidden;
+}
+.attach-progress > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--brand-primary);
+}
+.attach-remove {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.05rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+}
+.attach-remove:hover {
+  color: var(--text);
+}
+.composer-pending {
+  margin-bottom: 0.5rem;
+}

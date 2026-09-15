@@ -1,4 +1,4 @@
-import type { BetaContentBlock, BetaContentBlockParam, BetaMessageParam, StoredMessage } from "./types.js";
+import type { AttachmentMeta, BetaContentBlock, BetaContentBlockParam, BetaMessageParam, StoredMessage } from "./types.js";
 
 type AnyBlock = BetaContentBlock | BetaContentBlockParam;
 
@@ -34,4 +34,10 @@ export function toMessageParams(messages: StoredMessage[]): BetaMessageParam[] {
 /** Estimación barata de tokens para límite de contexto (≈ 3,5 caracteres por token en español). */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3.5);
+}
+
+/** Rough token estimate for an attachment: a PDF page costs about 2,000 tokens (text plus layout); text is ~3.5 chars/token. */
+export function estimateAttachmentTokens(a: AttachmentMeta): number {
+  if (a.contentType === "application/pdf") return a.pages ? a.pages * 2000 : Math.ceil(a.size / 350);
+  return Math.ceil(a.size / 3.5);
 }

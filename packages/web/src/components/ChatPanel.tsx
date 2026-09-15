@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ChatMessage, ChatState } from "../lib/chatReducer";
-import type { Conversation, Me } from "../lib/types";
+import type { AttachmentMeta, Conversation, Me } from "../lib/types";
 import { modelLabel } from "../lib/models";
 import { Composer } from "./Composer";
 import { MessageBubble } from "./MessageBubble";
@@ -10,7 +10,7 @@ interface Props {
   conversation: Conversation;
   state: ChatState;
   loading: boolean;
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments: AttachmentMeta[]) => void;
   onStop: () => void;
   onRetry: (message: ChatMessage) => void;
 }
@@ -61,6 +61,8 @@ export function ChatPanel({ me, conversation, state, loading, onSend, onStop, on
       </div>
 
       <Composer
+        conversationId={conversation.id}
+        attachments={me.limits.attachments?.enabled ? me.limits.attachments : null}
         maxChars={me.limits.maxMessageChars}
         streaming={state.streaming}
         disabled={loading}

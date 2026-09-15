@@ -6,6 +6,8 @@ import { loadConfig } from "../src/config.js";
 import { DevIdentityProvider } from "../src/auth/dev.js";
 import { SessionService } from "../src/auth/session.js";
 import { memoryRepos, MemoryUserDirectory } from "../src/repos/memory.js";
+import { MemoryAttachmentStore } from "../src/attachments/store.js";
+import { PDFDocument } from "pdf-lib";
 import type { Deps } from "../src/deps.js";
 import type { IdentityProvider } from "../src/auth/cognito.js";
 
@@ -29,6 +31,7 @@ async function makeApp(extraEnv: Record<string, string> = {}, identity?: Identit
     identity: identity ?? new DevIdentityProvider(), directory: new MemoryUserDirectory(), provider,
     router: new ModelRouter({ catalog: DEFAULT_CATALOG, provider, breaker: new CircuitBreaker(), firstEventTimeoutMs: 300 }),
     systemPrompt: { text: "prompt de sistema de prueba", version: "v1" },
+    attachments: new MemoryAttachmentStore(),
   };
   const app = await buildApp(deps);
   return { app, repos, deps };
@@ -223,6 +226,42 @@ describe("Admin: roles", () => {
     const staff = await login(app, "pepe", "staff");
     const denied = await app.inject({ method: "POST", url: `/api/admin/users/${id}/role`, headers: { ...H, cookie: staff.cookie }, payload: { role: "staff" } });
     expect(denied.statusCode).toBe(403);
+    await app.close();
+  });
+});
+
+describe("Attachments", () => {
+  it("presigns an upload, accepts the bytes and attaches the PDF to the turn", async () => {
+    const { app } = await makeApp();
+    const s = await login(app, "ana");
+    const created = await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: s.cookie }, payload: { modelAlias: "opus" } });
+    const convId = created.json().id as string;
+    const pdf = await PDFDocument.create();
+    pdf.addPage(); pdf.addPage();
+    const bytes = Buffer.from(await pdf.save());
+
+    const att = await app.inject({ method: "POST", url: `/api/conversations/${convId}/attachments`, headers: { ...H, cookie: s.cookie }, payload: { name: "EOB March.pdf", size: bytes.length, contentType: "application/pdf" } });
+    expect(att.statusCode).toBe(201);
+    const a = att.json();
+    expect(a.upload.url).toMatch(/^\/api\/dev\/upload\//);
+    const up = await app.inject({ method: "PUT", url: a.upload.url, headers: { "content-type": "application/pdf", "x-requested-with": "helixona" }, payload: bytes });
+    expect(up.statusCode).toBe(200);
+
+    const r = await app.inject({ method: "POST", url: `/api/conversations/${convId}/messages`, headers: { ...H, cookie: s.cookie }, payload: { text: "Summarize this EOB", attachments: [{ id: a.id, name: a.name }] } });
+    expect(r.statusCode).toBe(200);
+    expect(parseSse(r.body).some((e) => e.event === "done")).toBe(true);
+    const conv = await app.inject({ method: "GET", url: `/api/conversations/${convId}`, headers: { cookie: s.cookie } });
+    const user = conv.json().messages.find((m: { role: string }) => m.role === "user");
+    expect(user.attachments).toEqual([expect.objectContaining({ id: a.id, name: "EOB March.pdf", contentType: "application/pdf", pages: 2, size: bytes.length })]);
+
+    // A follow-up turn re-sends the document from storage (no error) and an unknown attachment is rejected.
+    const again = await app.inject({ method: "POST", url: `/api/conversations/${convId}/messages`, headers: { ...H, cookie: s.cookie }, payload: { text: "And the total?" } });
+    expect(parseSse(again.body).some((e) => e.event === "done")).toBe(true);
+    const bad = await app.inject({ method: "POST", url: `/api/conversations/${convId}/messages`, headers: { ...H, cookie: s.cookie }, payload: { text: "x", attachments: [{ id: "01ARZ3NDEKTSV4RRFFQ69G5FAV", name: "missing.pdf" }] } });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error.code).toBe("attachment_missing");
+    const unsupported = await app.inject({ method: "POST", url: `/api/conversations/${convId}/attachments`, headers: { ...H, cookie: s.cookie }, payload: { name: "virus.exe", size: 10, contentType: "application/octet-stream" } });
+    expect(unsupported.json().error.code).toBe("unsupported_type");
     await app.close();
   });
 });

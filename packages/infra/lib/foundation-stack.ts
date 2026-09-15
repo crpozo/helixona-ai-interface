@@ -195,6 +195,18 @@ export class FoundationStack extends cdk.Stack {
       lifecycleRules: [
         { id: 'noncurrent-35d', noncurrentVersionExpiration: cdk.Duration.days(35) },
         { id: 'abort-mpu', abortIncompleteMultipartUploadAfter: cdk.Duration.days(1) },
+        // Conversation attachments follow the conversation retention (same TTL as the DynamoDB items).
+        { id: 'expire-attachments', prefix: 'conversations/', expiration: cdk.Duration.days(props.config.retentionDays) },
+      ],
+      // The browser uploads directly with a presigned PUT, so the app origin needs CORS on the bucket.
+      cors: [
+        {
+          allowedMethods: [s3.HttpMethods.PUT],
+          allowedOrigins: [props.config.appBaseUrl],
+          allowedHeaders: ['content-type'],
+          exposedHeaders: ['ETag'],
+          maxAge: 3600,
+        },
       ],
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });

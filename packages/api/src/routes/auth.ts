@@ -5,6 +5,7 @@ import type { Deps } from "../deps.js";
 import type { OidcPending } from "../auth/cognito.js";
 import { SESSION_COOKIE } from "../auth/session.js";
 import { apiError, audit, requireAuth } from "../app.js";
+import { ALLOWED_TYPES } from "../attachments/policy.js";
 
 const OIDC_COOKIE = "hx_oidc";
 
@@ -78,7 +79,11 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
           ...deps.catalog.fallbackModels.map((m) => ({ alias: m.modelId, modelId: m.modelId, label: m.label, description: "Fallback only", costFactor: 0, available: false })),
         ],
       },
-      limits: { maxMessageChars: config.MAX_MESSAGE_CHARS, contextLimitTokens: config.CONTEXT_LIMIT_TOKENS },
+      limits: {
+        maxMessageChars: config.MAX_MESSAGE_CHARS,
+        contextLimitTokens: config.CONTEXT_LIMIT_TOKENS,
+        attachments: { enabled: deps.attachments !== null, maxMb: config.MAX_ATTACHMENT_MB, maxPerMessage: config.MAX_ATTACHMENTS_PER_MESSAGE, accept: Object.keys(ALLOWED_TYPES) },
+      },
     };
   });
 }
