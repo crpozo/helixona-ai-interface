@@ -115,7 +115,7 @@ Códigos de `error`: `quota_exceeded`, `context_limit`, `model_unavailable`, `ba
 | `AWS_REGION` | — | Región de Bedrock y DynamoDB |
 | `LLM_MODE` | `bedrock` | `bedrock` \| `anthropic` \| `claude-platform-aws` \| `fake`. `anthropic` usa la Claude API con `ANTHROPIC_API_KEY` (secreto); `claude-platform-aws` usa SigV4 + `ANTHROPIC_AWS_WORKSPACE_ID`. El catálogo se escribe siempre con IDs de Bedrock (`anthropic.claude-opus-5`); los otros modos quitan el prefijo |
 | `MODEL_CATALOG_JSON` | catálogo por defecto (§6) | JSON completo del catálogo |
-| `SYSTEM_PROMPT_FILE` | `prompts/system.es.md` | Prompt de sistema (versionado por conversación) |
+| `SYSTEM_PROMPT_FILE` | `prompts/system.en.md` | Prompt de sistema (versionado por conversación) |
 | `EFFORT` | `medium` | `output_config.effort` |
 | `MAX_TOKENS` | `64000` | Streaming |
 | `THINKING_DISPLAY` | `omitted` | `omitted` \| `summarized` |

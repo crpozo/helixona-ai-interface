@@ -114,7 +114,7 @@ export class FakeProvider implements LlmProvider {
 
   private replyFor(userText: string, model: string): string {
     const clean = userText.replace(/^\/\S+\s*/, "");
-    return `**Respuesta simulada** (${model}).\n\nRecibí: "${clean.slice(0, 120)}".\n\n- Este es un proveedor falso para desarrollo.\n- No hay conexión a Bedrock.\n\nVisita [documentación](https://example.com/doc) para más detalles.`;
+    return `**Simulated reply** (${model}).\n\nReceived: "${clean.slice(0, 120)}".\n\n- This is a fake provider for development.\n- There is no connection to Bedrock.\n\nSee the [documentation](https://example.com/doc) for more details.`;
   }
 }
 

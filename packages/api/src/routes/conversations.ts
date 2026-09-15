@@ -11,8 +11,8 @@ export function publicConversation(c: Conversation) {
 
 function defaultTitle(now: Date): string {
   // Título opaco: sin contenido de la conversación (evita PHI en listados e historial del navegador).
-  const f = new Intl.DateTimeFormat("es", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/New_York" });
-  return `Conversación ${f.format(now)}`;
+  const f = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Los_Angeles" });
+  return `Conversation ${f.format(now)}`;
 }
 
 export function registerConversationRoutes(app: FastifyInstance, deps: Deps): void {
@@ -26,9 +26,9 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
 
   app.post("/api/conversations", { preHandler: requireAuth() }, async (req, reply) => {
     const body = z.object({ modelAlias: z.string().min(2).max(32) }).safeParse(req.body);
-    if (!body.success) return apiError(reply, 400, "bad_request", "Solicitud inválida");
+    if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
     const entry = modelByAlias(deps.catalog, body.data.modelAlias);
-    if (!entry || !modelsForRole(deps.catalog, req.session!.roles).some((m) => m.alias === entry.alias)) return apiError(reply, 400, "unknown_model", "Modelo no disponible");
+    if (!entry || !modelsForRole(deps.catalog, req.session!.roles).some((m) => m.alias === entry.alias)) return apiError(reply, 400, "unknown_model", "Model not available");
     const t = now();
     const c: Conversation = {
       id: ulid(), userId: req.session!.userId, title: defaultTitle(t), modelAlias: entry.alias, modelId: entry.modelId,
@@ -43,7 +43,7 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
   app.get("/api/conversations/:id", { preHandler: requireAuth() }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const c = await deps.repos.conversations.get(req.session!.userId, id);
-    if (!c) return apiError(reply, 404, "not_found", "Conversación no encontrada");
+    if (!c) return apiError(reply, 404, "not_found", "Conversation not found");
     const messages = await deps.repos.messages.list(id);
     await audit(deps, req, { action: "conversation_read", conversationId: id });
     return { conversation: publicConversation(c), messages: messages.map(({ conversationId: _c, seq: _s, ...m }) => m) };
@@ -52,9 +52,9 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
   app.patch("/api/conversations/:id", { preHandler: requireAuth() }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = z.object({ title: z.string().trim().min(1).max(80) }).safeParse(req.body);
-    if (!body.success) return apiError(reply, 400, "bad_request", "Solicitud inválida");
+    if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
     const c = await deps.repos.conversations.update(req.session!.userId, id, { title: body.data.title });
-    if (!c) return apiError(reply, 404, "not_found", "Conversación no encontrada");
+    if (!c) return apiError(reply, 404, "not_found", "Conversation not found");
     await audit(deps, req, { action: "conversation_title", conversationId: id });
     return publicConversation(c);
   });
@@ -62,7 +62,7 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
   app.delete("/api/conversations/:id", { preHandler: requireAuth() }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const c = await deps.repos.conversations.get(req.session!.userId, id);
-    if (!c) return apiError(reply, 404, "not_found", "Conversación no encontrada");
+    if (!c) return apiError(reply, 404, "not_found", "Conversation not found");
     // Borrado explícito (no se espera al TTL).
     await deps.repos.messages.deleteAll(id);
     await deps.repos.conversations.delete(req.session!.userId, id);

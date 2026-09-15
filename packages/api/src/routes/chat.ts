@@ -27,9 +27,9 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     const { id } = req.params as { id: string };
     const userId = req.session!.userId;
     const body = z.object({ text: z.string().min(1).max(deps.config.MAX_MESSAGE_CHARS) }).safeParse(req.body);
-    if (!body.success) return apiError(reply, 400, "bad_request", "Solicitud inválida");
+    if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
     const conv = await deps.repos.conversations.get(userId, id);
-    if (!conv) return apiError(reply, 404, "not_found", "Conversación no encontrada");
+    if (!conv) return apiError(reply, 404, "not_found", "Conversation not found");
 
     // A partir de aquí la respuesta es SSE: los errores de negocio viajan como evento `error`.
     reply.hijack();
@@ -40,12 +40,12 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
       sse.end();
     };
 
-    if (!limiter.allow(userId)) return fail("quota_exceeded", "Has superado el número de mensajes por hora", "quota_exceeded");
+    if (!limiter.allow(userId)) return fail("quota_exceeded", "You have exceeded the hourly message limit", "quota_exceeded");
     const day = today(now);
     const usage = await deps.repos.usage.get(userId, day);
-    if (deps.config.DAILY_QUOTA_USD > 0 && (usage?.estimatedUsd ?? 0) >= deps.config.DAILY_QUOTA_USD) return fail("quota_exceeded", "Has agotado la cuota diaria de uso", "quota_exceeded");
+    if (deps.config.DAILY_QUOTA_USD > 0 && (usage?.estimatedUsd ?? 0) >= deps.config.DAILY_QUOTA_USD) return fail("quota_exceeded", "You have used up today's usage quota", "quota_exceeded");
     const text = body.data.text;
-    if (conv.lastInputTokens + estimateTokens(text) > deps.config.CONTEXT_LIMIT_TOKENS) return fail("context_limit", "La conversación es demasiado larga; abre una nueva");
+    if (conv.lastInputTokens + estimateTokens(text) > deps.config.CONTEXT_LIMIT_TOKENS) return fail("context_limit", "This conversation is too long; please start a new one");
 
     const history = await deps.repos.messages.list(id);
     const userMessageId = ulid();
@@ -86,7 +86,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
       }
     } catch (e) {
       deps.log.error("turn_unhandled", { conversationId: id, errorClass: e instanceof Error ? e.name : "unknown", requestId: req.requestId });
-      sse.send("error", { code: "internal", message: "No se pudo completar la solicitud", retryable: true, partial: false });
+      sse.send("error", { code: "internal", message: "The request could not be completed", retryable: true, partial: false });
     } finally {
       sse.end();
     }

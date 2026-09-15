@@ -83,7 +83,7 @@ describe("API", () => {
     expect(created.statusCode).toBe(201);
     const conv = created.json();
     expect(conv.modelId).toBe("anthropic.claude-fable-5-1");
-    expect(conv.title).toMatch(/^Conversación /);
+    expect(conv.title).toMatch(/^Conversation /);
 
     const turn = await app.inject({ method: "POST", url: `/api/conversations/${conv.id}/messages`, headers: { ...H, cookie }, payload: { text: "Hola, redacta una carta" } });
     expect(turn.statusCode).toBe(200);

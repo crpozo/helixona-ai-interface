@@ -24,8 +24,8 @@ export function apiError(reply: FastifyReply, status: number, code: string, mess
 
 export function requireAuth(roles: Role[] = ["staff"]) {
   return async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!req.session) return apiError(reply, 401, "unauthenticated", "Inicia sesión para continuar");
-    if (!roles.some((r) => req.session!.roles.includes(r))) return apiError(reply, 403, "forbidden", "No tienes permiso para esta acción");
+    if (!req.session) return apiError(reply, 401, "unauthenticated", "Please sign in to continue");
+    if (!roles.some((r) => req.session!.roles.includes(r))) return apiError(reply, 403, "forbidden", "You do not have permission to perform this action");
   };
 }
 
@@ -71,7 +71,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
     req.session = null;
     if (!req.url.startsWith("/api/")) return;
     if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method) && req.headers["x-requested-with"] !== "helixona") {
-      return apiError(reply, 403, "csrf", "Cabecera X-Requested-With requerida");
+      return apiError(reply, 403, "csrf", "X-Requested-With header is required");
     }
     const resolved = await deps.sessions.resolve(req.cookies[SESSION_COOKIE]);
     if (resolved?.expired) {
@@ -88,8 +88,8 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
     // Nunca se serializa el error completo: puede contener el cuerpo de la petición.
     deps.log.error("request_error", { requestId: req.requestId, route: req.routeOptions?.url ?? req.url.split("?")[0], method: req.method, status, errorClass: e.name ?? "Error", errorCode: e.code });
     if (reply.sent) return;
-    if (status === 400 || e.validation) return apiError(reply, 400, "bad_request", "Solicitud inválida");
-    return apiError(reply, status, status === 500 ? "internal" : "error", "No se pudo completar la solicitud");
+    if (status === 400 || e.validation) return apiError(reply, 400, "bad_request", "Invalid request");
+    return apiError(reply, status, status === 500 ? "internal" : "error", "The request could not be completed");
   });
 
   app.get("/api/health", async () => ({ ok: true, version: process.env["APP_VERSION"] ?? "dev" }));
@@ -105,12 +105,12 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
     await app.register(fastifyStatic, { root: dist, wildcard: false, index: false, maxAge: "1h", immutable: false, setHeaders: (res, path) => { if (path.endsWith("index.html")) res.setHeader("cache-control", "no-store"); } });
     const index = readFileSync(resolve(dist, "index.html"), "utf8");
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith("/api/")) return apiError(reply, 404, "not_found", "Recurso no encontrado");
-      if (req.method !== "GET") return apiError(reply, 405, "method_not_allowed", "Método no permitido");
+      if (req.url.startsWith("/api/")) return apiError(reply, 404, "not_found", "Resource not found");
+      if (req.method !== "GET") return apiError(reply, 405, "method_not_allowed", "Method not allowed");
       return reply.header("cache-control", "no-store").type("text/html; charset=utf-8").send(index);
     });
   } else {
-    app.setNotFoundHandler((req, reply) => apiError(reply, 404, "not_found", req.url.startsWith("/api/") ? "Recurso no encontrado" : "Frontend no compilado (packages/web/dist)"));
+    app.setNotFoundHandler((req, reply) => apiError(reply, 404, "not_found", req.url.startsWith("/api/") ? "Resource not found" : "Frontend not built (packages/web/dist)"));
   }
 
   return app;

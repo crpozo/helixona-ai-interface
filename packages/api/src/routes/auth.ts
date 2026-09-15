@@ -41,9 +41,9 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
   });
 
   app.post("/api/auth/dev-login", async (req, reply) => {
-    if (config.AUTH_MODE !== "dev" || config.NODE_ENV === "production") return apiError(reply, 404, "not_found", "Recurso no encontrado");
+    if (config.AUTH_MODE !== "dev" || config.NODE_ENV === "production") return apiError(reply, 404, "not_found", "Resource not found");
     const body = z.object({ username: z.string().regex(/^[a-z0-9._-]{2,40}$/i), role: z.enum(["staff", "admin"]).default("staff") }).safeParse(req.body);
-    if (!body.success) return apiError(reply, 400, "bad_request", "Solicitud inválida");
+    if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
     const roles: Role[] = body.data.role === "admin" ? ["staff", "admin"] : ["staff"];
     const userId = `dev-${body.data.username.toLowerCase()}`;
     const { cookie } = await deps.sessions.create({ id: userId, email: `${body.data.username}@dev.local`, name: body.data.username, roles }, null);
@@ -75,7 +75,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
         models: [
           ...deps.catalog.models.map((m) => ({ alias: m.alias, modelId: m.modelId, label: m.label, description: m.description, costFactor: m.costFactor, available: modelsForRole(deps.catalog, s.roles).some((x) => x.alias === m.alias) })),
           // Modelos solo de respaldo: no seleccionables, pero la UI necesita su etiqueta.
-          ...deps.catalog.fallbackModels.map((m) => ({ alias: m.modelId, modelId: m.modelId, label: m.label, description: "Solo como respaldo", costFactor: 0, available: false })),
+          ...deps.catalog.fallbackModels.map((m) => ({ alias: m.modelId, modelId: m.modelId, label: m.label, description: "Fallback only", costFactor: 0, available: false })),
         ],
       },
       limits: { maxMessageChars: config.MAX_MESSAGE_CHARS, contextLimitTokens: config.CONTEXT_LIMIT_TOKENS },

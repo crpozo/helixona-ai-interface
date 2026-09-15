@@ -47,14 +47,14 @@ export const CatalogSchema = z.object({
   const ids = new Set<string>(c.models.map((m) => m.modelId));
   for (const f of c.fallbackModels) ids.add(f.modelId);
   for (const m of c.models) {
-    if (aliases.has(m.alias)) ctx.addIssue({ code: "custom", message: `alias duplicado: ${m.alias}` });
+    if (aliases.has(m.alias)) ctx.addIssue({ code: "custom", message: `duplicate alias: ${m.alias}` });
     aliases.add(m.alias);
     for (const fb of [...m.refusalFallbacks, ...m.availabilityFallbacks]) {
-      if (fb === m.modelId) ctx.addIssue({ code: "custom", message: `${m.alias}: un modelo no puede ser su propio respaldo` });
-      if (!ids.has(fb)) ctx.addIssue({ code: "custom", message: `${m.alias}: respaldo ${fb} no está en models ni fallbackModels (falta precio/etiqueta)` });
+      if (fb === m.modelId) ctx.addIssue({ code: "custom", message: `${m.alias}: a model cannot be its own fallback` });
+      if (!ids.has(fb)) ctx.addIssue({ code: "custom", message: `${m.alias}: fallback ${fb} is not in models or fallbackModels (missing price/label)` });
     }
   }
-  if (!aliases.has(c.defaultAlias)) ctx.addIssue({ code: "custom", message: `defaultAlias ${c.defaultAlias} no existe` });
+  if (!aliases.has(c.defaultAlias)) ctx.addIssue({ code: "custom", message: `defaultAlias ${c.defaultAlias} does not exist` });
 });
 export type Catalog = z.infer<typeof CatalogSchema>;
 
@@ -62,9 +62,9 @@ export const DEFAULT_CATALOG: Catalog = CatalogSchema.parse({
   defaultAlias: "opus",
   effort: "medium",
   models: [
-    { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet", description: "Rápido y económico: traducciones, cartas, resúmenes cortos", costFactor: 1, priceInPerM: 2, priceOutPerM: 10, priceCacheReadPerM: 0.2, priceCacheWritePerM: 2.5, refusalFallbacks: [], availabilityFallbacks: [] },
-    { alias: "opus", modelId: "anthropic.claude-opus-5", label: "Opus", description: "Equilibrio recomendado para el trabajo diario", costFactor: 2.5, priceInPerM: 5, priceOutPerM: 25, priceCacheReadPerM: 0.5, priceCacheWritePerM: 6.25, refusalFallbacks: ["anthropic.claude-opus-4-8"], availabilityFallbacks: [] },
-    { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable", description: "Máxima capacidad para tareas difíciles y documentos largos (más lento y costoso)", costFactor: 5, priceInPerM: 10, priceOutPerM: 50, priceCacheReadPerM: 0.25, priceCacheWritePerM: 12.5, refusalFallbacks: ["anthropic.claude-opus-5"], availabilityFallbacks: ["anthropic.claude-opus-5"] },
+    { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, priceInPerM: 2, priceOutPerM: 10, priceCacheReadPerM: 0.2, priceCacheWritePerM: 2.5, refusalFallbacks: [], availabilityFallbacks: [] },
+    { alias: "opus", modelId: "anthropic.claude-opus-5", label: "Opus", description: "Recommended balance for everyday work", costFactor: 2.5, priceInPerM: 5, priceOutPerM: 25, priceCacheReadPerM: 0.5, priceCacheWritePerM: 6.25, refusalFallbacks: ["anthropic.claude-opus-4-8"], availabilityFallbacks: [] },
+    { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, priceInPerM: 10, priceOutPerM: 50, priceCacheReadPerM: 0.25, priceCacheWritePerM: 12.5, refusalFallbacks: ["anthropic.claude-opus-5"], availabilityFallbacks: ["anthropic.claude-opus-5"] },
   ],
   fallbackModels: [
     { modelId: "anthropic.claude-opus-4-8", label: "Opus 4.8", priceInPerM: 5, priceOutPerM: 25, priceCacheReadPerM: 0.5, priceCacheWritePerM: 6.25 },

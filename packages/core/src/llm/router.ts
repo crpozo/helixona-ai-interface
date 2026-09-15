@@ -65,7 +65,7 @@ export class ModelRouter {
   /** Modelo con el que debe empezar el turno: pin vigente → modelo elegido → respaldo si el breaker está abierto. */
   resolveStartModel(conv: Conversation): { model: string; entry: CatalogModel; switchedFrom: string | null } {
     const entry = modelByAlias(this.opts.catalog, conv.modelAlias);
-    if (!entry) throw new Error(`alias de modelo desconocido: ${conv.modelAlias}`);
+    if (!entry) throw new Error(`unknown model alias: ${conv.modelAlias}`);
     let model = conv.modelId;
     if (conv.pinnedModel) {
       const pinActive = conv.pinReason === "refusal" || !conv.pinnedUntil || new Date(conv.pinnedUntil).getTime() > this.now().getTime();
@@ -186,7 +186,7 @@ export class ModelRouter {
         log.warn("turn_error", { model, errorClass: cls.errorClass, status: cls.status ?? undefined, reason: cls.kind, latencyMs, attempt, count: emittedChars });
 
         if (cls.kind === "aborted" && input.signal?.aborted) {
-          input.emit({ type: "error", code: "aborted", message: "Solicitud cancelada", retryable: true, partial: emittedChars > 0 });
+          input.emit({ type: "error", code: "aborted", message: "Request canceled", retryable: true, partial: emittedChars > 0 });
           return this.failure(startModel, cls, latencyMs, emittedChars > 0);
         }
         if (cls.kind === "config") this.breaker.open(model, cls.breakerMs, cls.kind);
@@ -201,12 +201,12 @@ export class ModelRouter {
           continue;
         }
         const code = cls.kind === "availability" || cls.kind === "config" ? "model_unavailable" : cls.kind === "bug" ? "bad_request" : "internal";
-        input.emit({ type: "error", code, message: code === "model_unavailable" ? "El modelo no está disponible en este momento" : "No se pudo completar la solicitud", retryable: code === "model_unavailable" || code === "internal", partial: emittedChars > 0 });
+        input.emit({ type: "error", code, message: code === "model_unavailable" ? "The model is not available right now" : "The request could not be completed", retryable: code === "model_unavailable" || code === "internal", partial: emittedChars > 0 });
         return this.failure(startModel, cls, latencyMs, emittedChars > 0);
       }
     }
     // No debería llegar aquí: siempre hay al menos un candidato.
-    return this.failure(startModel, classifyError(new Error("sin candidatos")), this.now().getTime() - started, false);
+    return this.failure(startModel, classifyError(new Error("no candidates")), this.now().getTime() - started, false);
   }
 
   private failure(requestedModel: string, error: ClassifiedError, latencyMs: number, partial: boolean): TurnResult {

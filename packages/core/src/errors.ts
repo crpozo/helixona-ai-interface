@@ -17,7 +17,7 @@ export interface ClassifiedError { kind: ErrorKind; errorClass: string; status: 
 const MODEL_OR_RETENTION = /(model|modelo|retention|retenci|not enabled|access|inference profile|not supported|unsupported|does not exist|invalid model)/i;
 
 export class FirstEventTimeoutError extends Error {
-  constructor(ms: number) { super(`sin primer evento en ${ms} ms`); this.name = "FirstEventTimeoutError"; }
+  constructor(ms: number) { super(`no first event within ${ms} ms`); this.name = "FirstEventTimeoutError"; }
 }
 
 export function classifyError(err: unknown): ClassifiedError {

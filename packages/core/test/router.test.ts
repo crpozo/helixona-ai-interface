@@ -17,7 +17,7 @@ describe("ModelRouter", () => {
     expect(r.servedModel).toBe("anthropic.claude-fable-5-1");
     expect(r.pin).toBeNull();
     expect(c.events[0]).toEqual({ type: "message_start", model: "anthropic.claude-fable-5-1" });
-    expect(c.text()).toContain("Respuesta simulada");
+    expect(c.text()).toContain("Simulated reply");
     const done = c.events.at(-1)!;
     expect(done.type).toBe("done");
     expect(r.usage.estimatedUsd).toBeGreaterThan(0);

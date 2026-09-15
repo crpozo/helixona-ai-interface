@@ -53,16 +53,16 @@ export class AuthStack extends cdk.Stack {
       deletionProtection: true,
       keepOriginal: { email: true },
       userInvitation: {
-        emailSubject: 'Acceso a la interfaz clínica de IA',
+        emailSubject: 'Your Helixona AI Assistant account',
         emailBody:
-          'Hola {username}. Se ha creado tu cuenta en la interfaz clínica de IA. Tu contraseña temporal es {####}. ' +
-          'Deberás cambiarla y configurar la app de autenticación en el primer acceso.',
+          'Hello {username}. Your account for the Helixona AI Assistant has been created. Your temporary password is {####}. ' +
+          'You will be asked to change it and set up an authenticator app on first sign-in.',
       },
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
-    this.userPool.addGroup('StaffGroup', { groupName: 'staff', description: 'Personal: usa el chat' });
-    this.userPool.addGroup('AdminGroup', { groupName: 'admin', description: 'Administración: staff + gestión de usuarios y auditoría' });
+    this.userPool.addGroup('StaffGroup', { groupName: 'staff', description: 'Staff: uses the chat' });
+    this.userPool.addGroup('AdminGroup', { groupName: 'admin', description: 'Administration: staff plus user management and audit' });
 
     this.userPoolClient = this.userPool.addClient('WebClient', {
       userPoolClientName: resourceName(stage, 'web'),
@@ -119,7 +119,7 @@ export class AuthStack extends cdk.Stack {
       value:
         `aws cognito-idp describe-user-pool-client --user-pool-id ${this.userPool.userPoolId} ` +
         `--client-id ${this.userPoolClient.userPoolClientId} --query UserPoolClient.ClientSecret --output text`,
-      description: 'Comando para obtener el client secret que hay que copiar en Secrets Manager (ver README)',
+      description: 'Command that prints the client secret to copy into Secrets Manager (see README)',
     });
 
   }

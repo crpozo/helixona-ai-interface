@@ -26,7 +26,7 @@ const Env = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_AWS_WORKSPACE_ID: z.string().optional(),
   MODEL_CATALOG_JSON: z.string().optional(),
-  SYSTEM_PROMPT_FILE: z.string().default("prompts/system.es.md"),
+  SYSTEM_PROMPT_FILE: z.string().default("prompts/system.en.md"),
   EFFORT: EffortSchema.optional(),
   MAX_TOKENS: z.coerce.number().int().positive().default(64000),
   THINKING_DISPLAY: z.enum(["omitted", "summarized"]).default("omitted"),
@@ -46,25 +46,25 @@ export type Config = z.infer<typeof Env>;
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const cfg = Env.parse(env);
   const prod = cfg.NODE_ENV === "production";
-  if (prod && cfg.AUTH_MODE === "dev") throw new Error("AUTH_MODE=dev no está permitido en producción");
-  if (prod && cfg.STORE_MODE === "memory") throw new Error("STORE_MODE=memory no está permitido en producción");
-  if (prod && cfg.LLM_MODE === "fake") throw new Error("LLM_MODE=fake no está permitido en producción");
-  if (prod && !cfg.APP_BASE_URL.startsWith("https://")) throw new Error("APP_BASE_URL debe ser https en producción");
+  if (prod && cfg.AUTH_MODE === "dev") throw new Error("AUTH_MODE=dev is not allowed in production");
+  if (prod && cfg.STORE_MODE === "memory") throw new Error("STORE_MODE=memory is not allowed in production");
+  if (prod && cfg.LLM_MODE === "fake") throw new Error("LLM_MODE=fake is not allowed in production");
+  if (prod && !cfg.APP_BASE_URL.startsWith("https://")) throw new Error("APP_BASE_URL must use https in production");
   if (cfg.AUTH_MODE === "cognito") {
     for (const k of ["COGNITO_REGION", "COGNITO_USER_POOL_ID", "COGNITO_CLIENT_ID", "COGNITO_CLIENT_SECRET", "COGNITO_DOMAIN"] as const) {
-      if (!cfg[k]) throw new Error(`falta ${k} para AUTH_MODE=cognito`);
+      if (!cfg[k]) throw new Error(`${k} is required for AUTH_MODE=cognito`);
     }
   }
   if (cfg.STORE_MODE === "dynamo") {
     for (const k of ["TABLE_CONVERSATIONS", "TABLE_MESSAGES", "TABLE_SESSIONS", "TABLE_AUDIT", "TABLE_USAGE", "AWS_REGION"] as const) {
-      if (!cfg[k]) throw new Error(`falta ${k} para STORE_MODE=dynamo`);
+      if (!cfg[k]) throw new Error(`${k} is required for STORE_MODE=dynamo`);
     }
   }
-  if (cfg.LLM_MODE === "bedrock" && !cfg.AWS_REGION) throw new Error("falta AWS_REGION para LLM_MODE=bedrock");
-  if (cfg.LLM_MODE === "anthropic" && !cfg.ANTHROPIC_API_KEY) throw new Error("falta ANTHROPIC_API_KEY para LLM_MODE=anthropic");
-  if (cfg.LLM_MODE === "claude-platform-aws" && (!cfg.AWS_REGION || !cfg.ANTHROPIC_AWS_WORKSPACE_ID)) throw new Error("faltan AWS_REGION o ANTHROPIC_AWS_WORKSPACE_ID para LLM_MODE=claude-platform-aws");
+  if (cfg.LLM_MODE === "bedrock" && !cfg.AWS_REGION) throw new Error("AWS_REGION is required for LLM_MODE=bedrock");
+  if (cfg.LLM_MODE === "anthropic" && !cfg.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is required for LLM_MODE=anthropic");
+  if (cfg.LLM_MODE === "claude-platform-aws" && (!cfg.AWS_REGION || !cfg.ANTHROPIC_AWS_WORKSPACE_ID)) throw new Error("AWS_REGION and ANTHROPIC_AWS_WORKSPACE_ID are required for LLM_MODE=claude-platform-aws");
   if (!cfg.SESSION_SECRET) {
-    if (prod) throw new Error("falta SESSION_SECRET");
+    if (prod) throw new Error("SESSION_SECRET is required");
   }
   return cfg;
 }
