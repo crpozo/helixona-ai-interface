@@ -3,6 +3,7 @@ import type { AttachmentMeta, CatalogModel, Conversation, Project, ProjectVisibi
 import { ApiError, createProjectKnowledge, deleteProjectKnowledge, registerProjectKnowledge, updateProject, uploadFile } from "../lib/api";
 import { attachmentType, formatSize } from "../lib/files";
 import { modelLabel } from "../lib/models";
+import { useFileDrop } from "../lib/useFileDrop";
 
 interface Props {
   project: Project;
@@ -36,6 +37,7 @@ export function ProjectPage({ project, conversations, models, maxMb, uploadsEnab
   const [uploads, setUploads] = useState<Uploading[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const knowledgeRef = useRef<HTMLElement>(null);
 
   // Reset the form only when switching to another project: updates coming back from a save or a
   // knowledge upload must not clobber what the user is typing or hide the "Saved" notice.
@@ -110,6 +112,8 @@ export function ProjectPage({ project, conversations, models, maxMb, uploadsEnab
   };
 
   const canEdit = project.canEdit;
+  // Drop files onto the Knowledge card to add them to the project.
+  const dragging = useFileDrop(knowledgeRef, addFiles, !!canEdit && uploadsEnabled);
 
   return (
     <main className="project-page">
@@ -150,7 +154,15 @@ export function ProjectPage({ project, conversations, models, maxMb, uploadsEnab
         )}
       </section>
 
-      <section className="card" aria-labelledby="proj-knowledge">
+      <section className="card drop-zone" aria-labelledby="proj-knowledge" ref={knowledgeRef}>
+        {dragging && (
+          <div className="drop-overlay" aria-hidden="true">
+            <div className="drop-card">
+              <strong>Drop to add to the project</strong>
+              <span>PDF up to {maxMb} MB, TXT, MD or CSV</span>
+            </div>
+          </div>
+        )}
         <div className="row gap wrap" style={{ justifyContent: "space-between" }}>
           <h2 id="proj-knowledge">Knowledge</h2>
           {canEdit && uploadsEnabled && (
@@ -162,7 +174,7 @@ export function ProjectPage({ project, conversations, models, maxMb, uploadsEnab
             </>
           )}
         </div>
-        <p className="muted small">Every conversation in this project receives these files automatically. PDF up to {maxMb} MB and 600 pages per file.</p>
+        <p className="muted small">Every conversation in this project receives these files automatically. Drag files here or use Add files. PDF up to {maxMb} MB and 600 pages per file.</p>
         {fileError && (
           <p className="notice notice-error" role="alert">
             {fileError}

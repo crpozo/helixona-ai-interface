@@ -273,6 +273,10 @@ describe('ObservabilityStack (CloudTrail)', () => {
       },
     });
     t.hasResourceProperties('AWS::S3::Bucket', { BucketName: 'helixona-test-trail-logs-123456789012' });
+    // Alarms must not import the ALB listener: that blocks swapping HTTP for HTTPS in the App stack.
+    const json = JSON.stringify(t.toJSON());
+    expect(json).not.toMatch(/ExportsOutputRefAlbHttp/);
+    expect(json).toContain('"TargetGroup"');
   });
 });
 

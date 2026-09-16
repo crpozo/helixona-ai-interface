@@ -23,6 +23,7 @@ const FOLLOW_THRESHOLD = 48;
 
 export function ChatPanel({ me, conversation, projectName, state, loading, onSend, onStop, onRetry, onChangeModel, onOpenProject }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<HTMLElement>(null);
   // Follow mode keeps the newest text in view only while the reader is at the bottom. Scrolling up
   // during streaming switches it off (no forced jumps, no flicker); scrolling back down, sending a
   // message or opening another conversation switches it on again.
@@ -95,7 +96,7 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
   );
 
   return (
-    <section className="chat" aria-label="Conversation">
+    <section className="chat" aria-label="Conversation" ref={chatRef}>
       <header className="chat-head">
         <h1 className="chat-title" title={conversation.title}>
           {conversation.title}
@@ -138,6 +139,7 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
         onSend={onSend}
         onStop={onStop}
         leading={modelPicker}
+        dropZone={chatRef}
       />
     </section>
   );

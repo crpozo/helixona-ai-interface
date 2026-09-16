@@ -98,23 +98,33 @@ export class ObservabilityStack extends cdk.Stack {
       evaluationPeriods: 1,
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
     });
+    // Target-group metrics are built from the ALB and target-group full names on purpose: the CDK
+    // helpers (`targetGroup.metrics.*`) derive the LoadBalancer dimension from the *listener* ARN,
+    // which imports the listener across stacks and blocks swapping the HTTP listener for HTTPS.
+    const targetMetric = (metricName: string, options: cloudwatch.MetricOptions) =>
+      new cloudwatch.Metric({
+        namespace: 'AWS/ApplicationELB',
+        metricName,
+        dimensionsMap: { LoadBalancer: props.loadBalancer.loadBalancerFullName, TargetGroup: props.targetGroup.targetGroupFullName },
+        ...options,
+      });
     alarm('Target5xx', {
       alarmDescription: 'Respuestas 5xx de la API >= 10 en 5 min',
-      metric: props.targetGroup.metrics.httpCodeTarget(elbv2.HttpCodeTarget.TARGET_5XX_COUNT, { period: cdk.Duration.minutes(5), statistic: 'Sum' }),
+      metric: targetMetric('HTTPCode_Target_5XX_Count', { period: cdk.Duration.minutes(5), statistic: 'Sum' }),
       threshold: 10,
       evaluationPeriods: 1,
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
     });
     alarm('UnhealthyTargets', {
       alarmDescription: 'Algún target del ALB no está sano',
-      metric: props.targetGroup.metrics.unhealthyHostCount({ period: cdk.Duration.minutes(1), statistic: 'Maximum' }),
+      metric: targetMetric('UnHealthyHostCount', { period: cdk.Duration.minutes(1), statistic: 'Maximum' }),
       threshold: 1,
       evaluationPeriods: 3,
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
     });
     alarm('NoHealthyTargets', {
       alarmDescription: 'Ningún target sano: servicio caído',
-      metric: props.targetGroup.metrics.healthyHostCount({ period: cdk.Duration.minutes(1), statistic: 'Minimum' }),
+      metric: targetMetric('HealthyHostCount', { period: cdk.Duration.minutes(1), statistic: 'Minimum' }),
       threshold: 1,
       evaluationPeriods: 2,
       comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,

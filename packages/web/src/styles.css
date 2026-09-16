@@ -602,10 +602,48 @@ label {
 /* ---- Chat ---- */
 
 .chat {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+/* File drop targets: the whole chat panel and a project's Knowledge card. */
+.drop-zone {
+  position: relative;
+}
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.62);
+  border: 2px dashed var(--brand-primary);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.drop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  text-align: center;
+  padding: 1.25rem 1.75rem;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--brand-line-gold);
+  box-shadow: var(--brand-shadow);
+}
+.drop-card strong {
+  font-size: 1.15rem;
+  color: var(--brand-primary);
+}
+.drop-card span {
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 .chat-head {
   display: flex;

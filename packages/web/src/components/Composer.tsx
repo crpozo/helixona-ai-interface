@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AttachmentLimits, AttachmentMeta } from "../lib/types";
 import { ApiError, createAttachment, uploadFile } from "../lib/api";
 import { attachmentType, formatSize } from "../lib/files";
+import { useFileDrop } from "../lib/useFileDrop";
 
 interface Props {
   conversationId: string;
@@ -14,6 +15,8 @@ interface Props {
   onStop: () => void;
   /** Controls shown at the start of the bottom bar (the model picker lives here, like Claude.ai). */
   leading?: React.ReactNode;
+  /** Element that accepts dropped files (the whole chat panel); defaults to the composer itself. */
+  dropZone?: React.RefObject<HTMLElement | null>;
 }
 
 interface Pending {
@@ -28,11 +31,12 @@ interface Pending {
   abort: AbortController;
 }
 
-export function Composer({ conversationId, maxChars, attachments, streaming, disabled = false, onSend, onStop, leading }: Props) {
+export function Composer({ conversationId, maxChars, attachments, streaming, disabled = false, onSend, onStop, leading, dropZone }: Props) {
   const [text, setText] = useState("");
   const [pending, setPending] = useState<Pending[]>([]);
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const trimmed = text.trim();
   const over = text.length > maxChars;
   const uploading = pending.some((p) => p.status === "uploading");
@@ -92,6 +96,9 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
     if (fileRef.current) fileRef.current.value = "";
   };
 
+  // Drag a document onto the chat, or paste one, to attach it (same as Claude.ai).
+  const dragging = useFileDrop(dropZone ?? formRef, addFiles, !!attachments && !disabled);
+
   const remove = (localId: string) =>
     setPending((prev) => {
       prev.find((p) => p.localId === localId)?.abort.abort();
@@ -109,12 +116,23 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
 
   return (
     <form
+      ref={formRef}
       className="composer"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
+      {dragging && attachments && (
+        <div className="drop-overlay" aria-hidden="true">
+          <div className="drop-card">
+            <strong>Drop to attach</strong>
+            <span>
+              PDF, TXT, MD or CSV · up to {attachments.maxMb} MB per file · {attachments.maxPerMessage} files per message
+            </span>
+          </div>
+        </div>
+      )}
       {pending.length > 0 && (
         <ul className="attach-list composer-pending" aria-label="Files to send">
           {pending.map((p) => (
@@ -148,6 +166,12 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
         aria-invalid={over || undefined}
         aria-describedby="composer-counter"
         onChange={(e) => setText(e.target.value)}
+        onPaste={(e) => {
+          if (attachments && e.clipboardData.files.length > 0) {
+            e.preventDefault();
+            addFiles(e.clipboardData.files);
+          }
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
