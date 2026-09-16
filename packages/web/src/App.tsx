@@ -377,6 +377,7 @@ export function App() {
             onRename={rename}
             onOpenProject={openProject}
             onNewProject={() => void newProject()}
+            onNewInProject={(id) => startNew(id)}
             onLogout={() => void doLogout(null)}
             onAdmin={() => navigate("/admin")}
           />

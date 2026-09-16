@@ -164,21 +164,6 @@ jobs:
             .
           docker push "${{ steps.ctx.outputs.ecr_uri }}:${{ steps.ctx.outputs.image_tag }}"
 
-      # One-time ordering step (remove after the deploy that introduces the HTTPS listener succeeds):
-      # the monitoring stack used to import the HTTP listener, and CloudFormation refuses to swap a
-      # listener while another stack still imports it. Updating the monitoring stack first drops the
-      # import so the app stack can replace the listener.
-      - name: Deploy ObservabilityStack first (drops its import of the HTTP listener)
-        working-directory: packages/infra
-        run: |
-          set -euo pipefail
-          # shellcheck disable=SC2086
-          npx cdk deploy "Helixona-${{ inputs.stage }}-Observability" --exclusively --require-approval never $CDK_CONTEXT
-        env:
-          CDK_DEFAULT_ACCOUNT: ${{ steps.ctx.outputs.account_id }}
-          CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
-          CDK_CONTEXT: ${{ steps.ctx.outputs.cdk_context }}
-
       - name: Deploy all stacks
         working-directory: packages/infra
         run: |
