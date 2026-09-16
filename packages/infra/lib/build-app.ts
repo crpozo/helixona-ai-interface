@@ -58,6 +58,7 @@ export function buildStacks(app: cdk.App, config: DeployConfig, env: cdk.Environ
     vpc: network.vpc,
     appSubnets: network.appSubnets,
     albSecurityGroup: network.albSecurityGroup,
+    albHttpsSecurityGroup: network.albHttpsSecurityGroup,
     appSecurityGroup: network.appSecurityGroup,
   });
   const observability = new ObservabilityStack(app, `${prefix}-Observability`, {

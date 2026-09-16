@@ -17,6 +17,8 @@ export interface NetworkStackProps extends cdk.StackProps {
 export class NetworkStack extends cdk.Stack {
   readonly vpc: ec2.Vpc;
   readonly albSecurityGroup: ec2.SecurityGroup;
+  /** Only with `certificateArn`: the HTTPS ingress from CloudFront lives here (see the constructor). */
+  readonly albHttpsSecurityGroup?: ec2.SecurityGroup;
   readonly appSecurityGroup: ec2.SecurityGroup;
   readonly endpointsSecurityGroup: ec2.SecurityGroup;
   /** Subredes donde corren las tareas (aisladas, o con egreso si `enableNat`). */
@@ -81,8 +83,22 @@ export class NetworkStack extends cdk.Stack {
         'Sin `cloudFrontPrefixListId` en contexto: el ALB acepta 443 desde cualquier IP (la cabecera X-Origin-Verify sigue protegiendo).',
       );
     }
-    const albPort = certificateArn ? 443 : 80;
-    this.albSecurityGroup.addIngressRule(albIngressPeer, ec2.Port.tcp(albPort), `Desde CloudFront (${albPort})`);
+    // The CloudFront prefix list counts as ~55 of the 60 rules a security group may hold, so the HTTP
+    // and HTTPS ingress rules cannot share one group (CloudFormation creates new rules before it
+    // deletes old ones, so even a port change fails with "maximum number of rules"). Without a
+    // certificate the base group carries the HTTP rule; with one, a second group carries the HTTPS
+    // rule and is attached to the ALB next to the base group, which keeps the egress rule to the app.
+    if (certificateArn) {
+      this.albHttpsSecurityGroup = new ec2.SecurityGroup(this, 'AlbHttpsSg', {
+        vpc: this.vpc,
+        securityGroupName: resourceName(stage, 'alb-https'),
+        description: 'ALB: HTTPS solo desde CloudFront (prefix list gestionada)',
+        allowAllOutbound: false,
+      });
+      this.albHttpsSecurityGroup.addIngressRule(albIngressPeer, ec2.Port.tcp(443), 'Desde CloudFront (443)');
+    } else {
+      this.albSecurityGroup.addIngressRule(albIngressPeer, ec2.Port.tcp(80), 'Desde CloudFront (80)');
+    }
 
     this.appSecurityGroup = new ec2.SecurityGroup(this, 'AppSg', {
       vpc: this.vpc,
@@ -153,9 +169,9 @@ export class NetworkStack extends cdk.Stack {
       true,
     );
     if (!cfPrefixListId) {
-      NagSuppressions.addResourceSuppressions(this.albSecurityGroup, [
-        { id: 'AwsSolutions-EC23', reason: 'ALB público sin prefix list de CloudFront configurada; la cabecera secreta X-Origin-Verify bloquea el tráfico que no venga de CloudFront.' },
-      ]);
+      const reason = 'ALB público sin prefix list de CloudFront configurada; la cabecera secreta X-Origin-Verify bloquea el tráfico que no venga de CloudFront.';
+      NagSuppressions.addResourceSuppressions(this.albSecurityGroup, [{ id: 'AwsSolutions-EC23', reason }]);
+      if (this.albHttpsSecurityGroup) NagSuppressions.addResourceSuppressions(this.albHttpsSecurityGroup, [{ id: 'AwsSolutions-EC23', reason }]);
     }
   }
 }

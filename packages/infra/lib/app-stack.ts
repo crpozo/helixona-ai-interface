@@ -35,6 +35,8 @@ export interface AppStackProps extends cdk.StackProps {
   readonly vpc: ec2.IVpc;
   readonly appSubnets: ec2.SubnetSelection;
   readonly albSecurityGroup: ec2.ISecurityGroup;
+  /** Second ALB security group with the HTTPS ingress (only when a certificate is configured). */
+  readonly albHttpsSecurityGroup?: ec2.ISecurityGroup;
   readonly appSecurityGroup: ec2.ISecurityGroup;
 }
 
@@ -264,6 +266,8 @@ export class AppStack extends cdk.Stack {
       },
     });
     this.targetGroup.addTarget(this.service);
+
+    if (props.albHttpsSecurityGroup) this.loadBalancer.addSecurityGroup(props.albHttpsSecurityGroup);
 
     let listener: elbv2.ApplicationListener;
     if (cfg.certificateArn) {

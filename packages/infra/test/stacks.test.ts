@@ -275,3 +275,45 @@ describe('ObservabilityStack (CloudTrail)', () => {
     t.hasResourceProperties('AWS::S3::Bucket', { BucketName: 'helixona-test-trail-logs-123456789012' });
   });
 });
+
+describe('Custom domain (certificateArn)', () => {
+  it('HTTPS ingress from CloudFront lives in a second ALB security group; the ALB carries both; HTTPS listener and alias', () => {
+    const app = new cdk.App({ context: { stage: 'test', appBaseUrl: 'https://ai.test', domainName: 'ai.test', certificateArn: 'arn:aws:acm:us-east-1:123456789012:certificate/abcd', cognitoDomainPrefix: 'helixona-test' } });
+    const config = loadConfig(app);
+    const f = new FoundationStack(app, 'F3', { env, config });
+    const a = new AuthStack(app, 'A3', { env, config, phiKey: f.phiKey });
+    const n = new NetworkStack(app, 'N3', { env, config, logsBucket: f.logsBucket });
+    const s = new AppStack(app, 'App3', {
+      env,
+      config,
+      phiKey: f.phiKey,
+      tables: f.tables,
+      attachmentsBucket: f.attachmentsBucket,
+      logsBucket: f.logsBucket,
+      sessionSecret: f.sessionSecret,
+      cognitoClientSecret: f.cognitoClientSecret,
+      anthropicApiKeySecret: f.anthropicApiKeySecret,
+      apiRepository: f.apiRepository,
+      userPool: a.userPool,
+      userPoolClient: a.userPoolClient,
+      cognitoDomainUrl: a.cognitoDomainUrl,
+      vpc: n.vpc,
+      appSubnets: n.appSubnets,
+      albSecurityGroup: n.albSecurityGroup,
+      albHttpsSecurityGroup: n.albHttpsSecurityGroup,
+      appSecurityGroup: n.appSecurityGroup,
+    });
+    const nt = Template.fromStack(n);
+    nt.resourceCountIs('AWS::EC2::SecurityGroup', 4);
+    nt.hasResourceProperties('AWS::EC2::SecurityGroup', { GroupName: 'helixona-test-alb-https' });
+    const json = JSON.stringify(nt.toJSON());
+    expect(json).toContain('"SourcePrefixListId":"pl-3b927c52"');
+    expect(json).toContain('"FromPort":443');
+    expect(json).not.toContain('"FromPort":80');
+    const at = Template.fromStack(s);
+    const alb = Object.values(at.findResources('AWS::ElasticLoadBalancingV2::LoadBalancer'))[0] as { Properties: { SecurityGroups: unknown[] } };
+    expect(alb.Properties.SecurityGroups).toHaveLength(2);
+    at.hasResourceProperties('AWS::ElasticLoadBalancingV2::Listener', { Port: 443, Protocol: 'HTTPS' });
+    at.hasResourceProperties('AWS::CloudFront::Distribution', { DistributionConfig: Match.objectLike({ Aliases: ['ai.test'] }) });
+  });
+});
