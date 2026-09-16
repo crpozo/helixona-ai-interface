@@ -19,8 +19,8 @@ import { DeployConfig, resourceName } from './config.js';
 
 export interface ObservabilityStackProps extends cdk.StackProps {
   readonly config: DeployConfig;
-  readonly loadBalancer: elbv2.IApplicationLoadBalancer;
-  readonly targetGroup: elbv2.IApplicationTargetGroup;
+  readonly loadBalancer: elbv2.ApplicationLoadBalancer;
+  readonly targetGroup: elbv2.ApplicationTargetGroup;
   readonly service: ecs.FargateService;
   readonly appLogGroup: logs.ILogGroup;
   readonly logsBucket: s3.IBucket;
