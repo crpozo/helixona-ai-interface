@@ -20,13 +20,14 @@ interface Props {
   onNewProject: () => void;
   onLogout: () => void;
   onAdmin: () => void;
+  onDocs: () => void;
 }
 
 /**
  * Sidebar laid out like Claude.ai: each project is a group with its chats nested underneath, and
  * the Conversations list holds only the chats that belong to no project.
  */
-export function Sidebar({ me, conversations, projects, selectedId, projectViewId, open, onClose, onSelect, onNew, onNewInProject, onDelete, onRename, onOpenProject, onNewProject, onLogout, onAdmin }: Props) {
+export function Sidebar({ me, conversations, projects, selectedId, projectViewId, open, onClose, onSelect, onNew, onNewInProject, onDelete, onRename, onOpenProject, onNewProject, onLogout, onAdmin, onDocs }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -191,6 +192,16 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
             Administration
           </a>
         )}
+        <a
+          href="/documentation"
+          className="btn block"
+          onClick={(e) => {
+            e.preventDefault();
+            onDocs();
+          }}
+        >
+          Documentation
+        </a>
         <button type="button" className="btn block" onClick={onLogout}>
           Sign out
         </button>

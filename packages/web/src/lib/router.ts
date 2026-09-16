@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
-export type Route = "/login" | "/" | "/admin";
+export type Route = "/login" | "/" | "/admin" | "/documentation";
+/** Paths `navigate` accepts: a route, or one document inside the documentation. */
+export type Path = Route | `/documentation/${string}`;
 
 const listeners = new Set<() => void>();
 
@@ -19,11 +21,23 @@ function currentPath(): string {
 export function normalizeRoute(pathname: string): Route {
   if (pathname === "/login" || pathname.startsWith("/login/")) return "/login";
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return "/admin";
+  if (pathname === "/documentation" || pathname.startsWith("/documentation/")) return "/documentation";
   return "/";
 }
 
-/** Navega sin recargar. Nunca ponemos datos (ids, títulos) en la URL. */
-export function navigate(to: Route, opts: { replace?: boolean } = {}) {
+/** Slug of the document in `/documentation/<slug>`; null on the index or on any other route. */
+export function documentSlug(pathname: string): string | null {
+  const m = /^\/documentation\/([^/]+)\/?$/.exec(pathname);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1] ?? "");
+  } catch {
+    return null;
+  }
+}
+
+/** Navega sin recargar. Nunca ponemos datos (ids, títulos) en la URL; solo rutas y el slug de un documento. */
+export function navigate(to: Path, opts: { replace?: boolean } = {}) {
   if (typeof window === "undefined") return;
   if (currentPath() === to) return;
   const target = HASH_MODE ? `#${to}` : to;
@@ -32,11 +46,9 @@ export function navigate(to: Route, opts: { replace?: boolean } = {}) {
   notify();
 }
 
-export function useRoute(): Route {
-  const [route, setRoute] = useState<Route>(() =>
-    typeof window === "undefined" ? "/" : normalizeRoute(currentPath()),
-  );
-  const update = useCallback(() => setRoute(normalizeRoute(currentPath())), []);
+function useLocation<T>(select: (path: string) => T): T {
+  const [value, setValue] = useState<T>(() => select(currentPath()));
+  const update = useCallback(() => setValue(select(currentPath())), [select]);
   useEffect(() => {
     listeners.add(update);
     window.addEventListener("popstate", update);
@@ -47,5 +59,21 @@ export function useRoute(): Route {
       window.removeEventListener("hashchange", update);
     };
   }, [update]);
-  return route;
+  return value;
+}
+
+const identity = (path: string) => path;
+
+/** Route of the current URL, outside React (for handlers that must not navigate away from public pages). */
+export function currentRoute(): Route {
+  return normalizeRoute(currentPath());
+}
+
+export function useRoute(): Route {
+  return useLocation(normalizeRoute);
+}
+
+/** The raw current path (for pages that read a slug out of it). */
+export function usePath(): string {
+  return useLocation(identity);
 }

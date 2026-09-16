@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   ApiError,
   createConversation,
@@ -17,7 +17,7 @@ import {
 } from "./lib/api";
 import { chatReducer, initialChatState, type ChatMessage } from "./lib/chatReducer";
 import { useIdleTimeout } from "./lib/idle";
-import { navigate, useRoute } from "./lib/router";
+import { currentRoute, navigate, useRoute } from "./lib/router";
 import type { AttachmentMeta, Conversation, Me, Project } from "./lib/types";
 import { AdminPage } from "./components/AdminPage";
 import { ChatPanel } from "./components/ChatPanel";
@@ -26,6 +26,9 @@ import { LoginPage } from "./components/LoginPage";
 import { ModelSelector } from "./components/ModelSelector";
 import { ProjectPage } from "./components/ProjectPage";
 import { Sidebar } from "./components/Sidebar";
+
+// The HIPAA documents ship in their own chunk: the chat bundle stays lean.
+const DocumentationPage = lazy(() => import("./components/DocumentationPage").then((m) => ({ default: m.DocumentationPage })));
 
 type Auth =
   | { status: "loading" }
@@ -36,6 +39,20 @@ type Auth =
 let localSeq = 0;
 const localId = (p: string) => `local-${p}-${++localSeq}`;
 
+
+function Docs(props: { backLabel: string; backTo: "/login" | "/" }) {
+  return (
+    <Suspense
+      fallback={
+        <main className="center-screen" aria-busy="true">
+          <p className="muted">Loading…</p>
+        </main>
+      }
+    >
+      <DocumentationPage {...props} />
+    </Suspense>
+  );
+}
 
 /** Message for the login page when the OIDC callback redirected here with `?error=`. */
 function signInErrorReason(): string | null {
@@ -79,7 +96,8 @@ export function App() {
       setCreating(false);
       setListError(null);
       dispatch({ type: "reset" });
-      navigate("/login", { replace: true });
+      // The documentation is public: a visitor who lands there (or whose session expires while reading) stays.
+      if (currentRoute() !== "/documentation") navigate("/login", { replace: true });
     },
     [abortStream],
   );
@@ -128,7 +146,7 @@ export function App() {
 
   // Rutas según estado de autenticación.
   useEffect(() => {
-    if (auth.status === "anon" && route !== "/login") navigate("/login", { replace: true });
+    if (auth.status === "anon" && route !== "/login" && route !== "/documentation") navigate("/login", { replace: true });
     if (auth.status === "authed") {
       if (route === "/login") navigate("/", { replace: true });
       if (route === "/admin" && !auth.me.user.roles.includes("admin")) navigate("/", { replace: true });
@@ -278,9 +296,7 @@ export function App() {
     }
   };
 
-  const send = async (text: string, attachments: AttachmentMeta[] = []) => {
-    if (!selected || chat.streaming) return;
-    const conv = selected;
+  const sendTo = async (conv: Conversation, text: string, attachments: AttachmentMeta[] = []) => {
     const ac = new AbortController();
     abortRef.current = ac;
     dispatch({ type: "send", text, attachments, userId: localId("u"), assistantId: localId("a") });
@@ -310,6 +326,24 @@ export function App() {
       // Refrescamos metadatos (contador de mensajes, modelo fijado tras un fallback).
       void refreshConversations();
     }
+  };
+
+  const send = (text: string, attachments: AttachmentMeta[] = []) => {
+    if (!selected || chat.streaming) return;
+    return sendTo(selected, text, attachments);
+  };
+
+  /** From the project page: create the conversation in the project and send its first message. */
+  const startInProject = async (projectId: string, text: string, alias: string) => {
+    abortStream();
+    const conv = await createConversation(alias, projectId);
+    ++loadSeq.current;
+    setConversations((prev) => [conv, ...prev]);
+    setSelected(conv);
+    setCreating(false);
+    setProjectView(null);
+    dispatch({ type: "load", conversationId: conv.id, messages: [] });
+    void sendTo(conv, text);
   };
 
   // Mantén `selected` sincronizado con la lista (pinnedModel, updatedAt...).
@@ -350,6 +384,7 @@ export function App() {
   }
 
   if (auth.status === "anon") {
+    if (route === "/documentation") return <Docs backLabel="Sign in" backTo="/login" />;
     return <LoginPage reason={auth.reason} onSignedIn={() => void bootstrap()} />;
   }
 
@@ -358,7 +393,9 @@ export function App() {
 
   return (
     <>
-      {route === "/admin" && isAdmin ? (
+      {route === "/documentation" ? (
+        <Docs backLabel="Back to the assistant" backTo="/" />
+      ) : route === "/admin" && isAdmin ? (
         <AdminPage me={me} onBack={() => navigate("/")} />
       ) : (
         <div className="shell">
@@ -380,6 +417,7 @@ export function App() {
             onNewInProject={(id) => startNew(id)}
             onLogout={() => void doLogout(null)}
             onAdmin={() => navigate("/admin")}
+            onDocs={() => navigate("/documentation")}
           />
           <div className="main">
             <div className="topbar only-mobile">
@@ -404,7 +442,8 @@ export function App() {
                 uploadsEnabled={me.limits.attachments?.enabled ?? false}
                 onBack={() => setProjectView(null)}
                 onOpenConversation={(id) => void selectConversation(id)}
-                onNewConversation={() => startNew(projectView)}
+                defaultAlias={me.catalog.defaultAlias}
+                onStartConversation={(text, alias) => startInProject(projectView, text, alias)}
                 onUpdated={projectUpdated}
                 onDelete={() => void removeProject(projectView)}
               />

@@ -1,0 +1,12 @@
+{
+  "name": "helixona-hipaa-docs",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Generates the clinic's HIPAA documents (Word files and the web app's Documentation page content)",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "dependencies": {
+    "docx": "^9.5.1"
+  }
+}

@@ -207,3 +207,12 @@ aws kms schedule-key-deletion --key-id 64c83ac4-bd62-43b1-8420-1a4a07bf3dbd --pe
 - Anthropic Trust Center (HIPAA Implementation Guide): https://trust.anthropic.com/resources
 - AWS Artifact (BAA): https://console.aws.amazon.com/artifact/
 - HHS, *Security Rule Guidance Material*: https://www.hhs.gov/hipaa/for-professionals/security/guidance/index.html
+
+## Clinic documents in the app
+
+The risk analysis, the policies and procedures and the workforce training are published inside the
+application: `https://ai.helixona.com/documentation` (linked from the sign-in page and from the
+sidebar) renders them on screen, and each one can be downloaded as a Word file from
+`https://ai.helixona.com/docs/<file>.docx`. The page is public by design so that staff can read the
+policies before they have an account; it contains no patient data and no secrets. The source of both
+versions is `tools/hipaa-docs/` (see its README); regenerate and commit the outputs after any edit.

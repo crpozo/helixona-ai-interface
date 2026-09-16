@@ -4,10 +4,16 @@ import type { Role } from "../lib/types";
 import { ApiError, devLogin, forgotPassword, passwordChallenge, passwordSignIn, resetPassword, type PasswordResult } from "../lib/api";
 import { Logo } from "./Logo";
 import { brand } from "../brand";
+import { navigate } from "../lib/router";
 
 interface Props {
   onSignedIn: () => void;
   reason?: string | null;
+}
+
+function openDocs(e: React.MouseEvent) {
+  e.preventDefault();
+  navigate("/documentation");
 }
 
 type Step =
@@ -173,7 +179,12 @@ export function LoginPage({ onSignedIn, reason }: Props) {
     <main className="login">
       <header className="login-bar">
         <Logo variant="login" />
-        <span className="login-bar-note">{brand.tagline}</span>
+        <nav className="login-bar-right" aria-label="Site">
+          <span className="login-bar-note">{brand.tagline}</span>
+          <a className="login-bar-link" href="/documentation" onClick={openDocs}>
+            Documentation
+          </a>
+        </nav>
       </header>
       <section className="login-hero">
         <div className="login-copy">
@@ -181,6 +192,12 @@ export function LoginPage({ onSignedIn, reason }: Props) {
           <h1 className="login-title">{brand.productName}</h1>
           <p className="login-sub">Private Claude workspace for the Helixona team: drafting, summaries, translations and document analysis, with every conversation and file kept inside the clinic's own cloud.</p>
           <p className="login-foot">Restricted to authorized staff. Sign-in requires a password and an authenticator app; activity is logged for security and HIPAA compliance.</p>
+          <p className="login-foot">
+            <a href="/documentation" onClick={openDocs}>
+              HIPAA documentation
+            </a>
+            : risk analysis, policies and procedures, and workforce training.
+          </p>
         </div>
 
         <div className="login-panel" aria-live="polite">
