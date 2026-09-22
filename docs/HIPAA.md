@@ -216,3 +216,10 @@ sidebar) renders them on screen, and each one can be downloaded as a Word file f
 `https://ai.helixona.com/docs/<file>.docx`. The page is public by design so that staff can read the
 policies before they have an account; it contains no patient data and no secrets. The source of both
 versions is `tools/hipaa-docs/` (see its README); regenerate and commit the outputs after any edit.
+
+Signed-in staff complete the workforce training online: the knowledge check is graded by the API
+(the answer key never reaches the browser), every attempt is stored in the `training` table and the
+audit log, and once the check is passed the acknowledgment is signed with the user's name, email and
+date. Administrators see the resulting training log on the Administration page and at the end of the
+training document; it is the evidence of training the Privacy Officer keeps for six years (add any
+paper completions to it by hand).

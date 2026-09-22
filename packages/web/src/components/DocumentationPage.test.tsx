@@ -1,10 +1,80 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { Me, TrainingInfo, TrainingRecord } from "../lib/types";
+
+const training: TrainingInfo = {
+  version: "1.1",
+  passingScore: 2,
+  total: 2,
+  questions: [
+    { n: 1, text: "First question?", options: [{ letter: "A", text: "Yes" }, { letter: "B", text: "No" }] },
+    { n: 2, text: "Second question?", options: [{ letter: "A", text: "Up" }, { letter: "B", text: "Down" }] },
+  ],
+  record: null,
+};
+const record: TrainingRecord = { userId: "u1", name: "Ana", email: "ana@example.test", version: "1.1", attempts: 1, lastScore: 2, lastAttemptAt: "2026-09-22T10:00:00Z", bestScore: 2, passedAt: "2026-09-22T10:00:00Z", acknowledgedAt: null };
+// The fake API keeps the user's record like the real one does, so the acknowledgment section sees the passed check.
+const server: { record: TrainingRecord | null } = { record: null };
+
+vi.mock("../lib/api", () => ({
+  ApiError: class ApiError extends Error {},
+  getTraining: vi.fn(async () => ({ ...training, record: server.record })),
+  submitTrainingCheck: vi.fn(async () => {
+    server.record = record;
+    return { record, result: { score: 2, total: 2, passed: true, results: [{ n: 1, correct: true }, { n: 2, correct: true }] } };
+  }),
+  acknowledgeTraining: vi.fn(async () => {
+    server.record = { ...record, acknowledgedAt: "2026-09-22T10:05:00Z" };
+    return { record: server.record };
+  }),
+  adminTraining: vi.fn(async () => []),
+}));
+
+import { acknowledgeTraining, submitTrainingCheck } from "../lib/api";
 import { DocumentationPage } from "./DocumentationPage";
+
+const me: Me = {
+  user: { id: "u1", email: "ana@example.test", name: "Ana", roles: ["staff"] },
+  session: { expiresAt: "2026-09-22T12:00:00Z", idleTimeoutSeconds: 900 },
+  catalog: { defaultAlias: "opus", effort: "medium", models: [] },
+  limits: { maxMessageChars: 20000, contextLimitTokens: 1000000 },
+};
 
 afterEach(() => {
   cleanup();
   window.history.replaceState(null, "", "/");
+});
+
+describe("Workforce training online", () => {
+  it("signed-in staff answer the check, see the score, and sign the acknowledgment; the answer key stays hidden", async () => {
+    window.history.replaceState(null, "", "/documentation/workforce-training");
+    render(<DocumentationPage backLabel="Back" backTo="/" me={me} />);
+    expect(await screen.findByText(/First question\?/)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /Answer key/ })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Training log" })).toBeNull();
+    const submit = screen.getByRole("button", { name: "Submit answers" });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText(/Yes/));
+    fireEvent.click(screen.getByLabelText(/Down/));
+    expect((submit as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(submit);
+    await waitFor(() => expect(submitTrainingCheck).toHaveBeenCalledWith(["A", "B"]));
+    expect(await screen.findByText(/Score: 2 of 2. Passed./)).toBeTruthy();
+    // The acknowledgment section becomes signable once the check is passed.
+    const confirm = await screen.findByLabelText(/confirm the statements above/);
+    fireEvent.click(confirm);
+    fireEvent.click(screen.getByRole("button", { name: "Sign acknowledgment" }));
+    await waitFor(() => expect(acknowledgeTraining).toHaveBeenCalled());
+    expect(await screen.findByText(/Signed by Ana/)).toBeTruthy();
+  });
+
+  it("visitors see the paper version with a note, and no answer key", () => {
+    window.history.replaceState(null, "", "/documentation/workforce-training");
+    render(<DocumentationPage backLabel="Sign in" backTo="/login" />);
+    expect(screen.getByText(/Staff complete this check online after signing in/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Submit answers" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /Answer key/ })).toBeNull();
+  });
 });
 
 describe("DocumentationPage", () => {

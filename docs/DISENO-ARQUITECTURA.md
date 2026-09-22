@@ -234,7 +234,7 @@ Requisito: el empleado elige entre Sonnet, Opus y Fable, siempre en su última v
 | Alias en la UI | ID en Bedrock hoy | Precio 1P entrada/salida por millón (Bedrock a verificar) | Costo relativo | Uso sugerido |
 |---|---|---|---|---|
 | Sonnet | `anthropic.claude-sonnet-5` | $2 / $10 | 1x | Traducción, cartas, resúmenes cortos, tareas rápidas |
-| Opus | `anthropic.claude-opus-5` | $5 / $25 | 2,5x | Default recomendado para el trabajo diario |
+| Opus | `anthropic.claude-opus-5-5` | $4 / $20 | 2x | Default recomendado para el trabajo diario (respaldo: `anthropic.claude-opus-5`) |
 | Fable | `anthropic.claude-fable-5-1` | $10 / $50 | 5x | Tareas difíciles, documentos largos, razonamiento profundo |
 
 **"Siempre la última versión"**: Bedrock no tiene Models API para descubrir versiones, así que no puede ser automático. Los IDs sin sufijo de fecha (`claude-opus-5`, `claude-sonnet-5`, `claude-fable-5-1`) son estables; cuando Anthropic publica una versión nueva, actualizar el catálogo es cambiar un parámetro tras un checklist corto: habilitar el modelo en la cuenta, smoke test sin PHI (streaming, effort, refusal forzado, fallback), revisar precio y cuotas, autorización del oficial de privacidad (para Fable, la incógnita de retención), aviso a los usuarios. Las conversaciones abiertas siguen con la versión con la que empezaron; las nuevas usan la versión nueva.

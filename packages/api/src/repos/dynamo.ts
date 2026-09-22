@@ -1,9 +1,9 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
 import type { Conversation, Project, StoredMessage, UsageSummary } from "@helixona/core";
-import type { AuditEvent, AuditRepo, ConversationPatch, ConversationRepo, MessageRepo, ProjectPatch, ProjectRepo, Repos, Session, SessionRepo, UsageRepo, UsageRow } from "./types.js";
+import type { AuditEvent, AuditRepo, ConversationPatch, ConversationRepo, MessageRepo, ProjectPatch, ProjectRepo, Repos, Session, SessionRepo, TrainingRecord, TrainingRepo, UsageRepo, UsageRow } from "./types.js";
 
-export interface DynamoTables { conversations: string; messages: string; sessions: string; audit: string; usage: string; projects: string }
+export interface DynamoTables { conversations: string; messages: string; sessions: string; audit: string; usage: string; projects: string; training: string }
 
 const epoch = (d: Date) => Math.floor(d.getTime() / 1000);
 const pad = (n: number) => String(n).padStart(6, "0");
@@ -149,6 +149,26 @@ export class DynamoUsageRepo implements UsageRepo {
   }
 }
 
+export class DynamoTrainingRepo implements TrainingRepo {
+  constructor(private readonly doc: DynamoDBDocumentClient, private readonly table: string) {}
+  async get(userId: string) {
+    const r = await this.doc.send(new GetCommand({ TableName: this.table, Key: { userId } }));
+    return r.Item ? (r.Item as TrainingRecord) : null;
+  }
+  async put(rec: TrainingRecord) { await this.doc.send(new PutCommand({ TableName: this.table, Item: rec })); }
+  async list() {
+    // One small row per user: a full scan is the listing.
+    const out: TrainingRecord[] = [];
+    let key: Record<string, unknown> | undefined;
+    do {
+      const r = await this.doc.send(new ScanCommand({ TableName: this.table, ExclusiveStartKey: key }));
+      out.push(...((r.Items ?? []) as TrainingRecord[]));
+      key = r.LastEvaluatedKey;
+    } while (key);
+    return out;
+  }
+}
+
 export function dynamoRepos(region: string, tables: DynamoTables): Repos {
   const doc = DynamoDBDocumentClient.from(new DynamoDBClient({ region }), { marshallOptions: { removeUndefinedValues: true } });
   return {
@@ -158,5 +178,6 @@ export function dynamoRepos(region: string, tables: DynamoTables): Repos {
     audit: new DynamoAuditRepo(doc, tables.audit),
     usage: new DynamoUsageRepo(doc, tables.usage),
     projects: new DynamoProjectRepo(doc, tables.projects),
+    training: new DynamoTrainingRepo(doc, tables.training),
   };
 }

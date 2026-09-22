@@ -1,6 +1,6 @@
 # Helixona AI Interface — asistente Claude privado para la clínica
 
-Interfaz web propia para que el personal de una clínica sujeta a HIPAA use Claude (Sonnet 5, Opus 5 o Fable 5.1, siempre en su última versión) a través de la **Claude API de Anthropic** o de **Amazon Bedrock**, con usuario y contraseña + MFA en **Amazon Cognito**, sesiones del lado servidor, historial cifrado con KMS y auditoría sin contenido.
+Interfaz web propia para que el personal de una clínica sujeta a HIPAA use Claude (Sonnet 5, Opus 5.5 o Fable 5.1, siempre en su última versión) a través de la **Claude API de Anthropic** o de **Amazon Bedrock**, con usuario y contraseña + MFA en **Amazon Cognito**, sesiones del lado servidor, historial cifrado con KMS y auditoría sin contenido.
 
 - Diseño y decisiones: [`docs/DISENO-ARQUITECTURA.md`](docs/DISENO-ARQUITECTURA.md)
 - Contrato técnico (rutas, eventos SSE, variables, tablas): [`docs/CONTRATO.md`](docs/CONTRATO.md)
@@ -69,6 +69,6 @@ La aplicación es la misma con tres proveedores, elegidos por `LLM_MODE`:
 
 ## Reglas que el código hace cumplir
 
-- Sin `thinking` con presupuesto, sin `temperature/top_p/top_k`, sin prefill, sin `tool_choice` forzado (400 en Fable 5.1 / Opus 5); `output_config.effort` constante por conversación; prompt de sistema versionado por conversación con caché de 1 h.
+- Sin `thinking` con presupuesto, sin `temperature/top_p/top_k`, sin prefill, sin `tool_choice` forzado (400 en Fable 5.1 / Opus 5.5); `output_config.effort` constante por conversación; prompt de sistema versionado por conversación con caché de 1 h.
 - Rechazo del clasificador (`stop_reason: "refusal"`) ≠ indisponibilidad (429/5xx/403/404): dos mecanismos distintos, pin por conversación (permanente por rechazo, 15 min por disponibilidad), nunca se sustituye en silencio una respuesta ya emitida.
 - Logs con lista blanca de claves; test automático de no fuga; auditoría por usuario sin contenido; títulos de conversación opacos; borrado explícito; cabecera `Clear-Site-Data` al cerrar sesión.

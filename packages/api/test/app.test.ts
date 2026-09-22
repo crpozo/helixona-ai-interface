@@ -73,7 +73,7 @@ describe("API", () => {
     const body = me.json();
     expect(body.user.roles).toEqual(["staff"]);
     expect(body.catalog.models.filter((m: { available: boolean }) => m.available).map((m: { alias: string }) => m.alias)).toEqual(["sonnet", "opus", "fable"]);
-    expect(body.catalog.models.find((m: { modelId: string }) => m.modelId === "anthropic.claude-opus-4-8")).toMatchObject({ label: "Opus 4.8", available: false });
+    expect(body.catalog.models.find((m: { modelId: string }) => m.modelId === "anthropic.claude-opus-5")).toMatchObject({ label: "Opus 5", available: false });
     expect(body.catalog.defaultAlias).toBe("opus");
   });
 
@@ -122,9 +122,9 @@ describe("API", () => {
     const turn = await app.inject({ method: "POST", url: `/api/conversations/${conv.id}/messages`, headers: { ...H, cookie }, payload: { text: "/refuse pregunta clínica" } });
     const events = parseSse(turn.body);
     expect(events.some((e) => e.event === "fallback")).toBe(true);
-    expect(events.at(-1)!.data["model"]).toBe("anthropic.claude-opus-5");
+    expect(events.at(-1)!.data["model"]).toBe("anthropic.claude-opus-5-5");
     const detail = (await app.inject({ method: "GET", url: `/api/conversations/${conv.id}`, headers: { cookie } })).json();
-    expect(detail.conversation.pinnedModel).toBe("anthropic.claude-opus-5");
+    expect(detail.conversation.pinnedModel).toBe("anthropic.claude-opus-5-5");
     expect(detail.conversation.pinReason).toBe("refusal");
   });
 
@@ -140,7 +140,7 @@ describe("API", () => {
   it("cuota diaria: al agotarse devuelve error quota_exceeded como evento", async () => {
     const { cookie } = await login(app, "elena");
     const conv = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "opus" } })).json();
-    await repos.usage.add("dev-elena", new Date().toISOString().slice(0, 10), "anthropic.claude-opus-5", { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, estimatedUsd: 5 });
+    await repos.usage.add("dev-elena", new Date().toISOString().slice(0, 10), "anthropic.claude-opus-5-5", { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, estimatedUsd: 5 });
     const turn = await app.inject({ method: "POST", url: `/api/conversations/${conv.id}/messages`, headers: { ...H, cookie }, payload: { text: "hola" } });
     const events = parseSse(turn.body);
     expect(events[0]!.event).toBe("error");
@@ -397,6 +397,44 @@ describe("Projects and model switching", () => {
     expect((await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "sonnet", projectId: "01ARZ3NDEKTSV4RRFFQ69G5FAV" } })).statusCode).toBe(400);
     // deleting the project removes its knowledge
     expect((await app.inject({ method: "DELETE", url: `/api/projects/${project.id}`, headers: { ...H, cookie: ana.cookie } })).statusCode).toBe(204);
+    await app.close();
+  });
+});
+
+describe("Workforce training", () => {
+  it("grades the check server-side, records every attempt, and signs the acknowledgment only after passing", async () => {
+    const { app, repos } = await makeApp();
+    const { cookie } = await login(app, "bea");
+    const info = (await app.inject({ method: "GET", url: "/api/training", headers: { cookie } })).json();
+    expect(info).toMatchObject({ total: 10, passingScore: 8, record: null });
+    expect(info.questions[0].options.map((o: { letter: string }) => o.letter)).toEqual(["A", "B", "C"]);
+    expect(JSON.stringify(info)).not.toContain('"answer"');
+    // The acknowledgment needs a passed check.
+    expect((await app.inject({ method: "POST", url: "/api/training/acknowledgment", headers: { ...H, cookie }, payload: { accepted: true } })).statusCode).toBe(409);
+    // Wrong number of answers.
+    expect((await app.inject({ method: "POST", url: "/api/training/check", headers: { ...H, cookie }, payload: { answers: ["A"] } })).statusCode).toBe(400);
+    // All "A": only question 2 is right.
+    const fail = (await app.inject({ method: "POST", url: "/api/training/check", headers: { ...H, cookie }, payload: { answers: Array(10).fill("a") } })).json();
+    expect(fail.result).toMatchObject({ score: 1, total: 10, passed: false });
+    expect(fail.result.results[0].why).toBeTruthy();
+    expect(fail.result.results[1]).toEqual({ n: 2, correct: true });
+    expect(fail.record).toMatchObject({ attempts: 1, lastScore: 1, bestScore: 1, passedAt: null, acknowledgedAt: null, email: "bea@dev.local" });
+    expect(fail.record.answers).toBeUndefined();
+    // The right answers.
+    const pass = (await app.inject({ method: "POST", url: "/api/training/check", headers: { ...H, cookie }, payload: { answers: ["B", "A", "B", "B", "B", "B", "B", "B", "B", "C"] } })).json();
+    expect(pass.result).toMatchObject({ score: 10, passed: true });
+    expect(pass.record).toMatchObject({ attempts: 2, bestScore: 10, version: "1.1" });
+    expect(pass.record.passedAt).toBeTruthy();
+    const ack = (await app.inject({ method: "POST", url: "/api/training/acknowledgment", headers: { ...H, cookie }, payload: { accepted: true } })).json();
+    expect(ack.record.acknowledgedAt).toBeTruthy();
+    expect(repos.audit.events.map((e) => e.action)).toEqual(expect.arrayContaining(["training_check_failed", "training_check_passed", "training_acknowledged"]));
+    // The training log is for administrators.
+    expect((await app.inject({ method: "GET", url: "/api/admin/training", headers: { cookie } })).statusCode).toBe(403);
+    const admin = await login(app, "root", "admin");
+    const log = (await app.inject({ method: "GET", url: "/api/admin/training", headers: { cookie: admin.cookie } })).json();
+    const row = log.items.find((r: { id: string }) => r.id === "dev-bea");
+    expect(row).toMatchObject({ email: "bea@dev.local", record: { attempts: 2, bestScore: 10 } });
+    expect(row.record.acknowledgedAt).toBeTruthy();
     await app.close();
   });
 });

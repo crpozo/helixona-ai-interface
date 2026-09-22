@@ -142,6 +142,49 @@ export interface UsageRow {
   byModel: Record<string, { turns: number; estimatedUsd: number }>;
 }
 
+export interface TrainingRecord {
+  userId: string;
+  name: string;
+  email: string;
+  version: string;
+  attempts: number;
+  lastScore: number;
+  lastAttemptAt: string;
+  bestScore: number;
+  passedAt: string | null;
+  acknowledgedAt: string | null;
+}
+
+export interface TrainingQuestion {
+  n: number;
+  text: string;
+  options: { letter: string; text: string }[];
+}
+
+export interface TrainingInfo {
+  version: string;
+  passingScore: number;
+  total: number;
+  questions: TrainingQuestion[];
+  record: TrainingRecord | null;
+}
+
+export interface TrainingCheckResult {
+  score: number;
+  total: number;
+  passed: boolean;
+  results: { n: number; correct: boolean; why?: string }[];
+}
+
+export interface AdminTrainingRow {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  enabled: boolean;
+  record: TrainingRecord | null;
+}
+
 export interface ApiErrorBody {
   error: { code: string; message: string };
 }

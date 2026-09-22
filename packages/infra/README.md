@@ -15,7 +15,7 @@ Infraestructura AWS (CDK v2, TypeScript) de la interfaz Claude/Bedrock de la cl�
 ## Prerrequisitos (antes de cualquier PHI)
 
 1. **BAA de AWS aceptado en AWS Artifact** en la cuenta de producción (titular: la clínica). Sin BAA no se despliega en producción.
-2. **Acceso a modelos habilitado** en Bedrock (us-east-1) para `anthropic.claude-sonnet-5`, `anthropic.claude-opus-5`, `anthropic.claude-opus-4-8` y `anthropic.claude-fable-5-1`.
+2. **Acceso a modelos habilitado** en Bedrock (us-east-1) para `anthropic.claude-sonnet-5`, `anthropic.claude-opus-5-5`, `anthropic.claude-opus-5` y `anthropic.claude-fable-5-1`.
 3. **Certificado ACM** en `us-east-1` para el dominio (sirve para CloudFront y para el ALB, ya que todo se despliega en `us-east-1`). Sin `certificateArn` el ALB escucha en HTTP 80: solo para entornos sin PHI (ver «Sin dominio propio» más abajo).
 4. **Dominio** (`domainName`, `appBaseUrl`) y registro DNS apuntando a la distribución de CloudFront tras el despliegue.
 5. Cuenta bootstrapeada (`cdk bootstrap aws://<cuenta>/us-east-1`) y rol OIDC para GitHub Actions (`AWS_DEPLOY_ROLE_ARN`).

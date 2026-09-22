@@ -1,5 +1,5 @@
 import type { Conversation, Project, StoredMessage, UsageSummary } from "@helixona/core";
-import type { AuditEvent, AuditRepo, ConversationPatch, ConversationRepo, DirectoryUser, MessageRepo, ProjectPatch, ProjectRepo, Repos, Session, SessionRepo, UsageRepo, UsageRow, UserDirectory } from "./types.js";
+import type { AuditEvent, AuditRepo, ConversationPatch, ConversationRepo, DirectoryUser, MessageRepo, ProjectPatch, ProjectRepo, Repos, Session, SessionRepo, TrainingRecord, TrainingRepo, UsageRepo, UsageRow, UserDirectory } from "./types.js";
 
 export class MemoryConversationRepo implements ConversationRepo {
   private data = new Map<string, Conversation>();
@@ -76,6 +76,13 @@ export class MemoryUserDirectory implements UserDirectory {
   async resetMfa() {} // no authenticator in dev mode
 }
 
+export class MemoryTrainingRepo implements TrainingRepo {
+  private data = new Map<string, TrainingRecord>();
+  async get(userId: string) { const r = this.data.get(userId); return r ? structuredClone(r) : null; }
+  async put(r: TrainingRecord) { this.data.set(r.userId, structuredClone(r)); }
+  async list() { return [...this.data.values()].map((r) => structuredClone(r)); }
+}
+
 export function memoryRepos(): Repos & { audit: MemoryAuditRepo } {
-  return { conversations: new MemoryConversationRepo(), messages: new MemoryMessageRepo(), sessions: new MemorySessionRepo(), audit: new MemoryAuditRepo(), usage: new MemoryUsageRepo(), projects: new MemoryProjectRepo() };
+  return { conversations: new MemoryConversationRepo(), messages: new MemoryMessageRepo(), sessions: new MemorySessionRepo(), audit: new MemoryAuditRepo(), usage: new MemoryUsageRepo(), projects: new MemoryProjectRepo(), training: new MemoryTrainingRepo() };
 }

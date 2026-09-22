@@ -46,11 +46,11 @@ beforeAll(() => {
 });
 
 describe('FoundationStack', () => {
-  it('crea las 6 tablas cifradas con la CMK, con PITR y protección de borrado', () => {
+  it('crea las 7 tablas cifradas con la CMK, con PITR y protección de borrado', () => {
     const tables = foundation.findResources('AWS::DynamoDB::Table');
-    expect(Object.keys(tables)).toHaveLength(6);
+    expect(Object.keys(tables)).toHaveLength(7);
     const names = Object.values(tables).map((t) => (t as { Properties: { TableName: string } }).Properties.TableName).sort();
-    expect(names).toEqual(['helixona-test-audit', 'helixona-test-conversations', 'helixona-test-messages', 'helixona-test-projects', 'helixona-test-sessions', 'helixona-test-usage']);
+    expect(names).toEqual(['helixona-test-audit', 'helixona-test-conversations', 'helixona-test-messages', 'helixona-test-projects', 'helixona-test-sessions', 'helixona-test-training', 'helixona-test-usage']);
     foundation.allResourcesProperties('AWS::DynamoDB::Table', {
       BillingMode: 'PAY_PER_REQUEST',
       SSESpecification: { SSEEnabled: true, SSEType: 'KMS', KMSMasterKeyId: Match.objectLike({ 'Fn::GetAtt': Match.arrayWith([Match.stringLikeRegexp('PhiDataKey')]) }) },

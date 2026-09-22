@@ -168,6 +168,7 @@ export class AppStack extends cdk.Stack {
         TABLE_AUDIT: tableNames.audit.tableName,
         TABLE_USAGE: tableNames.usage.tableName,
         TABLE_PROJECTS: tableNames.projects.tableName,
+        TABLE_TRAINING: tableNames.training.tableName,
         AWS_REGION: this.region,
         LLM_MODE: cfg.llmMode,
         EFFORT: 'medium',
@@ -454,7 +455,7 @@ export class AppStack extends cdk.Stack {
       new iam.PolicyStatement({
         sid: 'DynamoDbAppTables',
         actions: rwActions,
-        resources: [tables.conversations, tables.messages, tables.sessions, tables.usage, tables.projects].flatMap(withIndexes),
+        resources: [tables.conversations, tables.messages, tables.sessions, tables.usage, tables.projects, tables.training].flatMap(withIndexes),
       }),
     );
     // Daily usage report: the usage table has no per-day index, so the admin listing scans it
@@ -463,8 +464,9 @@ export class AppStack extends cdk.Stack {
       new iam.PolicyStatement({
         sid: 'DynamoDbScanSmallTables',
         actions: ['dynamodb:Scan'],
-        // Usage (daily report) and projects (listing) are small tables without a query-friendly index.
-        resources: [tables.usage.tableArn, tables.projects.tableArn],
+        // Usage (daily report), projects (listing) and training (the training log) are small tables
+        // without a query-friendly index.
+        resources: [tables.usage.tableArn, tables.projects.tableArn, tables.training.tableArn],
       }),
     );
     // Audit: solo escribir y consultar. Además Deny explícito de Update/Delete (append-only).

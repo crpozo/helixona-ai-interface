@@ -9,4 +9,5 @@ export * from "./llm/bedrock-provider.js";
 export * from "./llm/sdk-provider.js";
 export * from "./llm/fake-provider.js";
 export * from "./llm/router.js";
+export * from "./training.js";
 export { ulid } from "ulid";

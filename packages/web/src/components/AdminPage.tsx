@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AdminUser, Me, Role, UsageRow } from "../lib/types";
 import { ApiError, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminResetMfa, adminSetRole, adminUsage } from "../lib/api";
 import { modelLabel } from "../lib/models";
+import { TrainingLog } from "./TrainingSections";
 
 interface Props {
   me: Me;
@@ -250,6 +251,12 @@ export function AdminPage({ me, onBack }: Props) {
             {formBusy ? "Creating…" : "Create user"}
           </button>
         </form>
+      </section>
+
+      <section aria-labelledby="training-title" className="card">
+        <h2 id="training-title">Training log</h2>
+        <p className="muted small">Knowledge-check results and acknowledgments completed online in the workforce training. Keep this log for six years; add paper completions by hand.</p>
+        <TrainingLog />
       </section>
 
       <section aria-labelledby="usage-title" className="card">

@@ -40,7 +40,7 @@ let localSeq = 0;
 const localId = (p: string) => `local-${p}-${++localSeq}`;
 
 
-function Docs(props: { backLabel: string; backTo: "/login" | "/" }) {
+function Docs(props: { backLabel: string; backTo: "/login" | "/"; me?: Me }) {
   return (
     <Suspense
       fallback={
@@ -394,7 +394,7 @@ export function App() {
   return (
     <>
       {route === "/documentation" ? (
-        <Docs backLabel="Back to the assistant" backTo="/" />
+        <Docs backLabel="Back to the assistant" backTo="/" me={me} />
       ) : route === "/admin" && isAdmin ? (
         <AdminPage me={me} onBack={() => navigate("/")} />
       ) : (

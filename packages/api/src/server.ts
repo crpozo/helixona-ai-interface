@@ -19,7 +19,7 @@ export async function createDeps(env: NodeJS.ProcessEnv = process.env): Promise<
   if (config.EFFORT) catalog.effort = config.EFFORT;
   const repos = config.STORE_MODE === "memory"
     ? memoryRepos()
-    : dynamoRepos(config.AWS_REGION!, { conversations: config.TABLE_CONVERSATIONS!, messages: config.TABLE_MESSAGES!, sessions: config.TABLE_SESSIONS!, audit: config.TABLE_AUDIT!, usage: config.TABLE_USAGE!, projects: config.TABLE_PROJECTS! });
+    : dynamoRepos(config.AWS_REGION!, { conversations: config.TABLE_CONVERSATIONS!, messages: config.TABLE_MESSAGES!, sessions: config.TABLE_SESSIONS!, audit: config.TABLE_AUDIT!, usage: config.TABLE_USAGE!, projects: config.TABLE_PROJECTS!, training: config.TABLE_TRAINING! });
   const sessions = new SessionService({ repo: repos.sessions, secret: config.SESSION_SECRET ?? randomBytes(32).toString("base64url"), idleSeconds: config.SESSION_IDLE_SECONDS, absoluteSeconds: config.SESSION_ABSOLUTE_SECONDS });
   const identity = config.AUTH_MODE === "dev"
     ? new DevIdentityProvider()

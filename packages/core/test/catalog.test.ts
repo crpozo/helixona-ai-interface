@@ -7,7 +7,7 @@ describe("catálogo", () => {
     expect(DEFAULT_CATALOG.defaultAlias).toBe("opus");
   });
   it("rechaza un modelo que sea su propio respaldo o un respaldo sin precio", () => {
-    const bad = { ...DEFAULT_CATALOG, models: DEFAULT_CATALOG.models.map((m) => (m.alias === "opus" ? { ...m, refusalFallbacks: ["anthropic.claude-opus-5"] } : m)) };
+    const bad = { ...DEFAULT_CATALOG, models: DEFAULT_CATALOG.models.map((m) => (m.alias === "opus" ? { ...m, refusalFallbacks: ["anthropic.claude-opus-5-5"] } : m)) };
     expect(() => CatalogSchema.parse(bad)).toThrow();
     const bad2 = { ...DEFAULT_CATALOG, models: DEFAULT_CATALOG.models.map((m) => (m.alias === "opus" ? { ...m, refusalFallbacks: ["anthropic.desconocido"] } : m)) };
     expect(() => CatalogSchema.parse(bad2)).toThrow();
@@ -15,8 +15,9 @@ describe("catálogo", () => {
   it("estima costo con precios del modelo servido, incluido un modelo solo de respaldo", () => {
     const u = { inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
     expect(estimateUsd(DEFAULT_CATALOG, "anthropic.claude-fable-5-1", u)).toBe(10);
-    expect(estimateUsd(DEFAULT_CATALOG, "anthropic.claude-opus-4-8", u)).toBe(5);
-    expect(labelFor(DEFAULT_CATALOG, "anthropic.claude-opus-4-8")).toBe("Opus 4.8");
+    expect(estimateUsd(DEFAULT_CATALOG, "anthropic.claude-opus-5-5", u)).toBe(4);
+    expect(estimateUsd(DEFAULT_CATALOG, "anthropic.claude-opus-5", u)).toBe(5);
+    expect(labelFor(DEFAULT_CATALOG, "anthropic.claude-opus-5")).toBe("Opus 5");
   });
   it("filtra modelos por rol y parsea JSON", () => {
     const json = JSON.stringify({ ...DEFAULT_CATALOG, models: DEFAULT_CATALOG.models.map((m) => (m.alias === "fable" ? { ...m, roles: ["admin"] } : m)) });

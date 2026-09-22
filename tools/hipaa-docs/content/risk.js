@@ -23,7 +23,7 @@ const children = [
     ["Document", "Security Risk Analysis, 45 CFR 164.308(a)(1)(ii)(A)"],
     ["System", "Helixona Assistant: internal AI assistant for clinic staff"],
     ["Covered entity", "Helixona, Irvine, California"],
-    ["Version and date", "1.1, September 22, 2026"],
+    ["Version and date", "1.2, September 22, 2026"],
     ["Prepared by", "[Name], Security Officer"],
     ["Next review", "September 2027, or after any major change to the system"],
   ]),
@@ -42,7 +42,7 @@ const children = [
     ["Database", "Conversations, messages, projects, sessions, audit events, usage", "Amazon DynamoDB, encrypted with the clinic's KMS key, point-in-time recovery"],
     ["File storage", "Uploaded PDF, TXT, MD and CSV files; project knowledge files", "Amazon S3, encrypted with the clinic's KMS key, versioned, public access blocked"],
     ["Secrets", "API key, session secret, identity client secret", "AWS Secrets Manager, KMS-encrypted"],
-    ["AI model", "Generates responses from the conversation and attached documents", "Anthropic Claude API (Sonnet 5, Opus 5, Fable 5.1) under the clinic's BAA with HIPAA readiness enabled"],
+    ["AI model", "Generates responses from the conversation and attached documents", "Anthropic Claude API (Sonnet 5, Opus 5.5, Fable 5.1) under the clinic's BAA with HIPAA readiness enabled"],
     ["Monitoring", "Application logs without content, CloudTrail, WAF logs, alarms, backups", "Amazon CloudWatch, AWS CloudTrail, AWS Backup"],
   ], [2000, 3800, 3560]),
   spacer(),
@@ -111,7 +111,7 @@ const children = [
   ], [2000, 3000, 2400, 1960]),
   spacer(),
   h1("Appendix C. Change history"),
-  table(["Version", "Date", "Change", "Author"], [["1.0", "September 16, 2026", "Initial analysis", "[Name]"], ["1.1", "September 22, 2026", "AWS Business Associate Addendum accepted; remediation item closed", "[Name]"]], [1200, 2200, 4200, 1760]),
+  table(["Version", "Date", "Change", "Author"], [["1.0", "September 16, 2026", "Initial analysis", "[Name]"], ["1.1", "September 22, 2026", "AWS Business Associate Addendum accepted; remediation item closed", "[Name]"], ["1.2", "September 22, 2026", "Opus model updated to Claude Opus 5.5 (same agreement and safeguards)", "[Name]"]], [1200, 2200, 4200, 1760]),
 ];
 module.exports = {
   slug: "risk-analysis",

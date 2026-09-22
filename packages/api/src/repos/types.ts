@@ -114,4 +114,26 @@ export interface UserDirectory {
   resetMfa(id: string): Promise<void>;
 }
 
-export interface Repos { conversations: ConversationRepo; messages: MessageRepo; sessions: SessionRepo; audit: AuditRepo; usage: UsageRepo; projects: ProjectRepo }
+/** Workforce training: one row per user, the training log the Privacy Officer keeps. */
+export interface TrainingRecord {
+  userId: string;
+  name: string;
+  email: string;
+  /** Version of the training document the check belongs to. */
+  version: string;
+  attempts: number;
+  lastScore: number;
+  lastAttemptAt: string;
+  bestScore: number;
+  passedAt: string | null;
+  acknowledgedAt: string | null;
+  /** Letters of the last attempt (kept for the record; never sent to the browser). */
+  answers: string[];
+}
+export interface TrainingRepo {
+  get(userId: string): Promise<TrainingRecord | null>;
+  put(r: TrainingRecord): Promise<void>;
+  list(): Promise<TrainingRecord[]>;
+}
+
+export interface Repos { conversations: ConversationRepo; messages: MessageRepo; sessions: SessionRepo; audit: AuditRepo; usage: UsageRepo; projects: ProjectRepo; training: TrainingRepo }

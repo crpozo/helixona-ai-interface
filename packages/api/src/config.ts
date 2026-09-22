@@ -22,6 +22,7 @@ const Env = z.object({
   TABLE_AUDIT: z.string().optional(),
   TABLE_USAGE: z.string().optional(),
   TABLE_PROJECTS: z.string().optional(),
+  TABLE_TRAINING: z.string().optional(),
   AWS_REGION: z.string().optional(),
   LLM_MODE: z.enum(["bedrock", "anthropic", "claude-platform-aws", "fake"]).default("bedrock"),
   /** Dev only: delay between simulated tokens of the fake provider (slower = easier to test streaming UI). */
@@ -63,7 +64,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
   }
   if (cfg.STORE_MODE === "dynamo") {
-    for (const k of ["TABLE_CONVERSATIONS", "TABLE_MESSAGES", "TABLE_SESSIONS", "TABLE_AUDIT", "TABLE_USAGE", "TABLE_PROJECTS", "AWS_REGION"] as const) {
+    for (const k of ["TABLE_CONVERSATIONS", "TABLE_MESSAGES", "TABLE_SESSIONS", "TABLE_AUDIT", "TABLE_USAGE", "TABLE_PROJECTS", "TABLE_TRAINING", "AWS_REGION"] as const) {
       if (!cfg[k]) throw new Error(`${k} is required for STORE_MODE=dynamo`);
     }
   }

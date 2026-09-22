@@ -2,16 +2,17 @@
  * API simulada para la vista previa publicada (modo `demo`): intercepta `fetch` a `/api/*`
  * y responde en memoria, incluido el streaming SSE. Datos de ejemplo, sin Bedrock ni PHI real.
  */
-import type { AdminUser, AttachmentMeta, AuditEvent, Conversation, Me, Message, Project, UsageRow } from "../lib/types";
+import type { AdminUser, AttachmentMeta, AuditEvent, Conversation, Me, Message, Project, TrainingRecord, UsageRow } from "../lib/types";
+import trainingQuiz from "./training-quiz.json";
 
 const MODELS = [
   { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, available: true },
-  { alias: "opus", modelId: "anthropic.claude-opus-5", label: "Opus", description: "Recommended balance for everyday work", costFactor: 2.5, available: true },
+  { alias: "opus", modelId: "anthropic.claude-opus-5-5", label: "Opus", description: "Recommended balance for everyday work", costFactor: 2, available: true },
   { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, available: true },
-  { alias: "anthropic.claude-opus-4-8", modelId: "anthropic.claude-opus-4-8", label: "Opus 4.8", description: "Fallback only", costFactor: 0, available: false },
+  { alias: "anthropic.claude-opus-5", modelId: "anthropic.claude-opus-5", label: "Opus 5", description: "Fallback only", costFactor: 0, available: false },
 ];
-const PRICES: Record<string, [number, number]> = { "anthropic.claude-sonnet-5": [2, 10], "anthropic.claude-opus-5": [5, 25], "anthropic.claude-fable-5-1": [10, 50], "anthropic.claude-opus-4-8": [5, 25] };
-const FALLBACK: Record<string, string | undefined> = { "anthropic.claude-fable-5-1": "anthropic.claude-opus-5", "anthropic.claude-opus-5": "anthropic.claude-opus-4-8" };
+const PRICES: Record<string, [number, number]> = { "anthropic.claude-sonnet-5": [2, 10], "anthropic.claude-opus-5-5": [4, 20], "anthropic.claude-fable-5-1": [10, 50], "anthropic.claude-opus-5": [5, 25] };
+const FALLBACK: Record<string, string | undefined> = { "anthropic.claude-fable-5-1": "anthropic.claude-opus-5-5", "anthropic.claude-opus-5-5": "anthropic.claude-opus-5" };
 
 let seq = 100;
 const id = () => `demo${(seq++).toString(36).padStart(6, "0")}`;
@@ -29,6 +30,7 @@ const state = {
   ] as AdminUser[],
   usage: [] as UsageRow[],
   audit: [] as AuditEvent[],
+  training: null as TrainingRecord | null,
   projects: [
     { id: "p-appeals", ownerId: "u-ana", name: "Insurance appeals", description: "Denied claims and prior authorizations", instructions: "You help the billing team write appeal letters. Always cite the claim number, the denial reason and the relevant policy language. Keep a professional, factual tone.", visibility: "clinic", knowledge: [{ id: "k-1", name: "Appeal letter template.md", contentType: "text/markdown", size: 4_210, pages: null }], createdAt: "2026-09-10T16:00:00Z", updatedAt: "2026-09-12T10:00:00Z", canEdit: true },
   ] as Project[],
@@ -36,12 +38,12 @@ const state = {
 
 function seed() {
   const c1: Conv = {
-    id: id(), title: "Sample · appointment reminder letter", modelAlias: "opus", modelId: "anthropic.claude-opus-5", pinnedModel: null, pinReason: null,
+    id: id(), title: "Sample · appointment reminder letter", modelAlias: "opus", modelId: "anthropic.claude-opus-5-5", pinnedModel: null, pinReason: null,
     createdAt: "2026-09-12T14:02:00Z", updatedAt: "2026-09-12T14:05:00Z", messageCount: 2, messages: [],
   };
   c1.messages.push(
     { id: id(), role: "user", content: [{ type: "text", text: "Write a short letter reminding a patient of their follow-up appointment next Tuesday at 10:00 AM and asking them to bring their latest lab results." }], model: null, fallbackReason: null, stopReason: null, usage: null, createdAt: "2026-09-12T14:02:10Z" },
-    { id: id(), role: "assistant", content: [{ type: "text", text: "**Subject: Follow-up appointment reminder**\n\nDear patient,\n\nThis is a reminder that you have a follow-up appointment on **Tuesday at 10:00 AM** at our clinic. Please bring your **most recent lab results** so we can review them during your visit.\n\nIf you need to reschedule, please call us and we will be happy to help.\n\nSincerely,\nThe Helixona Team\n\n---\n*Check the patient's name and the date before sending.*" }], model: "anthropic.claude-opus-5", fallbackReason: null, stopReason: "end_turn", usage: { inputTokens: 812, outputTokens: 190, cacheReadTokens: 640, cacheWriteTokens: 0, estimatedUsd: 0.0089 }, createdAt: "2026-09-12T14:02:24Z" },
+    { id: id(), role: "assistant", content: [{ type: "text", text: "**Subject: Follow-up appointment reminder**\n\nDear patient,\n\nThis is a reminder that you have a follow-up appointment on **Tuesday at 10:00 AM** at our clinic. Please bring your **most recent lab results** so we can review them during your visit.\n\nIf you need to reschedule, please call us and we will be happy to help.\n\nSincerely,\nThe Helixona Team\n\n---\n*Check the patient's name and the date before sending.*" }], model: "anthropic.claude-opus-5-5", fallbackReason: null, stopReason: "end_turn", usage: { inputTokens: 812, outputTokens: 190, cacheReadTokens: 640, cacheWriteTokens: 0, estimatedUsd: 0.0089 }, createdAt: "2026-09-12T14:02:24Z" },
   );
   const c2: Conv = {
     id: id(), title: "Sample · plain-language instructions", modelAlias: "sonnet", modelId: "anthropic.claude-sonnet-5", pinnedModel: null, pinReason: null,
@@ -52,7 +54,7 @@ function seed() {
     { id: id(), role: "assistant", content: [{ type: "text", text: "\"Take your medicine with food once a day for 14 days. If you feel dizzy, stop taking it and call the clinic.\"" }], model: "anthropic.claude-sonnet-5", fallbackReason: null, stopReason: "end_turn", usage: { inputTokens: 740, outputTokens: 42, cacheReadTokens: 600, cacheWriteTokens: 0, estimatedUsd: 0.0007 }, createdAt: "2026-09-11T20:40:09Z" },
   );
   state.conversations.push(c1, c2);
-  state.usage.push({ userId: "u-ana", day: today(), turns: 14, inputTokens: 21040, outputTokens: 5120, estimatedUsd: 0.31, byModel: { "anthropic.claude-opus-5": { turns: 9, estimatedUsd: 0.22 }, "anthropic.claude-sonnet-5": { turns: 5, estimatedUsd: 0.09 } } });
+  state.usage.push({ userId: "u-ana", day: today(), turns: 14, inputTokens: 21040, outputTokens: 5120, estimatedUsd: 0.31, byModel: { "anthropic.claude-opus-5-5": { turns: 9, estimatedUsd: 0.22 }, "anthropic.claude-sonnet-5": { turns: 5, estimatedUsd: 0.09 } } });
   state.usage.push({ userId: "u-luis", day: today(), turns: 6, inputTokens: 9800, outputTokens: 2400, estimatedUsd: 0.41, byModel: { "anthropic.claude-fable-5-1": { turns: 6, estimatedUsd: 0.41 } } });
 }
 function today() { return now().slice(0, 10); }
@@ -197,6 +199,30 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
   if (mUser && method === "POST") { const u = state.users.find((x) => x.id === mUser[1]); if (u) u.enabled = mUser[2] === "enable"; return json({ ok: true }); }
   if (path === "/api/admin/usage") return json({ items: state.usage.filter((u) => u.day === (url.searchParams.get("day") ?? today())) });
   if (path === "/api/admin/audit") return json({ items: state.audit });
+  // Workforce training (the signed-in demo user is Ana).
+  const quiz = trainingQuiz as { version: string; passingScore: number; questions: { text: string; options: string[]; answer: string; why: string }[] };
+  const trainingInfo = () => ({
+    version: quiz.version, passingScore: quiz.passingScore, total: quiz.questions.length,
+    questions: quiz.questions.map((q, i) => ({ n: i + 1, text: q.text, options: q.options.map((text, k) => ({ letter: "ABCDEF"[k]!, text })) })),
+    record: state.training,
+  });
+  if (path === "/api/training" && method === "GET") return json(trainingInfo());
+  if (path === "/api/training/check" && method === "POST") {
+    const answers = Array.isArray(body["answers"]) ? (body["answers"] as string[]).map((a) => String(a).toUpperCase()) : [];
+    if (answers.length !== quiz.questions.length) return error(400, "bad_request", "Answer every question");
+    const results = quiz.questions.map((q, i) => (answers[i] === q.answer ? { n: i + 1, correct: true } : { n: i + 1, correct: false, why: q.why }));
+    const score = results.filter((r) => r.correct).length;
+    const passed = score >= quiz.passingScore;
+    const prev = state.training;
+    state.training = { userId: "u-ana", name: "Ana Perez", email: "ana@helixona.com", version: quiz.version, attempts: (prev?.attempts ?? 0) + 1, lastScore: score, lastAttemptAt: now(), bestScore: Math.max(prev?.bestScore ?? 0, score), passedAt: prev?.passedAt ?? (passed ? now() : null), acknowledgedAt: prev?.acknowledgedAt ?? null };
+    return json({ record: state.training, result: { score, total: quiz.questions.length, passed, results } });
+  }
+  if (path === "/api/training/acknowledgment" && method === "POST") {
+    if (!state.training?.passedAt) return error(409, "check_not_passed", "Pass the knowledge check before signing the acknowledgment");
+    state.training = { ...state.training, acknowledgedAt: state.training.acknowledgedAt ?? now() };
+    return json({ record: state.training });
+  }
+  if (path === "/api/admin/training") return json({ items: state.users.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, enabled: u.enabled, record: u.id === "u-ana" ? state.training : null })) });
   return error(404, "not_found", "Resource not found");
 }
 

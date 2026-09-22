@@ -1,14 +1,67 @@
-import { Fragment, useEffect } from "react";
+import { Fragment, useEffect, type ReactNode } from "react";
 import { brand } from "../brand";
 import { docxUrl, documents, findDocument, type Cell, type DocNode, type HipaaDocument, type Run } from "../docs";
 import { documentSlug, navigate, usePath, type Path } from "../lib/router";
+import type { Me } from "../lib/types";
 import { Logo } from "./Logo";
+import { TrainingAcknowledgment, TrainingCheck, TrainingLog } from "./TrainingSections";
 
 interface Props {
   /** Label of the link that leaves the documentation. */
   backLabel: string;
   /** Where that link goes: the sign-in page for visitors, the assistant for signed-in staff. */
   backTo: "/login" | "/";
+  /** The signed-in user, when there is one: enables the online knowledge check and acknowledgment. */
+  me?: Me | null;
+}
+
+/** Replaces a top-level section of a document (keyed by its heading) with interactive content; null hides it. */
+type SectionRender = (section: { heading: ReactNode; body: ReactNode }) => ReactNode;
+
+const keepSection: SectionRender = ({ heading, body }) => (
+  <>
+    {heading}
+    {body}
+  </>
+);
+const hideSection: SectionRender = () => null;
+
+/** The workforce training: the check and the acknowledgment are completed online by signed-in staff. */
+function trainingSections(me: Me | null | undefined): Record<string, SectionRender> {
+  const isAdmin = !!me?.user.roles.includes("admin");
+  return {
+    "Knowledge check": me
+      ? ({ heading }) => (
+          <>
+            {heading}
+            <TrainingCheck me={me} />
+          </>
+        )
+      : ({ heading, body }) => (
+          <>
+            {heading}
+            <aside className="doc-note">Staff complete this check online after signing in: the score and the acknowledgment are saved to the training log. The paper version below is the alternative.</aside>
+            {body}
+          </>
+        ),
+    "Answer key (for the trainer)": isAdmin ? keepSection : hideSection,
+    Acknowledgment: me
+      ? ({ heading, body }) => (
+          <>
+            {heading}
+            <TrainingAcknowledgment me={me}>{body}</TrainingAcknowledgment>
+          </>
+        )
+      : keepSection,
+    "Training log": isAdmin
+      ? ({ heading }) => (
+          <>
+            {heading}
+            <TrainingLog />
+          </>
+        )
+      : hideSection,
+  };
 }
 
 const SIGNATURE_WIDTHS = [3400, 3600, 2360];
@@ -156,8 +209,39 @@ function jumpTo(id: string) {
   };
 }
 
-function DocumentView({ doc }: { doc: HipaaDocument }) {
-  const toc = doc.children.flatMap((n, k) => (n.type === "h" && n.level === 1 ? [{ id: `s${k}`, text: n.text }] : []));
+/** Renders the document, handing whole sections to their override when one exists. */
+function renderSections(doc: HipaaDocument, overrides: Record<string, SectionRender>): { elements: ReactNode[]; hidden: Set<string> } {
+  const elements: ReactNode[] = [];
+  const hidden = new Set<string>();
+  const isTop = (n: DocNode) => n.type === "h" && n.level === 1;
+  let i = 0;
+  while (i < doc.children.length) {
+    const node = doc.children[i]!;
+    const id = `s${i}`;
+    const override = node.type === "h" && node.level === 1 ? overrides[node.text] : undefined;
+    if (!override) {
+      elements.push(<Node key={id} node={node} id={id} />);
+      i++;
+      continue;
+    }
+    let j = i + 1;
+    const body: ReactNode[] = [];
+    while (j < doc.children.length && !isTop(doc.children[j]!)) {
+      body.push(<Node key={`s${j}`} node={doc.children[j]!} id={`s${j}`} />);
+      j++;
+    }
+    const rendered = override({ heading: <Node node={node} id={id} />, body: <>{body}</> });
+    if (rendered === null) hidden.add(id);
+    else elements.push(<Fragment key={id}>{rendered}</Fragment>);
+    i = j;
+  }
+  return { elements, hidden };
+}
+
+function DocumentView({ doc, me }: { doc: HipaaDocument; me?: Me | null }) {
+  const overrides = doc.slug === "workforce-training" ? trainingSections(me) : {};
+  const { elements, hidden } = renderSections(doc, overrides);
+  const toc = doc.children.flatMap((n, k) => (n.type === "h" && n.level === 1 && !hidden.has(`s${k}`) ? [{ id: `s${k}`, text: n.text }] : []));
   return (
     <div className="docs-layout">
       <nav className="docs-toc" aria-label="Contents">
@@ -181,9 +265,7 @@ function DocumentView({ doc }: { doc: HipaaDocument }) {
         </div>
       </nav>
       <article className="doc" aria-label={doc.title}>
-        {doc.children.map((n, k) => (
-          <Node key={k} node={n} id={`s${k}`} />
-        ))}
+        {elements}
         <footer className="doc-foot">Confidential. Internal use only.</footer>
       </article>
     </div>
@@ -229,7 +311,7 @@ function IndexView() {
 }
 
 /** Public documentation: the HIPAA documents, readable on screen and downloadable as Word files. */
-export function DocumentationPage({ backLabel, backTo }: Props) {
+export function DocumentationPage({ backLabel, backTo, me }: Props) {
   const path = usePath();
   const slug = documentSlug(path);
   const doc = slug ? findDocument(slug) : undefined;
@@ -259,7 +341,7 @@ export function DocumentationPage({ backLabel, backTo }: Props) {
           </a>
         </nav>
       </header>
-      <main className="docs-main">{doc ? <DocumentView doc={doc} /> : <IndexView />}</main>
+      <main className="docs-main">{doc ? <DocumentView doc={doc} me={me} /> : <IndexView />}</main>
     </div>
   );
 }

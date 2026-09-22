@@ -1845,3 +1845,102 @@ td {
     page-break-after: always;
   }
 }
+
+/* ---- Workforce training: the knowledge check and acknowledgment, completed online ---- */
+
+.training-status {
+  margin: 0.5rem 0 1rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+.training-status.passed {
+  border-color: var(--brand-line-gold);
+  background: rgba(214, 185, 129, 0.1);
+  color: #f1e7d2;
+}
+.quiz-q {
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+.quiz-q legend {
+  padding: 0 0.35rem;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.45;
+}
+.quiz-q.correct {
+  border-color: rgba(120, 200, 140, 0.6);
+}
+.quiz-q.wrong {
+  border-color: rgba(255, 138, 128, 0.6);
+}
+.quiz-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.35rem 0.25rem;
+  cursor: pointer;
+  line-height: 1.45;
+}
+.quiz-opt input {
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  accent-color: var(--brand-primary);
+  flex: 0 0 auto;
+}
+.quiz-opt span {
+  flex: 1;
+  min-width: 0;
+}
+.quiz-verdict {
+  margin: 0.4rem 0 0.2rem;
+  font-size: 0.88rem;
+}
+.quiz-verdict.ok {
+  color: #9fd8ad;
+}
+.quiz-verdict.ko {
+  color: var(--danger);
+}
+.quiz-result {
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--brand-line-gold);
+  border-radius: var(--radius);
+  background: rgba(214, 185, 129, 0.08);
+}
+.quiz-result strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #ffffff;
+}
+.ack-form {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+.ack-form .btn {
+  margin-top: 0.5rem;
+}
+.doc .training-log th,
+.doc .training-log td {
+  white-space: nowrap;
+}
+@media print {
+  .quiz-q input,
+  .ack-form,
+  .quiz-result .btn {
+    display: none;
+  }
+}

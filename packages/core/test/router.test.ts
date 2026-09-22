@@ -28,9 +28,9 @@ describe("ModelRouter", () => {
     const c = collect();
     const r = await mk().runTurn({ conversation: conv(), history, userText: "/refuse pregunta", systemPrompt: "s", emit: c.emit });
     expect(r.ok).toBe(true);
-    expect(r.servedModel).toBe("anthropic.claude-opus-5");
+    expect(r.servedModel).toBe("anthropic.claude-opus-5-5");
     expect(r.fallbackReason).toBe("refusal");
-    expect(r.pin).toEqual({ model: "anthropic.claude-opus-5", reason: "refusal", until: null });
+    expect(r.pin).toEqual({ model: "anthropic.claude-opus-5-5", reason: "refusal", until: null });
     expect(c.events.some((e) => e.type === "fallback")).toBe(true);
   });
 
@@ -66,7 +66,7 @@ describe("ModelRouter", () => {
     const now = new Date("2026-09-12T10:00:00Z");
     const r = await mk({ now: () => now }).runTurn({ conversation: conv(), history, userText: "/throttle x", systemPrompt: "s", emit: c.emit });
     expect(r.ok).toBe(true);
-    expect(r.servedModel).toBe("anthropic.claude-opus-5");
+    expect(r.servedModel).toBe("anthropic.claude-opus-5-5");
     expect(r.fallbackReason).toBe("availability");
     expect(r.pin?.reason).toBe("availability");
     expect(r.pin?.until).toBe("2026-09-12T10:15:00.000Z");
@@ -83,9 +83,17 @@ describe("ModelRouter", () => {
     expect(c.events.some((e) => e.type === "model_switched")).toBe(false);
   });
 
-  it("opus elegido y throttling: no hay respaldo por disponibilidad → error model_unavailable", async () => {
+  it("opus elegido y throttling: cae a Opus 5 por disponibilidad", async () => {
     const c = collect();
     const r = await mk().runTurn({ conversation: conv({ modelAlias: "opus" }), history, userText: "/throttle x", systemPrompt: "s", emit: c.emit });
+    expect(r.ok).toBe(true);
+    expect(r.servedModel).toBe("anthropic.claude-opus-5");
+    expect(r.pin?.reason).toBe("availability");
+  });
+
+  it("sonnet elegido y throttling: no hay respaldo por disponibilidad → error model_unavailable", async () => {
+    const c = collect();
+    const r = await mk().runTurn({ conversation: conv({ modelAlias: "sonnet" }), history, userText: "/throttle x", systemPrompt: "s", emit: c.emit });
     expect(r.ok).toBe(false);
     expect((c.events.at(-1) as { code: string }).code).toBe("model_unavailable");
   });
@@ -94,20 +102,20 @@ describe("ModelRouter", () => {
     const c = collect();
     const r = await mk({ firstEventTimeoutMs: 50 }).runTurn({ conversation: conv(), history, userText: "/hang x", systemPrompt: "s", emit: c.emit });
     expect(r.ok).toBe(true);
-    expect(r.servedModel).toBe("anthropic.claude-opus-5");
+    expect(r.servedModel).toBe("anthropic.claude-opus-5-5");
   });
 
   it("pin por refusal vigente: empieza directamente en Opus 5", async () => {
     const c = collect();
-    const r = await mk().runTurn({ conversation: conv({ pinnedModel: "anthropic.claude-opus-5", pinReason: "refusal" }), history, userText: "hola", systemPrompt: "s", emit: c.emit });
-    expect(c.events[0]).toEqual({ type: "message_start", model: "anthropic.claude-opus-5" });
-    expect(r.servedModel).toBe("anthropic.claude-opus-5");
+    const r = await mk().runTurn({ conversation: conv({ pinnedModel: "anthropic.claude-opus-5-5", pinReason: "refusal" }), history, userText: "hola", systemPrompt: "s", emit: c.emit });
+    expect(c.events[0]).toEqual({ type: "message_start", model: "anthropic.claude-opus-5-5" });
+    expect(r.servedModel).toBe("anthropic.claude-opus-5-5");
   });
 
   it("pin blando vencido: vuelve a Fable", async () => {
     const c = collect();
     const past = new Date(Date.now() - 60_000).toISOString();
-    const r = await mk().runTurn({ conversation: conv({ pinnedModel: "anthropic.claude-opus-5", pinReason: "availability", pinnedUntil: past }), history, userText: "hola", systemPrompt: "s", emit: c.emit });
+    const r = await mk().runTurn({ conversation: conv({ pinnedModel: "anthropic.claude-opus-5-5", pinReason: "availability", pinnedUntil: past }), history, userText: "hola", systemPrompt: "s", emit: c.emit });
     expect(r.servedModel).toBe("anthropic.claude-fable-5-1");
   });
 
@@ -116,8 +124,8 @@ describe("ModelRouter", () => {
     breaker.recordFailure("anthropic.claude-fable-5-1");
     const c = collect();
     const r = await mk({ breaker }).runTurn({ conversation: conv(), history, userText: "hola", systemPrompt: "s", emit: c.emit });
-    expect(c.events[0]).toEqual({ type: "model_switched", from: "anthropic.claude-fable-5-1", to: "anthropic.claude-opus-5", reason: "availability" });
-    expect(r.servedModel).toBe("anthropic.claude-opus-5");
+    expect(c.events[0]).toEqual({ type: "model_switched", from: "anthropic.claude-fable-5-1", to: "anthropic.claude-opus-5-5", reason: "availability" });
+    expect(r.servedModel).toBe("anthropic.claude-opus-5-5");
     expect(r.pin?.reason).toBe("availability");
   });
 

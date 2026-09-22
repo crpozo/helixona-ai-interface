@@ -1,4 +1,5 @@
 import type {
+  AdminTrainingRow,
   AdminUser,
   ApiErrorBody,
   AuditEvent,
@@ -6,6 +7,9 @@ import type {
   Conversation,
   Me,
   Message,
+  TrainingCheckResult,
+  TrainingInfo,
+  TrainingRecord,
   Project,
   ProjectVisibility,
   Role,
@@ -307,5 +311,25 @@ export async function adminUsage(day: string): Promise<UsageRow[]> {
 
 export async function adminAudit(day: string): Promise<AuditEvent[]> {
   const r = await request<{ items: AuditEvent[] }>(`/api/admin/audit?day=${encodeURIComponent(day)}`);
+  return r.items;
+}
+
+// ---- Workforce training (knowledge check and acknowledgment, completed online) ----
+
+export function getTraining(): Promise<TrainingInfo> {
+  return request<TrainingInfo>("/api/training");
+}
+
+/** One letter per question, in order. Graded server-side; the attempt is recorded either way. */
+export function submitTrainingCheck(answers: string[]): Promise<{ record: TrainingRecord; result: TrainingCheckResult }> {
+  return request("/api/training/check", { method: "POST", body: { answers } });
+}
+
+export function acknowledgeTraining(): Promise<{ record: TrainingRecord }> {
+  return request("/api/training/acknowledgment", { method: "POST", body: { accepted: true } });
+}
+
+export async function adminTraining(): Promise<AdminTrainingRow[]> {
+  const r = await request<{ items: AdminTrainingRow[] }>("/api/admin/training");
   return r.items;
 }

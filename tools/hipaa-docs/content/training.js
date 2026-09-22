@@ -1,22 +1,29 @@
 const { h1, h2, h3, p, b, i, note, bullets, numbered, table, kv, signatures, spacer, pageBreak, titleBlock, build } = require("../lib");
+/**
+ * Knowledge check. The same list feeds the Word file, the answer key and the online check in the
+ * app (build.js writes it to packages/core/src/training-quiz.generated.ts, where the API grades it).
+ */
+const LETTERS = ["A", "B", "C", "D"];
+const passingScore = 8;
 const quiz = [
-  ["A coworker is out sick and asks you to sign in with your account so they can finish a letter. What do you do?", "A. Share the code once. B. Decline; accounts are personal and an administrator can create one for them. C. Sign in for them on your computer.", "B"],
-  ["Which of these is PHI?", "A. A patient's name next to an appointment date. B. The clinic's address. C. A blank claim form.", "A"],
-  ["You need the assistant to summarize one patient's EOB. The PDF you have covers ten patients. What is the right step?", "A. Upload the whole file. B. Upload only the pages for that patient, or redact the others. C. Paste all ten into the message.", "B"],
-  ["The assistant drafts an appeal letter with a claim number and denial code. Before sending it you must:", "A. Send it; the assistant is accurate. B. Check the claim number, dates and reasons against the source document. C. Ask the assistant if it is sure.", "B"],
-  ["Which tool may receive patient information?", "A. Any AI chatbot with a good privacy policy. B. Only the Helixona Assistant at ai.helixona.com. C. Your personal account on a consumer AI product, if you delete the chat afterwards.", "B"],
-  ["Your phone with the authenticator app is stolen on Saturday. When do you report it?", "A. Monday morning. B. The same day, to the Security Officer. C. Only if you notice unusual activity.", "B"],
-  ["How long are conversations kept?", "A. Forever. B. 30 days after the last activity, or until you delete them. C. Until the end of the year.", "B"],
-  ["You notice a conversation in a shared project that contains a patient's full record for no work reason. What do you do?", "A. Ignore it. B. Report it to the Security Officer within an hour. C. Delete it yourself and say nothing.", "B"],
-  ["You are on a shared front-desk computer and step away for lunch. What do you do first?", "A. Nothing; the screen locks eventually. B. Sign out of the assistant. C. Close the browser tab only.", "B"],
-  ["Who is responsible for a clinical or billing decision made using the assistant's output?", "A. The assistant. B. Anthropic. C. The licensed staff member who reviews and uses it.", "C"],
+  { text: "A coworker is out sick and asks you to sign in with your account so they can finish a letter. What do you do?", options: ["Share the code once.", "Decline; accounts are personal and an administrator can create one for them.", "Sign in for them on your computer."], answer: "B", why: "Accounts are personal; every action must be attributable to one person." },
+  { text: "Which of these is PHI?", options: ["A patient's name next to an appointment date.", "The clinic's address.", "A blank claim form."], answer: "A", why: "A name with a date of care identifies the patient and relates to care." },
+  { text: "You need the assistant to summarize one patient's EOB. The PDF you have covers ten patients. What is the right step?", options: ["Upload the whole file.", "Upload only the pages for that patient, or redact the others.", "Paste all ten into the message."], answer: "B", why: "Minimum necessary: include only the information the task needs." },
+  { text: "The assistant drafts an appeal letter with a claim number and denial code. Before sending it you must:", options: ["Send it; the assistant is accurate.", "Check the claim number, dates and reasons against the source document.", "Ask the assistant if it is sure."], answer: "B", why: "The assistant can be wrong; the person is responsible for the result." },
+  { text: "Which tool may receive patient information?", options: ["Any AI chatbot with a good privacy policy.", "Only the Helixona Assistant at ai.helixona.com.", "Your personal account on a consumer AI product, if you delete the chat afterwards."], answer: "B", why: "Only the approved tool has HIPAA agreements and the clinic's safeguards." },
+  { text: "Your phone with the authenticator app is stolen on Saturday. When do you report it?", options: ["Monday morning.", "The same day, to the Security Officer.", "Only if you notice unusual activity."], answer: "B", why: "Same-day reporting lets an administrator disable the account or reset the authenticator." },
+  { text: "How long are conversations kept?", options: ["Forever.", "30 days after the last activity, or until you delete them.", "Until the end of the year."], answer: "B", why: "Retention is 30 days after the last activity; users may delete sooner." },
+  { text: "You notice a conversation in a shared project that contains a patient's full record for no work reason. What do you do?", options: ["Ignore it.", "Report it to the Security Officer within an hour.", "Delete it yourself and say nothing."], answer: "B", why: "Suspected incidents are reported within an hour and never handled alone." },
+  { text: "You are on a shared front-desk computer and step away for lunch. What do you do first?", options: ["Nothing; the screen locks eventually.", "Sign out of the assistant.", "Close the browser tab only."], answer: "B", why: "Signing out prevents someone else from using your session." },
+  { text: "Who is responsible for a clinical or billing decision made using the assistant's output?", options: ["The assistant.", "Anthropic.", "The licensed staff member who reviews and uses it."], answer: "C", why: "Licensed staff own every clinical and billing decision." },
 ];
+const optionsLine = (q) => q.options.map((o, k) => `${LETTERS[k]}. ${o}`).join(" ");
 const children = [
   ...titleBlock("Workforce Training", "HIPAA and the Helixona Assistant", [
     ["Document", "Training module, knowledge check, acknowledgment and training log"],
     ["Audience", "Every workforce member with an account; administrators complete the additional section"],
     ["Duration", "About 25 minutes"],
-    ["Version and date", "1.0, September 16, 2026"],
+    ["Version and date", "1.1, September 22, 2026"],
     ["Owner", "[Name], Privacy Officer"],
     ["Frequency", "Before first sign-in, yearly, and after material policy changes"],
   ]),
@@ -24,9 +31,9 @@ const children = [
   h1("How to use this training"),
   ...numbered([
     "Read modules 1 to 7 (about 20 minutes).",
-    "Complete the knowledge check. A score of 8 out of 10 or better is required; retake it if needed.",
-    "Sign the acknowledgment on the last page and return it to the Privacy Officer.",
-    "The Privacy Officer records the completion in the training log.",
+    "Complete the knowledge check. A score of 8 out of 10 or better is required; retake it if needed. Signed-in staff complete it online at ai.helixona.com/documentation/workforce-training, where the score is recorded automatically; the paper version below is the alternative.",
+    "Sign the acknowledgment: online, after passing the check, or on the last page of this document, returned to the Privacy Officer.",
+    "The training log in the Administration page records every online completion; the Privacy Officer adds paper completions to it.",
   ]),
   h1("Module 1. Why this matters"),
   p("HIPAA is the federal law that protects patients' health information. It applies to Helixona and to each of us as members of its workforce. Protecting that information is part of the care we give: patients share it with us because they trust us. The same law sets penalties for the clinic and, in serious cases, for individuals, when information is mishandled. California adds its own rules (the Confidentiality of Medical Information Act) that reinforce the same duties."),
@@ -100,26 +107,15 @@ const children = [
   ], [4680, 4680]),
   pageBreak(),
   h1("Knowledge check"),
-  p("Circle one answer per question. Passing score: 8 of 10."),
+  p(`Choose one answer per question. Passing score: ${passingScore} of ${quiz.length}.`),
   ...quiz.flatMap((q, n) => [
-    p([b(`${n + 1}. `), q[0]]),
-    p(q[1], { size: 20 }),
+    p([b(`${n + 1}. `), q.text]),
+    p(optionsLine(q), { size: 20 }),
   ]),
-  kv([["Name", ""], ["Date", ""], ["Score", "        / 10"]], [2000, 7360]),
+  kv([["Name", ""], ["Date", ""], ["Score", `        / ${quiz.length}`]], [2000, 7360]),
   pageBreak(),
   h1("Answer key (for the trainer)"),
-  table(["Question", "Answer", "Why"], quiz.map((q, n) => [String(n + 1), q[2], [
-    "Accounts are personal; every action must be attributable to one person.",
-    "A name with a date of care identifies the patient and relates to care.",
-    "Minimum necessary: include only the information the task needs.",
-    "The assistant can be wrong; the person is responsible for the result.",
-    "Only the approved tool has HIPAA agreements and the clinic's safeguards.",
-    "Same-day reporting lets an administrator disable the account or reset the authenticator.",
-    "Retention is 30 days after the last activity; users may delete sooner.",
-    "Suspected incidents are reported within an hour and never handled alone.",
-    "Signing out prevents someone else from using your session.",
-    "Licensed staff own every clinical and billing decision.",
-  ][n]]), [1200, 1000, 7160]),
+  table(["Question", "Answer", "Why"], quiz.map((q, n) => [String(n + 1), q.answer, q.why]), [1200, 1000, 7160]),
   pageBreak(),
   h1("Acknowledgment"),
   p("I confirm that:"),
@@ -145,4 +141,5 @@ module.exports = {
   summary: "The training every user completes before their first sign-in: seven short modules, a quick reference, a knowledge check and the acknowledgment form.",
   docx: "Helixona-Assistant-Workforce-Training.docx",
   children,
+  quiz: { version: "1.1", passingScore, questions: quiz },
 };
