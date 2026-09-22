@@ -6,7 +6,7 @@ const risks = [
   ["R3", "Former staff member keeps access", "Administrator disables the account from the Administration page; server-side sessions are revoked at once; access list reviewed quarterly", "Medium", "High", "Low", "Offboarding the same business day (Policy P3); quarterly access review. Owner: Privacy Officer."],
   ["R4", "Excessive privileges or misuse by an administrator", "Two roles only (staff, administrator); administrator actions are written to the audit log; audit log reviewed weekly; administrators limited to the minimum number needed", "Low", "High", "Low", "Keep no more than two administrators. Owner: Security Officer."],
   ["R5", "PHI sent to the AI vendor without a HIPAA agreement", "Anthropic Business Associate Agreement executed and HIPAA readiness enabled for the clinic's organization on September 15, 2026; the API rejects non-eligible features automatically; only eligible features are used", "Low", "High", "Low", "Review the agreement and eligible-feature list annually. Owner: Security Officer."],
-  ["R6", "PHI stored in the cloud account without a HIPAA agreement", "AWS Business Associate Addendum available in AWS Artifact; only HIPAA-eligible AWS services are used (Appendix A)", "Low", "High", "Low once accepted", "[Confirm the AWS BAA shows Active in AWS Artifact before real patient data is entered.] Owner: account owner. Due: before go-live."],
+  ["R6", "PHI stored in the cloud account without a HIPAA agreement", "AWS Business Associate Addendum accepted in AWS Artifact on September 22, 2026; only HIPAA-eligible AWS services are used (Appendix A)", "Low", "High", "Low", "Review the addendum and the eligible-services list yearly. Owner: account owner."],
   ["R7", "Interception of data in transit", "TLS 1.2 or higher from the browser to CloudFront; TLS from CloudFront to the load balancer with the clinic's certificate (ai.helixona.com); TLS to the Anthropic API; file uploads over HTTPS presigned URLs; HTTP requests redirected to HTTPS", "Low", "High", "Low", "None. Certificate renews automatically (AWS Certificate Manager)."],
   ["R8", "Unauthorized access to stored conversations or files", "Customer-managed KMS encryption for the database, file storage, logs and secrets; application servers in private subnets with no public IP; least-privilege IAM role for the application; public access blocked on all storage; CloudTrail records every read and write to the PHI tables and the file bucket", "Low", "High", "Low", "None. CloudTrail reviewed monthly (Policy P7)."],
   ["R9", "Data loss, corruption or ransomware", "Point-in-time recovery on all tables; versioned file storage; AWS Backup daily with 35-day retention; infrastructure defined as code and redeployable", "Low", "High", "Low", "[Perform and document one restore test.] Owner: Security Officer. Due: within 30 days of go-live, then yearly."],
@@ -23,7 +23,7 @@ const children = [
     ["Document", "Security Risk Analysis, 45 CFR 164.308(a)(1)(ii)(A)"],
     ["System", "Helixona Assistant: internal AI assistant for clinic staff"],
     ["Covered entity", "Helixona, Irvine, California"],
-    ["Version and date", "1.0, September 16, 2026"],
+    ["Version and date", "1.1, September 22, 2026"],
     ["Prepared by", "[Name], Security Officer"],
     ["Next review", "September 2027, or after any major change to the system"],
   ]),
@@ -87,7 +87,7 @@ const children = [
   spacer(),
   h1("6. Remediation plan"),
   table(["Action", "Owner", "Due", "Status"], [
-    ["Confirm the AWS Business Associate Addendum shows Active in AWS Artifact", "[Account owner]", "Before go-live", "[ ]"],
+    ["Confirm the AWS Business Associate Addendum shows Active in AWS Artifact", "Account owner", "Before go-live", "Done, September 22, 2026"],
     ["Perform and document a backup restore test", "Security Officer", "30 days after go-live", "[ ]"],
     ["Enable two-factor authentication for every member of the Claude Console organization; keep the production API key in its own workspace with a spend limit", "Security Officer", "Before go-live", "[ ]"],
     ["Complete workforce training and collect signed acknowledgments", "Privacy Officer", "Before each user's first sign-in", "[ ]"],
@@ -106,12 +106,12 @@ const children = [
   ...bullets(["Amazon CloudFront and AWS WAF", "Elastic Load Balancing (Application Load Balancer)", "Amazon ECS on AWS Fargate", "Amazon DynamoDB", "Amazon S3", "AWS Key Management Service", "Amazon Cognito", "AWS Secrets Manager", "Amazon CloudWatch and AWS CloudTrail", "AWS Backup", "Amazon VPC"]),
   h1("Appendix B. Agreements register"),
   table(["Vendor", "Agreement", "Status", "Reference"], [
-    ["Amazon Web Services", "AWS Business Associate Addendum", "[Active / date]", "AWS Artifact, account 148274106093"],
+    ["Amazon Web Services", "AWS Business Associate Addendum", "Active since September 22, 2026 (accepted by the account owner)", "AWS Artifact, account 148274106093"],
     ["Anthropic", "Business Associate Agreement with HIPAA readiness", "Active since September 15, 2026 (enabled by the account owner)", "Claude Console, Settings, Privacy"],
   ], [2000, 3000, 2400, 1960]),
   spacer(),
   h1("Appendix C. Change history"),
-  table(["Version", "Date", "Change", "Author"], [["1.0", "September 16, 2026", "Initial analysis", "[Name]"]], [1200, 2200, 4200, 1760]),
+  table(["Version", "Date", "Change", "Author"], [["1.0", "September 16, 2026", "Initial analysis", "[Name]"], ["1.1", "September 22, 2026", "AWS Business Associate Addendum accepted; remediation item closed", "[Name]"]], [1200, 2200, 4200, 1760]),
 ];
 module.exports = {
   slug: "risk-analysis",
