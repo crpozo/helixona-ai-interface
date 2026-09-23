@@ -91,6 +91,10 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
             onKeyDown={(e) => {
               if (e.key === "Escape") setEditingId(null);
             }}
+            onBlur={(e) => {
+              // Leaving the editor saves, unless focus moved to its own Save/Cancel buttons.
+              if (!(e.relatedTarget instanceof Node && e.currentTarget.form?.contains(e.relatedTarget))) void commitRename();
+            }}
           />
           <button type="submit" className="btn btn-small">
             Save

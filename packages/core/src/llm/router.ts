@@ -120,6 +120,7 @@ export class ModelRouter {
       let timer: ReturnType<typeof setTimeout> | null = setTimeout(() => { timedOut = true; controller.abort(); }, firstEventMs);
 
       let emittedChars = 0;
+      let partialText = "";
       let currentModel = model;
       let refusalFallback = false;
       input.emit({ type: "message_start", model });
@@ -146,7 +147,7 @@ export class ModelRouter {
               currentModel = to;
             }
           } else if (ev.type === "content_block_delta") {
-            if (ev.delta.type === "text_delta") { emittedChars += ev.delta.text.length; input.emit({ type: "text_delta", text: ev.delta.text }); }
+            if (ev.delta.type === "text_delta") { emittedChars += ev.delta.text.length; partialText += ev.delta.text; input.emit({ type: "text_delta", text: ev.delta.text }); }
             else if (ev.delta.type === "thinking_delta" && this.opts.thinkingDisplay === "summarized") input.emit({ type: "thinking_delta", text: ev.delta.thinking });
           }
         }
@@ -196,7 +197,8 @@ export class ModelRouter {
 
         if (cls.kind === "aborted" && input.signal?.aborted) {
           input.emit({ type: "error", code: "aborted", message: "Request canceled", retryable: true, partial: emittedChars > 0 });
-          return this.failure(startModel, cls, latencyMs, emittedChars > 0);
+          // The caller keeps what was already answered, marked as stopped.
+          return { ...this.failure(startModel, cls, latencyMs, emittedChars > 0), servedModel: currentModel, content: partialText ? [{ type: "text", text: partialText, citations: null } as BetaContentBlock] : [] };
         }
         if (cls.kind === "config") this.breaker.open(model, cls.breakerMs, cls.kind);
         else if (cls.kind === "availability") this.breaker.recordFailure(model, cls.kind);

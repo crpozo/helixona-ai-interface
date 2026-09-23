@@ -7,6 +7,7 @@ import { DevIdentityProvider } from "../src/auth/dev.js";
 import { SessionService } from "../src/auth/session.js";
 import { memoryRepos, MemoryUserDirectory } from "../src/repos/memory.js";
 import { MemoryAttachmentStore } from "../src/attachments/store.js";
+import type { DirectoryUser } from "../src/repos/types.js";
 import { PDFDocument } from "pdf-lib";
 import type { Deps } from "../src/deps.js";
 import type { IdentityProvider } from "../src/auth/cognito.js";
@@ -22,7 +23,7 @@ function parseSse(body: string): { event: string; data: Record<string, unknown> 
   });
 }
 
-async function makeApp(extraEnv: Record<string, string> = {}, identity?: IdentityProvider, passwordAuth: PasswordAuth | null = null) {
+async function makeApp(extraEnv: Record<string, string> = {}, identity?: IdentityProvider, passwordAuth: PasswordAuth | null = null, directorySeed: DirectoryUser[] = []) {
   // The training gate is covered by its own tests; everything else runs with it off.
   const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "1", WEB_DIST: "/nonexistent", TRAINING_REQUIRED: "false", ...extraEnv });
   const repos = memoryRepos();
@@ -30,7 +31,7 @@ async function makeApp(extraEnv: Record<string, string> = {}, identity?: Identit
   const deps: Deps = {
     config, log: noopLogger, catalog: DEFAULT_CATALOG, repos,
     sessions: new SessionService({ repo: repos.sessions, secret: config.SESSION_SECRET!, idleSeconds: config.SESSION_IDLE_SECONDS, absoluteSeconds: config.SESSION_ABSOLUTE_SECONDS }),
-    identity: identity ?? new DevIdentityProvider(), directory: new MemoryUserDirectory(), provider,
+    identity: identity ?? new DevIdentityProvider(), directory: new MemoryUserDirectory(directorySeed), provider,
     router: new ModelRouter({ catalog: DEFAULT_CATALOG, provider, breaker: new CircuitBreaker(), firstEventTimeoutMs: 300 }),
     systemPrompt: { text: "prompt de sistema de prueba", version: "v1" },
     attachments: new MemoryAttachmentStore(),
@@ -440,8 +441,11 @@ describe("Workforce training", () => {
     const { app, repos } = await makeApp({ TRAINING_REQUIRED: "true" });
     const { cookie } = await login(app, "bea");
     expect((await app.inject({ method: "POST", url: "/api/training/modules/99", headers: { ...H, cookie }, payload: { answers: { "1": "B" } } })).statusCode).toBe(404);
-    // Module 3 has two questions; answering one is not enough.
+    // Module 3 has two questions; answering one is not enough, and it stays locked until modules 1 and 2 are done.
     expect((await app.inject({ method: "POST", url: "/api/training/modules/3", headers: { ...H, cookie }, payload: { answers: { "3": "B" } } })).statusCode).toBe(400);
+    const locked = await app.inject({ method: "POST", url: "/api/training/modules/3", headers: { ...H, cookie }, payload: { answers: { "3": "B", "4": "C" } } });
+    expect(locked.statusCode).toBe(409);
+    expect(locked.json().error.code).toBe("module_locked");
     // A wrong first try is recorded and the module stays open.
     const wrong = (await app.inject({ method: "POST", url: "/api/training/modules/1", headers: { ...H, cookie }, payload: { answers: { "1": "A" } } })).json();
     expect(wrong.result).toMatchObject({ correct: 0, total: 1, moduleComplete: false, courseComplete: false });
@@ -513,6 +517,12 @@ describe("Training gate", () => {
     // A paper completion recorded by an administrator unlocks a user too, and shows in the log.
     const created = (await app.inject({ method: "POST", url: "/api/admin/users", headers: { ...H, cookie: admin.cookie }, payload: { email: "paper@clinic.test", name: "Paper Person", role: "staff" } })).json();
     expect((await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie: admin.cookie }, payload: { completedAt: "2026-09-20", score: 9 } })).statusCode).toBe(400);
+    // An impossible date and a future date are refused with a clear message, never a 500.
+    for (const completedAt of ["2026-13-45", "2026-02-30", "2099-01-01"]) {
+      const bad = await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie: admin.cookie }, payload: { completedAt, score: 12 } });
+      expect(bad.statusCode, completedAt).toBe(400);
+      expect(bad.json().error.code).toBe("bad_request");
+    }
     const paper = await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie: admin.cookie }, payload: { completedAt: "2026-09-20", score: 11 } });
     expect(paper.statusCode).toBe(200);
     expect(paper.json().record).toMatchObject({ source: "paper", bestScore: 11, recordedBy: "dev-root", version: "1.2" });
@@ -578,6 +588,11 @@ describe("Agreements", () => {
     const presign = (await app.inject({ method: "POST", url: "/api/admin/agreements/aws-baa/upload", headers: { ...H, cookie: admin.cookie }, payload: { size: bytes.length, contentType: "application/pdf" } })).json();
     expect(presign.upload.url).toMatch(/^\/api\/dev\/upload\/agreements\/aws-baa\.pdf$/);
     expect((await app.inject({ method: "PUT", url: presign.upload.url, headers: { "content-type": "application/pdf", "x-requested-with": "helixona" }, payload: bytes })).statusCode).toBe(200);
+    // Text bytes declared as a PDF are refused and discarded.
+    const fake = (await app.inject({ method: "POST", url: "/api/admin/agreements/anthropic-baa/upload", headers: { ...H, cookie: admin.cookie }, payload: { size: 12, contentType: "application/pdf" } })).json();
+    expect((await app.inject({ method: "PUT", url: fake.upload.url, headers: { "content-type": "application/pdf", "x-requested-with": "helixona" }, payload: Buffer.from("not a pdf!!") })).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: "/api/admin/agreements/anthropic-baa/confirm", headers: { ...H, cookie: admin.cookie }, payload: {} })).json().error.code).toBe("unsupported_type");
+    expect((await app.inject({ method: "GET", url: "/api/agreements/anthropic-baa/file", headers: { cookie: admin.cookie } })).statusCode).toBe(404);
     const confirmed = (await app.inject({ method: "POST", url: "/api/admin/agreements/aws-baa/confirm", headers: { ...H, cookie: admin.cookie }, payload: {} })).json();
     expect(confirmed.file).toMatchObject({ size: bytes.length });
     expect(confirmed.file.uploadedAt).toBeTruthy();
@@ -596,6 +611,23 @@ describe("Agreements", () => {
     expect((await app.inject({ method: "DELETE", url: "/api/admin/agreements/aws-baa", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(204);
     expect((await app.inject({ method: "GET", url: "/api/agreements/aws-baa/file", headers: { cookie: staff.cookie } })).statusCode).toBe(404);
     expect(repos.audit.events.map((e) => e.action)).toEqual(expect.arrayContaining(["admin_agreement_uploaded", "agreement_downloaded", "admin_agreement_removed"]));
+    await app.close();
+  });
+});
+
+describe("Account safety", () => {
+  it("an administrator cannot disable their own account, and a disabled account cannot sign in (dev)", async () => {
+    const gone: DirectoryUser = { id: "dev-gone", email: "gone@clinic.test", name: "Gone Person", role: "staff", enabled: true, createdAt: "2026-09-01T00:00:00Z", status: "active" };
+    const { app } = await makeApp({}, undefined, null, [gone]);
+    const admin = await login(app, "root", "admin");
+    const self = await app.inject({ method: "POST", url: "/api/admin/users/dev-root/disable", headers: { ...H, cookie: admin.cookie } });
+    expect(self.statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie: admin.cookie } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: "/api/auth/dev-login", headers: H, payload: { username: "gone", role: "staff" } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: "/api/admin/users/dev-gone/disable", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(200);
+    const blocked = await app.inject({ method: "POST", url: "/api/auth/dev-login", headers: H, payload: { username: "gone", role: "staff" } });
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json().error.code).toBe("account_disabled");
     await app.close();
   });
 });

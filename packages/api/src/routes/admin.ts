@@ -19,8 +19,9 @@ export function registerAdminRoutes(app: FastifyInstance, deps: Deps): void {
     return reply.code(201).send(u);
   });
 
-  app.post("/api/admin/users/:id/disable", { preHandler: admin }, async (req) => {
+  app.post("/api/admin/users/:id/disable", { preHandler: admin }, async (req, reply) => {
     const { id } = req.params as { id: string };
+    if (id === req.session!.userId) return apiError(reply, 400, "bad_request", "You cannot disable your own account");
     await deps.directory.setEnabled(id, false);
     // Revocación real: se borran sus sesiones del lado servidor.
     const n = await deps.repos.sessions.deleteAllForUser(id);

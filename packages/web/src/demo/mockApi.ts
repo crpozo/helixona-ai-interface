@@ -262,7 +262,7 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     state.training = { userId: "u-ana", name: "Ana Perez", email: "ana@helixona.com", version: quiz.version, attempts: state.training?.attempts ?? 0, lastScore: state.training?.lastScore ?? 0, lastAttemptAt: state.training?.lastAttemptAt ?? now(), bestScore: state.training?.bestScore ?? 0, passedAt: state.training?.passedAt ?? now(), source: "attested" };
     return json({ record: state.training });
   }
-  if (path === "/api/admin/training" && method === "GET") return json({ items: state.users.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, enabled: u.enabled, record: u.id === "u-ana" ? state.training : null })), version: quiz.version, passingScore: quiz.passingScore, total: quiz.questions.length });
+  if (path === "/api/admin/training" && method === "GET") return json({ items: state.users.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, enabled: u.enabled, inDirectory: true, record: u.id === "u-ana" ? state.training : null })), version: quiz.version, passingScore: quiz.passingScore, total: quiz.questions.length });
   const mPaper = path.match(/^\/api\/admin\/training\/([^/]+)\/paper$/);
   if (mPaper && method === "POST") {
     const u = state.users.find((x) => x.id === decodeURIComponent(mPaper[1]!));

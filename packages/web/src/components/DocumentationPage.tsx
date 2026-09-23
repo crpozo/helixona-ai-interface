@@ -327,6 +327,9 @@ export function DocumentationPage({ backLabel, backTo, me }: Props) {
     if (import.meta.env.MODE !== "test") window.scrollTo(0, 0);
   }, [slug]);
   useEffect(() => {
+    if (slug && !doc) navigate("/documentation", { replace: true });
+  }, [slug, doc]);
+  useEffect(() => {
     document.title = `${doc ? doc.title : "Documentation"} · ${brand.productName}`;
     return () => {
       document.title = brand.productName;

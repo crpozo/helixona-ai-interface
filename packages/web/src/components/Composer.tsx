@@ -35,6 +35,7 @@ interface Pending {
 export function Composer({ conversationId, maxChars, attachments, streaming, disabled = false, onSend, onStop, leading, dropZone }: Props) {
   const [text, setText] = useState("");
   const [pending, setPending] = useState<Pending[]>([]);
+  const [limitNote, setLimitNote] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -67,6 +68,7 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
   const addFiles = (files: FileList | null) => {
     if (!files || !attachments) return;
     const room = Math.max(0, attachments.maxPerMessage - pending.length);
+    setLimitNote(files.length > room ? `Up to ${attachments.maxPerMessage} files per message: ${files.length - room} ${files.length - room === 1 ? "file was" : "files were"} not added.` : null);
     for (const file of Array.from(files).slice(0, room)) {
       const localId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const abort = new AbortController();
@@ -100,11 +102,13 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
   // Drag a document onto the chat, or paste one, to attach it (same as Claude.ai).
   const dragging = useFileDrop(dropZone ?? formRef, addFiles, !!attachments && !disabled);
 
-  const remove = (localId: string) =>
+  const remove = (localId: string) => {
+    setLimitNote(null);
     setPending((prev) => {
       prev.find((p) => p.localId === localId)?.abort.abort();
       return prev.filter((p) => p.localId !== localId);
     });
+  };
 
   const submit = () => {
     if (!canSend) return;
@@ -112,6 +116,7 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
     onSend(trimmed, metas);
     setText("");
     setPending([]);
+    setLimitNote(null);
     ref.current?.focus();
   };
 
@@ -153,6 +158,11 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
             </li>
           ))}
         </ul>
+      )}
+      {limitNote && (
+        <p className="notice" role="status">
+          {limitNote}
+        </p>
       )}
       <label htmlFor="composer-text" className="visually-hidden">
         Message

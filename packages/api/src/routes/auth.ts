@@ -121,6 +121,8 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
     if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
     const roles: Role[] = body.data.role === "admin" ? ["staff", "admin"] : ["staff"];
     const userId = `dev-${body.data.username.toLowerCase()}`;
+    const existing = (await deps.directory.list()).find((u) => u.id === userId);
+    if (existing && !existing.enabled) return apiError(reply, 403, "account_disabled", "This account is disabled");
     const { cookie } = await deps.sessions.create({ id: userId, email: `${body.data.username}@dev.local`, name: body.data.username, roles }, null);
     reply.setCookie(SESSION_COOKIE, cookie, deps.sessions.cookieOptions(secure));
     await audit(deps, req, { action: "login", userId, meta: { mode: "dev" } });

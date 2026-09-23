@@ -212,6 +212,8 @@ export interface AdminTrainingRow {
   email: string;
   role: Role;
   enabled: boolean;
+  /** False for a record whose user is no longer in the directory. */
+  inDirectory: boolean;
   record: TrainingRecord | null;
 }
 

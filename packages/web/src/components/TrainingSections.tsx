@@ -312,7 +312,7 @@ export function TrainingLog({ refreshKey = 0 }: { refreshKey?: number } = {}) {
               <td>{row.email}</td>
               <td>
                 {row.role}
-                {row.enabled ? "" : " (disabled)"}
+                {!row.inDirectory ? " (no longer in the directory)" : row.enabled ? "" : " (disabled)"}
               </td>
               <td>{status(row, log.version)}</td>
               <td>{row.record?.attempts ?? 0}</td>

@@ -84,6 +84,7 @@ function noticeForFallback(reason: FallbackReason | null, model: string | null):
 export function fromServerMessage(m: Message): ChatMessage {
   const notices = m.role === "assistant" ? noticeForFallback(m.fallbackReason, m.model) : [];
   if (m.role === "assistant" && m.stopReason === "max_tokens") notices.push({ kind: "truncated" });
+  if (m.role === "assistant" && m.stopReason === "stopped") notices.push({ kind: "stopped" });
   return {
     id: m.id,
     role: m.role,

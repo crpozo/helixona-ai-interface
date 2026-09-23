@@ -35,6 +35,10 @@ export function AgreementsSection({ me }: { me?: Me | null }) {
   const upload = async (a: Agreement, file: File | undefined) => {
     if (!file) return;
     setError(null);
+    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name)) {
+      setError("Upload the agreement as a PDF.");
+      return;
+    }
     setProgress((p) => ({ ...p, [a.id]: 0 }));
     try {
       const { upload: target } = await adminAgreementUpload(a.id, { size: file.size, contentType: "application/pdf" });

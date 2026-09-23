@@ -95,6 +95,8 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: Deps): void {
     const t = now().toISOString();
     const prev = await repo.get(s.userId);
     const same = prev?.version === TRAINING_INFO.version ? prev : null;
+    const locked = TRAINING_INFO.modules.some((m) => m.id < moduleId && !same?.moduleProgress?.[String(m.id)]?.completedAt);
+    if (locked) return apiError(reply, 409, "module_locked", "Complete the previous modules first");
     const progress: Record<string, TrainingModuleProgress> = { ...(same?.moduleProgress ?? {}) };
     const before = progress[String(moduleId)];
     progress[String(moduleId)] = {
@@ -160,10 +162,10 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: Deps): void {
   app.get("/api/admin/training", { preHandler: admin }, async () => {
     const [users, records] = await Promise.all([deps.directory.list(), repo.list()]);
     const byUser = new Map(records.map((r) => [r.userId, r]));
-    const items = users.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, enabled: u.enabled, record: publicRecord(byUser.get(u.id) ?? null) }));
+    const items = users.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, enabled: u.enabled, inDirectory: true, record: publicRecord(byUser.get(u.id) ?? null) }));
     const known = new Set(users.map((u) => u.id));
     for (const r of records) {
-      if (!known.has(r.userId)) items.push({ id: r.userId, name: r.name, email: r.email, role: "staff", enabled: false, record: publicRecord(r) });
+      if (!known.has(r.userId)) items.push({ id: r.userId, name: r.name, email: r.email, role: "staff", enabled: true, inDirectory: false, record: publicRecord(r) });
     }
     items.sort((a, b) => a.name.localeCompare(b.name));
     return { items, version: TRAINING_INFO.version, passingScore: TRAINING_INFO.passingScore, total: TRAINING_INFO.total };
@@ -183,7 +185,10 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: Deps): void {
     if (body.data.score < TRAINING_INFO.passingScore) return apiError(reply, 400, "not_passed", `A score of ${TRAINING_INFO.passingScore} of ${TRAINING_INFO.total} or better is required`);
     const user = (await deps.directory.list()).find((u) => u.id === userId);
     if (!user) return apiError(reply, 404, "not_found", "User not found");
-    const completedAt = new Date(`${body.data.completedAt}T12:00:00Z`).toISOString();
+    const completedDate = new Date(`${body.data.completedAt}T12:00:00Z`);
+    if (Number.isNaN(completedDate.getTime()) || completedDate.toISOString().slice(0, 10) !== body.data.completedAt) return apiError(reply, 400, "bad_request", "Provide a real date (YYYY-MM-DD)");
+    if (completedDate.getTime() > now().getTime() + 86_400_000) return apiError(reply, 400, "bad_request", "The completion date cannot be in the future");
+    const completedAt = completedDate.toISOString();
     const prev = await repo.get(userId);
     const same = prev?.version === TRAINING_INFO.version ? prev : null;
     const record: TrainingRecord = {

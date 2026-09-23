@@ -62,7 +62,8 @@ export function registerAgreementRoutes(app: FastifyInstance, deps: Deps): void 
     if (!deps.attachments) return apiError(reply, 400, "attachments_disabled", "File storage is not enabled on this server");
     const head = await deps.attachments.head(agreementKey(id));
     if (!head) return apiError(reply, 400, "upload_missing", "The PDF did not arrive; try the upload again");
-    if (head.contentType && !head.contentType.startsWith("application/pdf")) {
+    const bytes = await deps.attachments.get(agreementKey(id));
+    if ((head.contentType && !head.contentType.startsWith("application/pdf")) || !bytes.subarray(0, 5).equals(Buffer.from("%PDF-"))) {
       await deps.attachments.delete(agreementKey(id));
       return apiError(reply, 400, "unsupported_type", "Upload the agreement as a PDF");
     }

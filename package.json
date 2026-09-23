@@ -22,6 +22,8 @@
     "dev:web": "npm run dev -w @helixona/web",
     "synth": "npm run synth -w @helixona/infra",
     "e2e": "npm run e2e -w @helixona/e2e",
-    "verify": "npm run typecheck && npm run test && npm run build && npm run e2e"
+    "verify": "npm run typecheck && npm run test && npm run build && npm run e2e",
+    "pretypecheck": "npm run build -w @helixona/core",
+    "pretest": "npm run build -w @helixona/core"
   }
 }

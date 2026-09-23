@@ -1178,7 +1178,11 @@ label {
   padding: 1rem;
 }
 .table-wrap {
+  position: relative; /* keeps visually-hidden headers inside the scroll area */
   overflow-x: auto;
+}
+.table-wrap td .row.wrap {
+  flex-wrap: nowrap; /* the table scrolls sideways; buttons stay on one line */
 }
 table {
   border-collapse: collapse;
@@ -2337,4 +2341,25 @@ td {
 .agreement-card label.btn.busy {
   opacity: 0.7;
   cursor: progress;
+}
+
+/* Phone: the course and documentation header wraps instead of pushing the page sideways. */
+@media (max-width: 640px) {
+  .login-bar {
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    padding: 0.85rem 1rem;
+  }
+  .logo-login img {
+    height: 30px;
+  }
+  .login-bar-right {
+    flex-wrap: wrap;
+    gap: 0.5rem 0.9rem;
+    min-width: 0;
+  }
+  .login-bar-link {
+    white-space: normal;
+    text-align: right;
+  }
 }

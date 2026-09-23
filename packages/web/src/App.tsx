@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   ApiError,
+  createAttachment,
   createConversation,
   createProject,
   deleteConversation,
@@ -14,10 +15,12 @@ import {
   sendMessage,
   setUnauthorizedHandler,
   updateConversation,
+  uploadFile,
 } from "./lib/api";
 import { chatReducer, initialChatState, type ChatMessage } from "./lib/chatReducer";
 import { useIdleTimeout } from "./lib/idle";
-import { currentRoute, navigate, useRoute } from "./lib/router";
+import { conversationIdFromPath, currentRoute, navigate, usePath, useRoute } from "./lib/router";
+import { attachmentType } from "./lib/files";
 import type { AttachmentMeta, Conversation, Me, Project } from "./lib/types";
 import { AdminPage } from "./components/AdminPage";
 import { ChatPanel } from "./components/ChatPanel";
@@ -68,6 +71,7 @@ function signInErrorReason(): string | null {
 
 export function App() {
   const route = useRoute();
+  const path = usePath();
   const [auth, setAuth] = useState<Auth>({ status: "loading" });
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -112,6 +116,7 @@ export function App() {
   const refreshConversations = useCallback(async () => {
     try {
       setConversations(await listConversations());
+      setListLoaded(true);
       setListError(null);
     } catch (e) {
       if (!(e instanceof ApiError && e.status === 401)) setListError("Could not load the conversation list.");
@@ -198,6 +203,7 @@ export function App() {
       abortStream();
       setProjectView(null);
       setSidebarOpen(false);
+      navigate(`/c/${id}`);
       const seq = ++loadSeq.current;
       const known = conversations.find((c) => c.id === id) ?? null;
       setSelected(known);
@@ -220,6 +226,32 @@ export function App() {
     [abortStream, conversations],
   );
 
+  // Deep link or reload on /c/<id>: open that conversation once the list is known; an unknown id goes home.
+  const [listLoaded, setListLoaded] = useState(false);
+  useEffect(() => {
+    if (auth.status !== "authed" || !listLoaded) return;
+    const id = conversationIdFromPath(path);
+    if (!id) {
+      if (route === "/" && path !== "/") navigate("/", { replace: true });
+      return;
+    }
+    if (selected?.id === id || loadingConv) return;
+    if (conversations.some((c) => c.id === id)) void selectConversation(id);
+    else navigate("/", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.status, listLoaded, path, route, conversations]);
+
+  // Phone drawer: Escape closes it and focus moves inside when it opens.
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    document.getElementById("sidebar")?.querySelector<HTMLElement>("button, a")?.focus();
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen]);
+
   // A new chat starts from the start screen (home) or from the project's own composer, like Claude.ai.
   const startNew = (projectId: string | null = null) => {
     abortStream();
@@ -231,6 +263,7 @@ export function App() {
     setSelected(null);
     dispatch({ type: "reset" });
     setProjectView(null);
+    navigate("/");
   };
 
   const openProject = (id: string) => {
@@ -239,6 +272,7 @@ export function App() {
     dispatch({ type: "reset" });
     setProjectView(id);
     setSidebarOpen(false);
+    navigate("/");
   };
 
   const newProject = async () => {
@@ -283,6 +317,7 @@ export function App() {
         abortStream();
         setSelected(null);
         dispatch({ type: "reset" });
+        navigate("/", { replace: true });
       }
     } catch (e) {
       if (!(e instanceof ApiError && e.status === 401)) setListError("Could not delete the conversation.");
@@ -337,15 +372,23 @@ export function App() {
   };
 
   /** From the project page: create the conversation in the project and send its first message. */
-  const startInProject = async (projectId: string | null, text: string, alias: string) => {
+  const startInProject = async (projectId: string | null, text: string, alias: string, files: File[] = []) => {
     abortStream();
     const conv = await createConversation(alias, projectId);
+    const metas: AttachmentMeta[] = [];
+    for (const file of files) {
+      const contentType = attachmentType(file) ?? "application/octet-stream";
+      const created = await createAttachment(conv.id, { name: file.name, size: file.size, contentType });
+      await uploadFile(created.upload, file, () => {});
+      metas.push({ id: created.id, name: created.name, contentType, size: file.size, pages: null });
+    }
     ++loadSeq.current;
     setConversations((prev) => [conv, ...prev]);
     setSelected(conv);
     setProjectView(null);
+    navigate(`/c/${conv.id}`);
     dispatch({ type: "load", conversationId: conv.id, messages: [] });
-    void sendTo(conv, text);
+    void sendTo(conv, text, metas);
   };
 
   // Mantén `selected` sincronizado con la lista (pinnedModel, updatedAt...).
@@ -456,10 +499,11 @@ export function App() {
                 models={me.catalog.models}
                 maxMb={me.limits.attachments?.maxMb ?? 20}
                 uploadsEnabled={me.limits.attachments?.enabled ?? false}
+                attachments={me.limits.attachments?.enabled ? me.limits.attachments : null}
                 onBack={() => setProjectView(null)}
                 onOpenConversation={(id) => void selectConversation(id)}
                 defaultAlias={me.catalog.defaultAlias}
-                onStartConversation={(text, alias) => startInProject(projectView, text, alias)}
+                onStartConversation={(text, alias, files) => startInProject(projectView, text, alias, files)}
                 onUpdated={projectUpdated}
                 onDelete={() => void removeProject(projectView)}
               />
@@ -482,7 +526,7 @@ export function App() {
                   <p className="eyebrow">{brand.productName}</p>
                   <h1>Hello, {me.user.name}</h1>
                   <p className="muted home-lead">What are you working on today?</p>
-                  <StartComposer models={me.catalog.models} defaultAlias={me.catalog.defaultAlias} placeholder="Write a message…" onStart={(text, alias) => startInProject(null, text, alias)} />
+                  <StartComposer models={me.catalog.models} defaultAlias={me.catalog.defaultAlias} attachments={me.limits.attachments?.enabled ? me.limits.attachments : null} placeholder="Write a message…" onStart={(text, alias, files) => startInProject(null, text, alias, files)} />
                   <p className="muted small home-hint">Patient information stays in this assistant; review every answer before you use it.</p>
                 </div>
               </div>

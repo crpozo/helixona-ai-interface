@@ -149,10 +149,14 @@ describe("ModelRouter", () => {
     const ac = new AbortController();
     const slow: LlmProvider = new FakeProvider({ refusalFallbacks, delayMs: 20 });
     const p = new ModelRouter({ catalog: DEFAULT_CATALOG, provider: slow }).runTurn({ conversation: conv(), history, userText: "hola", systemPrompt: "s", emit: c.emit, signal: ac.signal });
-    setTimeout(() => ac.abort(), 30);
+    setTimeout(() => ac.abort(), 60);
     const r = await p;
     expect(r.ok).toBe(false);
     expect((c.events.at(-1) as { code: string }).code).toBe("aborted");
+    // The partial answer and the model that gave it come back, so the caller can keep the turn.
+    expect(r.partial).toBe(true);
+    expect(r.servedModel).toBe("anthropic.claude-fable-5-1");
+    expect(r.content.map((b) => (b.type === "text" ? b.text : "")).join("").length).toBeGreaterThan(0);
   });
 });
 

@@ -53,9 +53,9 @@ test.describe("Conversations", () => {
     await expect(page.locator(".conv-list .conv-title").first()).toHaveText("Renamed chat");
     await expect(page.locator(".chat-title")).toHaveText("Renamed chat");
 
-    // Everything survives a reload.
+    // Everything survives a reload, and the URL brings the same conversation back.
+    await expect(page).toHaveURL(/\/c\/[0-9A-Z]{26}$/);
     await page.reload({ waitUntil: "load" });
-    await page.locator(".conv-list .conv-select").first().click();
     await expect(page.locator(".msg")).toHaveCount(6);
     await expect(page.locator(".chat-title")).toHaveText("Renamed chat");
 
@@ -74,6 +74,10 @@ test.describe("Conversations", () => {
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByRole("button", { name: "Stop" }).click();
     await expect(page.locator(".composer-stop")).toHaveCount(0);
+    await expect(page.locator(".msg-assistant").first().locator(".notice")).toContainText("Stopped by you");
+    // What was sent and answered so far is kept: a reload shows the same turn, still marked as stopped.
+    await page.reload({ waitUntil: "load" });
+    await expect(page.locator(".msg-user")).toHaveCount(1);
     await expect(page.locator(".msg-assistant").first().locator(".notice")).toContainText("Stopped by you");
     // The conversation goes on afterwards.
     await page.locator("#composer-text").fill("Continue");
@@ -97,6 +101,17 @@ test.describe("Conversations", () => {
     await box.fill("x".repeat(20_001));
     await expect(counter).toHaveClass(/over/);
     await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+  });
+
+  test("a file picked on the start screen travels with the first message", async ({ page }) => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.locator(".composer-start input[type=file]").setInputFiles({ name: "Referral.pdf", mimeType: "application/pdf", buffer: await samplePdf("Referral") });
+    await expect(page.locator(".composer-start .attach-chip")).toContainText("Referral.pdf");
+    await page.getByPlaceholder("Write a message…").fill("What is this about?");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.locator(".msg-user .attach-chip")).toContainText("Referral.pdf");
+    await expect(page.locator(".msg-assistant")).toHaveCount(1);
+    await expect(page).toHaveURL(/\/c\/[0-9A-Z]{26}$/);
   });
 
   test("a PDF attached from the composer travels with the message; unsupported files are refused", async ({ page }) => {

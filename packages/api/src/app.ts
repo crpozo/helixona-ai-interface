@@ -125,6 +125,8 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith("/api/")) return apiError(reply, 404, "not_found", "Resource not found");
       if (req.method !== "GET") return apiError(reply, 405, "method_not_allowed", "Method not allowed");
+      // A file that is not there (an old bundle after a deploy) is a 404; only app routes get the shell.
+      if (/\.[a-z0-9]{1,8}$/i.test(req.url.split("?")[0] ?? "")) return apiError(reply, 404, "not_found", "Resource not found");
       return reply.header("cache-control", "no-store").type("text/html; charset=utf-8").send(index);
     });
   } else {

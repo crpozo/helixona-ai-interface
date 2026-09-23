@@ -131,10 +131,11 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     try {
       const result = await deps.router.runTurn({ conversation: conv, history, userText, userContent, systemPrompt: deps.systemPrompt.text, systemExtra, signal: ac.signal, emit });
       const latencyMs = now().getTime() - started.getTime();
+      const seq = history.length;
+      const storedUserMessage = (createdAt: string): StoredMessage => ({ id: userMessageId, conversationId: id, seq: seq + 1, role: "user", content: [{ type: "text", text: userText }], ...(attached.length > 0 ? { attachments: attached.map((a) => a.meta) } : {}), model: null, fallbackReason: null, stopReason: null, usage: null, createdAt });
       if (result.ok && result.servedModel) {
-        const seq = history.length;
         const createdAt = now().toISOString();
-        const userMsg: StoredMessage = { id: userMessageId, conversationId: id, seq: seq + 1, role: "user", content: [{ type: "text", text: userText }], ...(attached.length > 0 ? { attachments: attached.map((a) => a.meta) } : {}), model: null, fallbackReason: null, stopReason: null, usage: null, createdAt };
+        const userMsg = storedUserMessage(createdAt);
         const assistantMsg: StoredMessage = { id: assistantMessageId, conversationId: id, seq: seq + 2, role: "assistant", content: result.content, model: result.servedModel, fallbackReason: result.fallbackReason, stopReason: result.stopReason, usage: result.usage, createdAt: now().toISOString() };
         await deps.repos.messages.append(userMsg, ttl);
         await deps.repos.messages.append(assistantMsg, ttl);
@@ -148,6 +149,18 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
         });
         await deps.repos.usage.add(userId, day, result.servedModel, result.usage);
         await audit(deps, req, { action: "turn", conversationId: id, model: result.requestedModel, servedBy: result.servedModel, fallbackReason: result.fallbackReason ?? undefined, stopReason: result.stopReason ?? undefined, usage: result.usage, latencyMs });
+      } else if (result.error?.kind === "aborted") {
+        // The reader pressed Stop or left the page: the message they sent and whatever was answered stay in
+        // the conversation (the answer marked as stopped) instead of vanishing on the next load.
+        const partialText = result.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+        await deps.repos.messages.append(storedUserMessage(now().toISOString()), ttl);
+        let messageCount = seq + 1;
+        if (partialText) {
+          await deps.repos.messages.append({ id: assistantMessageId, conversationId: id, seq: seq + 2, role: "assistant", content: result.content, model: result.servedModel ?? conv.modelId, fallbackReason: result.fallbackReason, stopReason: "stopped", usage: null, createdAt: now().toISOString() }, ttl);
+          messageCount = seq + 2;
+        }
+        await deps.repos.conversations.update(userId, id, { messageCount, lastInputTokens: conv.lastInputTokens + estimateTokens(userText) + attachedTokens + estimateTokens(partialText) });
+        await audit(deps, req, { action: "turn_stopped", conversationId: id, model: result.requestedModel, servedBy: result.servedModel ?? undefined, latencyMs, meta: { partial: partialText.length > 0 } });
       } else if (result.stopReason === "refusal") {
         await audit(deps, req, { action: "turn", conversationId: id, model: result.requestedModel, refusalCategory: result.refusalCategory, stopReason: "refusal", latencyMs });
       } else {

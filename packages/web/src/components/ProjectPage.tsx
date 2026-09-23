@@ -13,10 +13,12 @@ interface Props {
   defaultAlias: string;
   maxMb: number;
   uploadsEnabled: boolean;
+  /** Upload limits for files sent with the first message; null when uploads are off. */
+  attachments?: { maxMb: number; maxPerMessage: number } | null;
   onBack: () => void;
   onOpenConversation: (id: string) => void;
   /** Starts a conversation in this project with its first message; resolves once it exists. */
-  onStartConversation: (text: string, modelAlias: string) => Promise<void>;
+  onStartConversation: (text: string, modelAlias: string, files: File[]) => Promise<void>;
   onUpdated: (project: Project) => void;
   onDelete: () => void;
 }
@@ -45,7 +47,7 @@ export function relativeTime(iso: string, now = Date.now()): string {
 }
 
 
-export function ProjectPage({ project, conversations, models, defaultAlias, maxMb, uploadsEnabled, onBack, onOpenConversation, onStartConversation, onUpdated, onDelete }: Props) {
+export function ProjectPage({ project, conversations, models, defaultAlias, maxMb, uploadsEnabled, attachments = null, onBack, onOpenConversation, onStartConversation, onUpdated, onDelete }: Props) {
   // Settings card (name, description, visibility).
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
@@ -184,7 +186,7 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
 
       <div className="project-grid">
         <div className="project-main">
-          <StartComposer models={models} defaultAlias={defaultAlias} onStart={onStartConversation} />
+          <StartComposer models={models} defaultAlias={defaultAlias} attachments={attachments} onStart={onStartConversation} />
 
           <section className="project-recents" aria-labelledby="proj-recents">
             <h2 id="proj-recents" className="section-label">

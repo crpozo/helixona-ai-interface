@@ -76,7 +76,7 @@ describe("ProjectPage", () => {
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "sonnet" } });
     fireEvent.change(screen.getByPlaceholderText("How can I help you today?"), { target: { value: "  Summarize this EOB  " } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(p.onStartConversation).toHaveBeenCalledWith("Summarize this EOB", "sonnet"));
+    await waitFor(() => expect(p.onStartConversation).toHaveBeenCalledWith("Summarize this EOB", "sonnet", []));
     await waitFor(() => expect((screen.getByPlaceholderText("How can I help you today?") as HTMLTextAreaElement).value).toBe(""));
   });
 

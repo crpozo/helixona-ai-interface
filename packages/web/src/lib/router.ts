@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 export type Route = "/login" | "/" | "/admin" | "/documentation" | "/training";
 /** Paths `navigate` accepts: a route, or one document inside the documentation. */
-export type Path = Route | `/documentation/${string}`;
+export type Path = Route | `/documentation/${string}` | `/c/${string}`;
 
 const listeners = new Set<() => void>();
 
@@ -26,6 +26,17 @@ export function normalizeRoute(pathname: string): Route {
   return "/";
 }
 
+/** Id of the conversation in `/c/<id>`; null elsewhere. The id is opaque (a ULID), never a title. */
+export function conversationIdFromPath(pathname: string): string | null {
+  const m = /^\/c\/([^/]+)\/?$/.exec(pathname);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1] ?? "") || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Slug of the document in `/documentation/<slug>`; null on the index or on any other route. */
 export function documentSlug(pathname: string): string | null {
   const m = /^\/documentation\/([^/]+)\/?$/.exec(pathname);
@@ -37,7 +48,7 @@ export function documentSlug(pathname: string): string | null {
   }
 }
 
-/** Navega sin recargar. Nunca ponemos datos (ids, títulos) en la URL; solo rutas y el slug de un documento. */
+/** Navigates without a reload. The URL carries routes, a document slug or a conversation id; never titles or content. */
 export function navigate(to: Path, opts: { replace?: boolean } = {}) {
   if (typeof window === "undefined") return;
   if (currentPath() === to) return;
