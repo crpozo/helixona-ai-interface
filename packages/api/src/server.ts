@@ -38,8 +38,8 @@ export async function createDeps(env: NodeJS.ProcessEnv = process.env): Promise<
     ? null
     : new CognitoPasswordAuth({ region: config.COGNITO_REGION!, userPoolId: config.COGNITO_USER_POOL_ID!, clientId: config.COGNITO_CLIENT_ID!, clientSecret: config.COGNITO_CLIENT_SECRET! });
   const feedback = config.FEEDBACK_TOPIC_ARN
-    ? new SnsFeedbackSender(config.AWS_REGION!, config.FEEDBACK_TOPIC_ARN)
-    : config.STORE_MODE === "memory" ? new MemoryFeedbackSender() : null;
+    ? new SnsFeedbackSender(config.AWS_REGION!, config.FEEDBACK_TOPIC_ARN, config.FEEDBACK_EMAIL)
+    : config.STORE_MODE === "memory" ? new MemoryFeedbackSender(config.FEEDBACK_EMAIL || "maintainer@example.test") : null;
   return { config, log, catalog, repos, sessions, identity, directory, provider, router, systemPrompt, attachments, passwordAuth, feedback };
 }
 

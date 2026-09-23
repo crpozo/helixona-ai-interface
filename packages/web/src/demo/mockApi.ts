@@ -232,6 +232,8 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     return new Response(null, { status: 204 });
   }
   if (path === "/api/feedback/bug" && method === "POST") return json({ ok: true });
+  if (path === "/api/admin/feedback" && method === "GET") return json({ enabled: true, email: "carlos@mindfultech.ec", subscription: "confirmed" });
+  if ((path === "/api/admin/feedback/resend-confirmation" || path === "/api/admin/feedback/test") && method === "POST") return json({ ok: true });
   if (path === "/api/training" && method === "GET") return json(trainingInfo());
   const mModule = path.match(/^\/api\/training\/modules\/(\d+)$/);
   if (mModule && method === "POST") {

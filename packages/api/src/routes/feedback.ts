@@ -10,11 +10,14 @@ const MAX_PER_HOUR = 10;
 /**
  * "Report a bug" from the sidebar: the description goes by email to the person who runs the
  * assistant (an SNS topic with their address subscribed). The app keeps only an audit entry that a
- * report was sent, never its text, since a user may describe patient data by mistake.
+ * report was sent, never its text, since a user may describe patient data by mistake. Administrators
+ * can see whether the inbox is confirmed, ask for the confirmation email again, and send a test.
  */
 export function registerFeedbackRoutes(app: FastifyInstance, deps: Deps): void {
   const now = deps.now ?? (() => new Date());
+  const admin = requireAuth(["admin"]);
   const recent = new Map<string, number[]>();
+  const userAgent = (req: { headers: Record<string, unknown> }) => String(req.headers["user-agent"] ?? "").slice(0, 200);
 
   app.post("/api/feedback/bug", { preHandler: requireAuth() }, async (req, reply) => {
     if (!deps.feedback) return apiError(reply, 503, "feedback_disabled", "Bug reports are not enabled on this server");
@@ -27,14 +30,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, deps: Deps): void {
     times.push(t);
     recent.set(s.userId, times);
     const page = (body.data.page ?? "").split("?")[0]!.slice(0, 200);
-    const report: BugReport = {
-      reporterName: s.name,
-      reporterEmail: s.email,
-      description: body.data.description,
-      page,
-      userAgent: String(req.headers["user-agent"] ?? "").slice(0, 200),
-      at: now().toISOString(),
-    };
+    const report: BugReport = { reporterName: s.name, reporterEmail: s.email, description: body.data.description, page, userAgent: userAgent(req), at: now().toISOString() };
     try {
       await deps.feedback.send(report);
     } catch (e) {
@@ -42,6 +38,50 @@ export function registerFeedbackRoutes(app: FastifyInstance, deps: Deps): void {
       return apiError(reply, 502, "feedback_failed", "The report could not be sent right now. Please try again later");
     }
     await audit(deps, req, { action: "bug_reported", meta: { length: body.data.description.length, page } });
+    return { ok: true };
+  });
+
+  // Delivery status for administrators: SNS delivers nothing until the inbox confirms its subscription.
+  app.get("/api/admin/feedback", { preHandler: admin }, async () => {
+    if (!deps.feedback) return { enabled: false, email: null, subscription: "none" };
+    try {
+      return { enabled: true, ...(await deps.feedback.status()) };
+    } catch (e) {
+      deps.log.warn("feedback_status_failed", { errorClass: e instanceof Error ? e.name : "unknown" });
+      return { enabled: true, email: null, subscription: "unknown" };
+    }
+  });
+
+  app.post("/api/admin/feedback/resend-confirmation", { preHandler: admin }, async (req, reply) => {
+    if (!deps.feedback) return apiError(reply, 503, "feedback_disabled", "Bug reports are not enabled on this server");
+    try {
+      await deps.feedback.resendConfirmation();
+    } catch (e) {
+      deps.log.error("feedback_confirmation_failed", { errorClass: e instanceof Error ? e.name : "unknown", requestId: req.requestId });
+      return apiError(reply, 502, "feedback_failed", "The confirmation email could not be requested right now");
+    }
+    await audit(deps, req, { action: "admin_feedback_confirmation_resent" });
+    return { ok: true };
+  });
+
+  app.post("/api/admin/feedback/test", { preHandler: admin }, async (req, reply) => {
+    if (!deps.feedback) return apiError(reply, 503, "feedback_disabled", "Bug reports are not enabled on this server");
+    const s = req.session!;
+    const report: BugReport = {
+      reporterName: s.name,
+      reporterEmail: s.email,
+      description: "Test message sent from the Administration page to check that bug reports arrive.",
+      page: "/admin",
+      userAgent: userAgent(req),
+      at: now().toISOString(),
+    };
+    try {
+      await deps.feedback.send(report);
+    } catch (e) {
+      deps.log.error("feedback_send_failed", { errorClass: e instanceof Error ? e.name : "unknown", requestId: req.requestId });
+      return apiError(reply, 502, "feedback_failed", "The test report could not be sent right now");
+    }
+    await audit(deps, req, { action: "admin_feedback_test" });
     return { ok: true };
   });
 }

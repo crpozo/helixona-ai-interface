@@ -2395,3 +2395,12 @@ td {
   font-size: 0.9rem;
   color: #9fd8ad;
 }
+
+.feedback-delivery {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.feedback-delivery .notice {
+  margin: 0;
+}

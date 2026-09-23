@@ -303,3 +303,10 @@ export interface Agreement {
   file: AgreementFile | null;
 }
 export interface AgreementsInfo { items: Agreement[]; canDownload: boolean; uploads: boolean }
+
+// ---- Bug report delivery (administration) ----
+export interface FeedbackStatus {
+  enabled: boolean;
+  email: string | null;
+  subscription: "confirmed" | "pending" | "none" | "unknown";
+}

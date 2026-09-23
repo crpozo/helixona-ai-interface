@@ -1,5 +1,6 @@
 import type {
   Agreement,
+  FeedbackStatus,
   AgreementFile,
   AgreementsInfo,
   AdminTrainingLog,
@@ -385,4 +386,16 @@ export function adminRemoveAgreement(id: string): Promise<void> {
 
 export function reportBug(description: string, page: string): Promise<{ ok: true }> {
   return request("/api/feedback/bug", { method: "POST", body: { description, page } });
+}
+
+export function adminFeedbackStatus(): Promise<FeedbackStatus> {
+  return request<FeedbackStatus>("/api/admin/feedback");
+}
+
+export function adminResendFeedbackConfirmation(): Promise<{ ok: true }> {
+  return request("/api/admin/feedback/resend-confirmation", { method: "POST", body: {} });
+}
+
+export function adminSendTestBugReport(): Promise<{ ok: true }> {
+  return request("/api/admin/feedback/test", { method: "POST", body: {} });
 }

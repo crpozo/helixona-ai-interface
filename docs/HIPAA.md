@@ -246,4 +246,6 @@ email, the page and the browser go by email to the maintainer through an SNS top
 (`FEEDBACK_TOPIC_ARN`, key-encrypted, the address in the `feedbackEmail` context of the
 infrastructure; SNS asks that inbox to confirm the subscription once). The form tells staff not to
 include patient information, the API rate-limits reports per user, and the audit log records only
-that a report was sent (length and page), never its text.
+that a report was sent (length and page), never its text. The Administration page shows whether the
+inbox has confirmed its subscription, can ask SNS for the confirmation email again, and can send a
+test report.

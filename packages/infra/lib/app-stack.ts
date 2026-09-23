@@ -143,6 +143,8 @@ export class AppStack extends cdk.Stack {
     if (cfg.feedbackEmail) feedbackTopic.addSubscription(new subscriptions.EmailSubscription(cfg.feedbackEmail));
     else cdk.Annotations.of(this).addWarningV2('helixona:no-feedback-email', 'No feedbackEmail in context: bug reports have no recipient.');
     feedbackTopic.grantPublish(this.taskRole);
+    // The Administration page shows whether the inbox confirmed its subscription and can ask for the email again.
+    this.taskRole.addToPolicy(new iam.PolicyStatement({ sid: 'FeedbackSubscription', actions: ['sns:ListSubscriptionsByTopic', 'sns:Subscribe'], resources: [feedbackTopic.topicArn] }));
 
     const containerPort = 3000;
     const containerProtocol = cfg.tlsToContainer ? 'https' : 'http';
@@ -206,6 +208,7 @@ export class AppStack extends cdk.Stack {
         LOG_LEVEL: 'info',
         ATTACHMENTS_BUCKET: props.attachmentsBucket.bucketName,
         FEEDBACK_TOPIC_ARN: feedbackTopic.topicArn,
+        ...(cfg.feedbackEmail ? { FEEDBACK_EMAIL: cfg.feedbackEmail } : {}),
         TLS_TO_CONTAINER: String(cfg.tlsToContainer),
       },
       secrets: {

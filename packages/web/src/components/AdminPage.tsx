@@ -3,6 +3,7 @@ import type { AdminUser, Me, Role, UsageRow } from "../lib/types";
 import { ApiError, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminResendInvitation, adminResetMfa, adminSetRole, adminSetTemporaryPassword, adminUsage } from "../lib/api";
 import { modelLabel } from "../lib/models";
 import { TrainingLog } from "./TrainingSections";
+import { FeedbackDelivery } from "./FeedbackDelivery";
 
 interface Props {
   me: Me;
@@ -286,6 +287,11 @@ export function AdminPage({ me, onBack }: Props) {
             {formBusy ? "Creating…" : "Create user"}
           </button>
         </form>
+      </section>
+
+      <section aria-labelledby="feedback-title" className="card">
+        <h2 id="feedback-title">Bug reports</h2>
+        <FeedbackDelivery />
       </section>
 
       <section aria-labelledby="training-title" className="card">

@@ -51,6 +51,8 @@ const Env = z.object({
   ATTACHMENTS_BUCKET: z.string().optional(),
   /** SNS topic that emails bug reports to the maintainer; unset = reports kept in memory (dev) or disabled. */
   FEEDBACK_TOPIC_ARN: z.string().optional(),
+  /** The inbox subscribed to that topic, so the Administration page can show whether it is confirmed. */
+  FEEDBACK_EMAIL: z.string().optional(),
   MAX_ATTACHMENT_MB: z.coerce.number().positive().default(20),
   MAX_ATTACHMENTS_PER_MESSAGE: z.coerce.number().int().positive().default(5),
 });

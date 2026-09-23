@@ -664,3 +664,22 @@ describe("Bug reports", () => {
     await app.close();
   });
 });
+
+describe("Bug report delivery (administration)", () => {
+  it("shows whether the inbox is confirmed, resends the confirmation and sends a test report", async () => {
+    const { app, repos, deps } = await makeApp();
+    const staff = await login(app, "ana");
+    expect((await app.inject({ method: "GET", url: "/api/admin/feedback", headers: { cookie: staff.cookie } })).statusCode).toBe(403);
+    const admin = await login(app, "root", "admin");
+    expect((await app.inject({ method: "GET", url: "/api/admin/feedback", headers: { cookie: admin.cookie } })).json()).toEqual({ enabled: true, email: "maintainer@example.test", subscription: "confirmed" });
+    expect((await app.inject({ method: "POST", url: "/api/admin/feedback/resend-confirmation", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(200);
+    const sender = deps.feedback as MemoryFeedbackSender;
+    expect(sender.confirmations).toBe(1);
+    expect((await app.inject({ method: "POST", url: "/api/admin/feedback/test", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(200);
+    expect(sender.reports).toHaveLength(1);
+    expect(sender.reports[0]).toMatchObject({ reporterEmail: "root@dev.local", page: "/admin" });
+    expect(sender.reports[0]!.description).toContain("Test message");
+    expect(repos.audit.events.map((e) => e.action)).toEqual(expect.arrayContaining(["admin_feedback_confirmation_resent", "admin_feedback_test"]));
+    await app.close();
+  });
+});

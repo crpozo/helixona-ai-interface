@@ -12,6 +12,11 @@ test.describe("Administration", () => {
     await expect(page).toHaveURL(/\/admin$/);
     await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
     await expect(page.locator("tr", { hasText: adminName })).toBeVisible();
+    // Bug reports: where they go and that the inbox is confirmed (memory sender in this environment).
+    await expect(page.getByRole("heading", { name: "Bug reports" })).toBeVisible();
+    await expect(page.getByText(/Delivery confirmed/)).toBeVisible();
+    await page.getByRole("button", { name: "Send a test report" }).click();
+    await expect(page.getByText(/Test report sent/)).toBeVisible();
 
     // A new user is invited.
     const email = `${uniqueUser("paper")}@clinic.test`;
