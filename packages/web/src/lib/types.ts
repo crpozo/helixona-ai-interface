@@ -114,6 +114,8 @@ export interface AdminUser {
   role: Role;
   enabled: boolean;
   createdAt: string;
+  /** `invited`: still on the temporary password from the invitation email (first sign-in pending). */
+  status?: "invited" | "active";
 }
 
 export interface AuditEvent {

@@ -47,6 +47,19 @@ export function registerAdminRoutes(app: FastifyInstance, deps: Deps): void {
     return { ok: true };
   });
 
+  // New invitation email with a fresh temporary password for a user who has not signed in yet.
+  app.post("/api/admin/users/:id/invitation/resend", { preHandler: admin }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    try {
+      await deps.directory.resendInvitation(id);
+    } catch (e) {
+      deps.log.warn("admin_invitation_resend_failed", { targetUserId: id, error: (e as { name?: string }).name ?? "error" });
+      return apiError(reply, 409, "not_invited", "Only accounts that have not completed their first sign-in can receive a new invitation");
+    }
+    await audit(deps, req, { action: "admin_user_invitation_resent", meta: { targetUserId: id } });
+    return { ok: true };
+  });
+
   // Lost or replaced phone: forget the authenticator; the user enrolls a new one at the next sign-in.
   app.post("/api/admin/users/:id/mfa/reset", { preHandler: admin }, async (req) => {
     const { id } = req.params as { id: string };

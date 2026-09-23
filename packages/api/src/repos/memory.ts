@@ -68,12 +68,16 @@ export class MemoryUserDirectory implements UserDirectory {
   constructor(seed: DirectoryUser[] = []) { this.users = seed.map((u) => ({ ...u })); }
   async list() { return this.users.map((u) => ({ ...u })); }
   async create(input: { email: string; name: string; role: "staff" | "admin" }) {
-    const u: DirectoryUser = { id: `dev-${this.users.length + 1}`, email: input.email, name: input.name, role: input.role, enabled: true, createdAt: new Date().toISOString() };
+    const u: DirectoryUser = { id: `dev-${this.users.length + 1}`, email: input.email, name: input.name, role: input.role, enabled: true, createdAt: new Date().toISOString(), status: "invited" };
     this.users.push(u); return { ...u };
   }
   async setEnabled(id: string, enabled: boolean) { const u = this.users.find((x) => x.id === id); if (u) u.enabled = enabled; }
   async setRole(id: string, role: "staff" | "admin") { const u = this.users.find((x) => x.id === id); if (u) u.role = role; }
   async resetMfa() {} // no authenticator in dev mode
+  async resendInvitation(id: string) {
+    const u = this.users.find((x) => x.id === id);
+    if (!u || u.status !== "invited") throw new Error("not invited");
+  }
 }
 
 export class MemoryTrainingRepo implements TrainingRepo {

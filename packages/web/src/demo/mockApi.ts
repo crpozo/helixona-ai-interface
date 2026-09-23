@@ -195,6 +195,7 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
   const mRole = path.match(/^\/api\/admin\/users\/([^/]+)\/role$/);
   if (mRole && method === "POST") { const u = state.users.find((x) => x.id === decodeURIComponent(mRole[1]!)); if (u) u.role = body["role"] === "admin" ? "admin" : "staff"; return json({ ok: true }); }
   if (/^\/api\/admin\/users\/[^/]+\/mfa\/reset$/.test(path) && method === "POST") return json({ ok: true });
+  if (/^\/api\/admin\/users\/[^/]+\/invitation\/resend$/.test(path) && method === "POST") return json({ ok: true });
   const mUser = path.match(/^\/api\/admin\/users\/([^/]+)\/(disable|enable)$/);
   if (mUser && method === "POST") { const u = state.users.find((x) => x.id === mUser[1]); if (u) u.enabled = mUser[2] === "enable"; return json({ ok: true }); }
   if (path === "/api/admin/usage") return json({ items: state.usage.filter((u) => u.day === (url.searchParams.get("day") ?? today())) });

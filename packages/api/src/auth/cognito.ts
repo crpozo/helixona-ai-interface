@@ -87,7 +87,15 @@ export class CognitoUserDirectory implements UserDirectory {
       const r = await this.client.send(new ListUsersCommand({ UserPoolId: this.userPoolId, PaginationToken: token, Limit: 60 }));
       for (const u of r.Users ?? []) {
         const attr = (n: string) => u.Attributes?.find((a) => a.Name === n)?.Value ?? "";
-        out.push({ id: attr("sub") || (u.Username ?? ""), email: attr("email"), name: attr("name"), role: admins.has(u.Username ?? "") ? "admin" : "staff", enabled: u.Enabled ?? false, createdAt: u.UserCreateDate?.toISOString() ?? "" });
+        out.push({
+          id: attr("sub") || (u.Username ?? ""),
+          email: attr("email"),
+          name: attr("name"),
+          role: admins.has(u.Username ?? "") ? "admin" : "staff",
+          enabled: u.Enabled ?? false,
+          createdAt: u.UserCreateDate?.toISOString() ?? "",
+          status: u.UserStatus === "FORCE_CHANGE_PASSWORD" ? "invited" : "active",
+        });
       }
       token = r.PaginationToken;
     } while (token);
@@ -122,12 +130,19 @@ export class CognitoUserDirectory implements UserDirectory {
     await this.client.send(new AdminUserGlobalSignOutCommand({ UserPoolId: this.userPoolId, Username: username })).catch(() => {});
   }
 
+  // The temporary password in the invitation expires after 3 days, and "Forgot your password?" does
+  // not work until the first sign-in is complete, so a new invitation is the only way back in.
+  async resendInvitation(id: string): Promise<void> {
+    const username = await this.usernameFor(id);
+    await this.client.send(new AdminCreateUserCommand({ UserPoolId: this.userPoolId, Username: username, MessageAction: "RESEND", DesiredDeliveryMediums: ["EMAIL"] }));
+  }
+
   async create(input: { email: string; name: string; role: Role }): Promise<DirectoryUser> {
     const r = await this.client.send(new AdminCreateUserCommand({ UserPoolId: this.userPoolId, Username: input.email, DesiredDeliveryMediums: ["EMAIL"], UserAttributes: [{ Name: "email", Value: input.email }, { Name: "email_verified", Value: "true" }, { Name: "name", Value: input.name }] }));
     await this.client.send(new AdminAddUserToGroupCommand({ UserPoolId: this.userPoolId, Username: input.email, GroupName: input.role }));
     if (input.role === "admin") await this.client.send(new AdminAddUserToGroupCommand({ UserPoolId: this.userPoolId, Username: input.email, GroupName: "staff" }));
     const sub = r.User?.Attributes?.find((a) => a.Name === "sub")?.Value ?? input.email;
-    return { id: sub, email: input.email, name: input.name, role: input.role, enabled: true, createdAt: new Date().toISOString() };
+    return { id: sub, email: input.email, name: input.name, role: input.role, enabled: true, createdAt: new Date().toISOString(), status: "invited" };
   }
 
   async setEnabled(id: string, enabled: boolean): Promise<void> {

@@ -103,7 +103,9 @@ export interface UsageRepo {
   listByDay(day: string): Promise<UsageRow[]>;
 }
 
-export interface DirectoryUser { id: string; email: string; name: string; role: Role; enabled: boolean; createdAt: string }
+/** `invited`: created by an administrator and still on the temporary password (first sign-in pending). */
+export type DirectoryUserStatus = "invited" | "active";
+export interface DirectoryUser { id: string; email: string; name: string; role: Role; enabled: boolean; createdAt: string; status: DirectoryUserStatus }
 export interface UserDirectory {
   list(): Promise<DirectoryUser[]>;
   create(input: { email: string; name: string; role: Role }): Promise<DirectoryUser>;
@@ -112,6 +114,8 @@ export interface UserDirectory {
   setRole(id: string, role: Role): Promise<void>;
   /** Forgets the user's authenticator (lost phone): they enroll a new one at the next sign-in. */
   resetMfa(id: string): Promise<void>;
+  /** Sends the invitation email again with a new temporary password (only while the user is `invited`). */
+  resendInvitation(id: string): Promise<void>;
 }
 
 /** Workforce training: one row per user, the training log the Privacy Officer keeps. */

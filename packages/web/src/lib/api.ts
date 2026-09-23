@@ -304,6 +304,11 @@ export function adminResetMfa(id: string): Promise<{ ok: true }> {
   return request(`/api/admin/users/${encodeURIComponent(id)}/mfa/reset`, { method: "POST" });
 }
 
+/** Sends the invitation email again with a new temporary password (users who have not signed in yet). */
+export function adminResendInvitation(id: string): Promise<{ ok: true }> {
+  return request(`/api/admin/users/${encodeURIComponent(id)}/invitation/resend`, { method: "POST" });
+}
+
 export async function adminUsage(day: string): Promise<UsageRow[]> {
   const r = await request<{ items: UsageRow[] }>(`/api/admin/usage?day=${encodeURIComponent(day)}`);
   return r.items;

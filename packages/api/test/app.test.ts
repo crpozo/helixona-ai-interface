@@ -438,3 +438,18 @@ describe("Workforce training", () => {
     await app.close();
   });
 });
+
+describe("Invitations", () => {
+  it("an administrator can resend the invitation only while the user has not signed in", async () => {
+    const { app, repos } = await makeApp();
+    const admin = await login(app, "root", "admin");
+    const created = (await app.inject({ method: "POST", url: "/api/admin/users", headers: { ...H, cookie: admin.cookie }, payload: { email: "new@clinic.test", name: "New Person", role: "staff" } })).json();
+    expect(created.status).toBe("invited");
+    expect((await app.inject({ method: "POST", url: `/api/admin/users/${created.id}/invitation/resend`, headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(200);
+    expect(repos.audit.events.map((e) => e.action)).toContain("admin_user_invitation_resent");
+    expect((await app.inject({ method: "POST", url: "/api/admin/users/unknown/invitation/resend", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(409);
+    const staff = await login(app, "pepe");
+    expect((await app.inject({ method: "POST", url: `/api/admin/users/${created.id}/invitation/resend`, headers: { ...H, cookie: staff.cookie } })).statusCode).toBe(403);
+    await app.close();
+  });
+});

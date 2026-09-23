@@ -138,7 +138,9 @@ export function LoginPage({ onSignedIn, reason }: Props) {
     void run(async () => {
       await forgotPassword(email.trim());
       go({ kind: "reset" });
-      setInfo("If that address has an account, a reset code is on its way. Enter it below with your new password.");
+      setInfo(
+        "If that address has an account, a reset code is on its way from no-reply@verificationemail.com; check your junk folder. If you have never signed in, use the temporary password from your invitation email instead: a code is not sent for accounts that have not completed their first sign-in.",
+      );
     });
   };
   const submitReset = (e: React.FormEvent) => {
@@ -277,7 +279,7 @@ export function LoginPage({ onSignedIn, reason }: Props) {
           {step.kind === "forgot" && (
             <form onSubmit={submitForgot}>
               <h2>Reset your password</h2>
-              <p className="muted small">We'll email you a code to choose a new password.</p>
+              <p className="muted small">We'll email you a code to choose a new password. Use the work email your account was created with. If you have never signed in, use the temporary password from your invitation email instead.</p>
               {emailField}
               {error && <p className="notice notice-error" role="alert">{error}</p>}
               <button type="submit" className="btn btn-primary btn-cta block" disabled={busy || !email}>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AdminUser, Me, Role, UsageRow } from "../lib/types";
-import { ApiError, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminResetMfa, adminSetRole, adminUsage } from "../lib/api";
+import { ApiError, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminResendInvitation, adminResetMfa, adminSetRole, adminUsage } from "../lib/api";
 import { modelLabel } from "../lib/models";
 import { TrainingLog } from "./TrainingSections";
 
@@ -96,6 +96,17 @@ export function AdminPage({ me, onBack }: Props) {
       await adminResetMfa(u.id);
       setFormMsg(null);
       window.alert(`Authenticator reset for ${u.email}. Their next sign-in will show a new QR code.`);
+    } catch (err) {
+      setUsersError(errMsg(err));
+    }
+  };
+
+  const resendInvitation = async (u: AdminUser) => {
+    if (!window.confirm(`Send a new invitation to ${u.email}? It contains a new temporary password valid for 3 days.`)) return;
+    setUsersError(null);
+    try {
+      await adminResendInvitation(u.id);
+      window.alert(`Invitation sent again to ${u.email} from no-reply@verificationemail.com. Ask them to check the junk folder.`);
     } catch (err) {
       setUsersError(errMsg(err));
     }
@@ -197,10 +208,15 @@ export function AdminPage({ me, onBack }: Props) {
                         <option value="admin">admin</option>
                       </select>
                     </td>
-                    <td>{u.enabled ? "Active" : "Disabled"}</td>
+                    <td>{!u.enabled ? "Disabled" : u.status === "invited" ? "Invited (first sign-in pending)" : "Active"}</td>
                     <td>{dateFmt.format(new Date(u.createdAt))}</td>
                     <td>
                       <div className="row gap wrap">
+                        {u.enabled && u.status === "invited" && (
+                          <button type="button" className="btn btn-small" onClick={() => void resendInvitation(u)} title="New invitation email with a new temporary password (valid 3 days)">
+                            Resend invitation
+                          </button>
+                        )}
                         <button type="button" className="btn btn-small" onClick={() => void toggle(u)} disabled={u.id === me.user.id}>
                           {u.enabled ? "Disable" : "Enable"}
                         </button>
