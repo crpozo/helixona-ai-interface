@@ -8,3 +8,5 @@ coverage/
 !.env.example
 .DS_Store
 packages/web/dist/
+packages/e2e/test-results/
+packages/e2e/playwright-report/

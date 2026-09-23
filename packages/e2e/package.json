@@ -1,0 +1,16 @@
+{
+  "name": "@helixona/e2e",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "End-to-end tests: the built web app served by the API with the fake model, driven in a real browser",
+  "scripts": {
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "pdf-lib": "^1.17.1"
+  }
+}

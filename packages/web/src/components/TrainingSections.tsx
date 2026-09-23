@@ -241,8 +241,8 @@ function todayIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** The training log (administrators): one row per user, with a way to record paper completions. */
-export function TrainingLog() {
+/** The training log (administrators): one row per user, with a way to record paper completions. `refreshKey` reloads it when the users change. */
+export function TrainingLog({ refreshKey = 0 }: { refreshKey?: number } = {}) {
   const [log, setLog] = useState<AdminTrainingLog | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
@@ -255,7 +255,7 @@ export function TrainingLog() {
   }, []);
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   const recordPaper = async (row: AdminTrainingRow) => {
     if (!log) return;

@@ -1,10 +1,11 @@
-# CI del monorepo: typecheck, tests, build y synth de la infraestructura (sin credenciales AWS).
-# Acciones ancladas por SHA (supply chain): actualizar SHA y comentario de versión a la vez.
+# CI for the monorepo: typecheck, unit and integration tests, build, end-to-end tests in a real
+# browser, and a synth of the infrastructure (no AWS credentials). Runs on every push and pull
+# request; the deploy workflow runs the same checks before it is allowed to deploy.
+# Actions are pinned by SHA (supply chain): update the SHA and the version comment together.
 name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 permissions:
@@ -16,9 +17,9 @@ concurrency:
 
 jobs:
   verify:
-    name: Typecheck, test, build, synth
+    name: Typecheck, test, build, e2e, synth
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CI: 'true'
     steps:
@@ -39,20 +40,37 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test
+      - name: Unit and integration tests
         run: npm run test
 
       - name: Build
         run: npm run build
 
-      - name: CDK synth (cuenta/región ficticias, cdk-nag bloquea en error)
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      # The built web app served by the API with the fake model, driven in a real browser.
+      - name: End-to-end tests
+        run: npm run e2e
+
+      - name: Upload the end-to-end report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: |
+            packages/e2e/playwright-report
+            packages/e2e/test-results
+          retention-days: 14
+
+      - name: CDK synth (fictitious account and region; cdk-nag fails on errors)
         run: npm run synth -w @helixona/infra
         env:
           CDK_DEFAULT_ACCOUNT: '123456789012'
           CDK_DEFAULT_REGION: us-east-1
 
-      # Escaneo de dependencias de producción. No bloquea el pipeline (informativo) hasta que el
-      # equipo decida el umbral; el resultado queda en el log del job.
-      - name: npm audit (producción, high+)
+      # Production dependency scan. Informative until the team sets a threshold; the result stays
+      # in the job log.
+      - name: npm audit (production, high+)
         run: npm audit --omit=dev --audit-level=high
         continue-on-error: true

@@ -3,8 +3,16 @@
   "private": true,
   "version": "0.1.0",
   "description": "Interfaz privada de la clínica para Claude (Sonnet / Opus / Fable) sobre Amazon Bedrock, bajo HIPAA",
-  "engines": { "node": ">=22" },
-  "workspaces": ["packages/core", "packages/api", "packages/web", "packages/infra"],
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/core",
+    "packages/api",
+    "packages/web",
+    "packages/infra",
+    "packages/e2e"
+  ],
   "scripts": {
     "build": "npm run build -w @helixona/core && npm run build -w @helixona/api && npm run build -w @helixona/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
@@ -12,6 +20,8 @@
     "lint": "npm run lint --workspaces --if-present",
     "dev:api": "npm run dev -w @helixona/api",
     "dev:web": "npm run dev -w @helixona/web",
-    "synth": "npm run synth -w @helixona/infra"
+    "synth": "npm run synth -w @helixona/infra",
+    "e2e": "npm run e2e -w @helixona/e2e",
+    "verify": "npm run typecheck && npm run test && npm run build && npm run e2e"
   }
 }

@@ -35,10 +35,13 @@ export function AdminPage({ me, onBack }: Props) {
   const [usage, setUsage] = useState<UsageRow[] | null>(null);
   const [usageError, setUsageError] = useState<string | null>(null);
 
+  // Bumped on every users reload so the training log (one row per user) follows the list.
+  const [usersVersion, setUsersVersion] = useState(0);
   const loadUsers = useCallback(async () => {
     setUsersError(null);
     try {
       setUsers(await adminListUsers());
+      setUsersVersion((v) => v + 1);
     } catch (e) {
       setUsersError(errMsg(e));
     }
@@ -288,7 +291,7 @@ export function AdminPage({ me, onBack }: Props) {
       <section aria-labelledby="training-title" className="card">
         <h2 id="training-title">Training log</h2>
         <p className="muted small">Knowledge-check results from the workforce training completed online. Keep this log for six years; add paper completions by hand.</p>
-        <TrainingLog />
+        <TrainingLog refreshKey={usersVersion} />
       </section>
 
       <section aria-labelledby="usage-title" className="card">
