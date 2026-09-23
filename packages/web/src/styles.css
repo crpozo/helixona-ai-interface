@@ -2474,3 +2474,44 @@ td {
   max-height: 240px;
   overflow-y: auto;
 }
+
+/* ---- Project title, edited in place ---- */
+.project-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.35rem;
+}
+.project-title-row .project-title {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.project-title.editable {
+  cursor: text;
+}
+.project-title-row .title-edit {
+  flex: none;
+  opacity: 0.55;
+}
+.project-title-row:hover .title-edit,
+.project-title-row:focus-within .title-edit {
+  opacity: 1;
+}
+.project-title-form {
+  margin: 0 0 0.35rem;
+}
+.project-title-input {
+  width: 100%;
+  max-width: 760px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 2rem;
+  line-height: 1.25;
+  padding: 0.05rem 0.4rem;
+  background: var(--surface);
+}
+@media (max-width: 720px) {
+  .project-title-input {
+    font-size: 1.6rem;
+  }
+}

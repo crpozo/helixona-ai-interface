@@ -6,6 +6,7 @@ import { modelLabel } from "../lib/models";
 import { useFileDrop } from "../lib/useFileDrop";
 import { ProjectMembers } from "./ProjectMembers";
 import { StartComposer } from "./StartComposer";
+import { Icon } from "./Icon";
 
 interface Props {
   project: Project;
@@ -64,6 +65,13 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // The title, edited in place (the Settings card has the same field). The draft also lives in a ref
+  // so a blur that fires while the editor closes reads the current text, not a stale one.
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(project.name);
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const titleDraftRef = useRef(project.name);
+  const titleCommitting = useRef(false);
   // Instructions card, edited in place.
   const [editingInstructions, setEditingInstructions] = useState(false);
   const [instructionsDraft, setInstructionsDraft] = useState(project.instructions);
@@ -94,6 +102,13 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
   useEffect(() => {
     setVisibility(project.visibility);
   }, [project.visibility]);
+  // A rename (from the title, the sidebar or a colleague) shows up in the Settings form too.
+  useEffect(() => {
+    setName(project.name);
+    setTitleDraft(project.name);
+    titleDraftRef.current = project.name;
+    setEditingTitle(false);
+  }, [project.name]);
 
   const dirty = name !== project.name || description !== project.description || visibility !== project.visibility;
 
@@ -130,6 +145,31 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
       setInstructionsError(errMsg(err));
     } finally {
       setSavingInstructions(false);
+    }
+  };
+
+  const startTitleEdit = () => {
+    if (!project.canEdit) return;
+    setTitleDraft(project.name);
+    titleDraftRef.current = project.name;
+    setTitleError(null);
+    setEditingTitle(true);
+  };
+  const cancelTitleEdit = () => {
+    titleDraftRef.current = project.name;
+    setEditingTitle(false);
+  };
+  const commitTitle = async () => {
+    if (titleCommitting.current) return;
+    titleCommitting.current = true;
+    const next = titleDraftRef.current.trim().slice(0, 80);
+    setEditingTitle(false);
+    try {
+      if (next && next !== project.name) onUpdated(await updateProject(project.id, { name: next }));
+    } catch (err) {
+      setTitleError(errMsg(err));
+    } finally {
+      titleCommitting.current = false;
     }
   };
 
@@ -200,7 +240,51 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
 
       <header className="project-head">
         <div className="project-head-text">
-          <h1 className="project-title">{project.name}</h1>
+          {editingTitle ? (
+            <form
+              className="project-title-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void commitTitle();
+              }}
+            >
+              <label htmlFor="proj-title" className="visually-hidden">
+                Project name
+              </label>
+              <input
+                id="proj-title"
+                className="project-title-input"
+                autoFocus
+                required
+                maxLength={80}
+                value={titleDraft}
+                onChange={(e) => {
+                  setTitleDraft(e.target.value);
+                  titleDraftRef.current = e.target.value;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") cancelTitleEdit();
+                }}
+                onBlur={() => void commitTitle()}
+              />
+            </form>
+          ) : (
+            <div className="project-title-row">
+              <h1 className={`project-title${canEdit ? " editable" : ""}`} onClick={startTitleEdit} title={canEdit ? "Click to rename" : undefined}>
+                {project.name}
+              </h1>
+              {canEdit && (
+                <button type="button" className="icon-btn title-edit" onClick={startTitleEdit} aria-label={`Rename project: ${project.name}`} title="Rename">
+                  <Icon name="pencil" size={16} />
+                </button>
+              )}
+            </div>
+          )}
+          {titleError && (
+            <p className="notice notice-error" role="alert">
+              {titleError}
+            </p>
+          )}
           {project.description && <p className="project-desc">{project.description}</p>}
         </div>
         <span className="badge">{visibilityLabel(project)}</span>

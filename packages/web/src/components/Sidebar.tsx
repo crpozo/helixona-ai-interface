@@ -18,6 +18,7 @@ interface Props {
   onNewInProject: (projectId: string) => void;
   onDelete: (id: string) => void;
   onRename: (id: string, title: string) => Promise<void>;
+  onRenameProject: (id: string, name: string) => Promise<void>;
   onOpenProject: (id: string) => void;
   onNewProject: (visibility: "private" | "shared") => void;
   onLogout: () => void;
@@ -43,10 +44,12 @@ export function projectTag(p: Project): string {
  * chats nested underneath, then the chats that belong to no project, and the signed-in user at the
  * bottom. Rows are text with an icon; the actions (rename, delete, new chat in a project) appear on hover.
  */
-export function Sidebar({ me, conversations, projects, selectedId, projectViewId, open, onClose, onSelect, onNew, onNewInProject, onDelete, onRename, onOpenProject, onNewProject, onLogout, onAdmin, onDocs, onTraining }: Props) {
+export function Sidebar({ me, conversations, projects, selectedId, projectViewId, open, onClose, onSelect, onNew, onNewInProject, onDelete, onRename, onRenameProject, onOpenProject, onNewProject, onLogout, onAdmin, onDocs, onTraining }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [projectDraft, setProjectDraft] = useState("");
   const isAdmin = me.user.roles.includes("admin");
   const mine = projects.filter((p) => p.visibility === "private");
   const shared = projects.filter((p) => p.visibility !== "private");
@@ -63,6 +66,17 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
     const id = editingId;
     setEditingId(null);
     if (title) await onRename(id, title);
+  };
+  const startProjectRename = (p: Project) => {
+    setEditingProjectId(p.id);
+    setProjectDraft(p.name);
+  };
+  const commitProjectRename = async () => {
+    if (!editingProjectId) return;
+    const name = projectDraft.trim().slice(0, 80);
+    const id = editingProjectId;
+    setEditingProjectId(null);
+    if (name) await onRenameProject(id, name);
   };
 
   const link = (href: string, label: string, icon: "cap" | "book" | "sliders", go: () => void) => (
@@ -153,6 +167,38 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
     const kind = p.visibility === "clinic" ? "Shared with the clinic" : p.visibility === "shared" ? `Shared with ${p.members.length + 1} people` : "Private";
     return (
       <li key={p.id} className={`project-group${p.id === projectViewId ? " active" : ""}`}>
+        {editingProjectId === p.id ? (
+          <form
+            className="rename-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void commitProjectRename();
+            }}
+          >
+            <label htmlFor={`rename-project-${p.id}`} className="visually-hidden">
+              New project name
+            </label>
+            <input
+              id={`rename-project-${p.id}`}
+              autoFocus
+              maxLength={80}
+              value={projectDraft}
+              onChange={(e) => setProjectDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setEditingProjectId(null);
+              }}
+              onBlur={(e) => {
+                if (!(e.relatedTarget instanceof Node && e.currentTarget.form?.contains(e.relatedTarget))) void commitProjectRename();
+              }}
+            />
+            <button type="submit" className="btn btn-small">
+              Save
+            </button>
+            <button type="button" className="btn btn-small" onClick={() => setEditingProjectId(null)}>
+              Cancel
+            </button>
+          </form>
+        ) : (
         <div className="project-row">
           <button
             type="button"
@@ -175,10 +221,16 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
             <span className="conv-title">{p.name}</span>
             {p.visibility !== "private" && <span className="side-tag">{projectTag(p)}</span>}
           </button>
+          {p.canEdit && (
+            <button type="button" className="icon-btn row-action" onClick={() => startProjectRename(p)} aria-label={`Rename project: ${p.name}`} title="Rename">
+              <Icon name="pencil" size={15} />
+            </button>
+          )}
           <button type="button" className="icon-btn row-action" onClick={() => onNewInProject(p.id)} aria-label={`New chat in ${p.name}`} title="New chat in this project">
             <Icon name="plus" size={15} />
           </button>
         </div>
+        )}
         {!isCollapsed && (
           <ul className="project-chats" aria-label={`Chats in ${p.name}`}>
             {chats.length === 0 && <li className="muted small project-empty">No chats yet</li>}

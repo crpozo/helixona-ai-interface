@@ -15,6 +15,7 @@ import {
   sendMessage,
   setUnauthorizedHandler,
   updateConversation,
+  updateProject,
   uploadFile,
 } from "./lib/api";
 import { chatReducer, initialChatState, type ChatMessage } from "./lib/chatReducer";
@@ -287,6 +288,14 @@ export function App() {
 
   const projectUpdated = (p: Project) => setProjects((prev) => prev.map((x) => (x.id === p.id ? p : x)).sort((a, b) => a.name.localeCompare(b.name)));
 
+  const renameProject = async (id: string, name: string) => {
+    try {
+      projectUpdated(await updateProject(id, { name }));
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 401)) setListError("Could not rename the project.");
+    }
+  };
+
   const removeProject = async (id: string) => {
     try {
       await deleteProject(id);
@@ -494,6 +503,7 @@ export function App() {
             onNew={() => startNew(null)}
             onDelete={(id) => void removeConversation(id)}
             onRename={rename}
+            onRenameProject={renameProject}
             onOpenProject={openProject}
             onNewProject={(visibility) => void newProject(visibility)}
             onNewInProject={(id) => startNew(id)}

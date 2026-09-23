@@ -10,13 +10,18 @@ test.describe("Projects", () => {
 
     await page.getByRole("button", { name: "New project" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "New project" })).toBeVisible();
+    // The title is edited in place: click it, type, Enter.
+    await page.getByRole("heading", { level: 1, name: "New project" }).click();
+    await page.locator("#proj-title").fill("EOB review");
+    await page.locator("#proj-title").press("Enter");
+    await expect(page.getByRole("heading", { level: 1, name: "EOB review" })).toBeVisible();
+    await expect(page.locator(".project-list .project-select")).toContainText("EOB review");
+    await expect(page.locator("#proj-name")).toHaveValue("EOB review");
     const settings = page.locator("form:has(#proj-name)");
-    await page.locator("#proj-name").fill("EOB review");
     await page.locator("#proj-description").fill("Denied claims and appeals");
     await settings.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Saved.")).toBeVisible();
-    await expect(page.getByRole("heading", { level: 1, name: "EOB review" })).toBeVisible();
-    await expect(page.locator(".project-list .project-select")).toContainText("EOB review");
+    await expect(page.locator(".project-desc")).toHaveText("Denied claims and appeals");
 
     // Instructions
     await page.locator("section:has(#proj-instructions-h)").getByRole("button", { name: "Add" }).click();
@@ -47,6 +52,14 @@ test.describe("Projects", () => {
     await page.locator(".project-row").first().hover();
     await page.getByRole("button", { name: "New chat in EOB review" }).click();
     await expect(page.getByPlaceholder("How can I help you today?")).toBeVisible();
+
+    // Renaming from the sidebar row changes the page too.
+    await page.locator(".project-row").first().hover();
+    await page.locator(".project-list").getByRole("button", { name: "Rename project: EOB review" }).click();
+    await page.locator(".project-list .rename-form input").fill("EOB appeals");
+    await page.locator(".project-list .rename-form").getByRole("button", { name: "Save" }).click();
+    await expect(page.locator(".project-list .project-select")).toContainText("EOB appeals");
+    await expect(page.getByRole("heading", { level: 1, name: "EOB appeals" })).toBeVisible();
 
     // Deleting the project keeps the chat, now outside any project.
     page.once("dialog", (d) => void d.accept());

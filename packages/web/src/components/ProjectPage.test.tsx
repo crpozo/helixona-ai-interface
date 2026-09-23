@@ -98,10 +98,28 @@ describe("ProjectPage", () => {
     await waitFor(() => expect(p.onUpdated).toHaveBeenCalledWith(expect.objectContaining({ instructions: "Always answer in English." })));
   });
 
+  it("renames the project from its title: Enter saves, Escape cancels", async () => {
+    const p = renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Rename project: EOB review" }));
+    const field = screen.getByLabelText("Project name") as HTMLInputElement;
+    expect(field.value).toBe("EOB review");
+    fireEvent.change(field, { target: { value: "Appeals" } });
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(screen.queryByLabelText("Project name")).toBeNull();
+    expect(updateProject).not.toHaveBeenCalledWith("p1", { name: "Appeals" });
+    fireEvent.click(screen.getByRole("heading", { level: 1, name: "EOB review" }));
+    const again = screen.getByLabelText("Project name");
+    fireEvent.change(again, { target: { value: "  Appeals  " } });
+    fireEvent.submit(again.closest("form")!);
+    await waitFor(() => expect(updateProject).toHaveBeenCalledWith("p1", { name: "Appeals" }));
+    await waitFor(() => expect(p.onUpdated).toHaveBeenCalledWith(expect.objectContaining({ name: "Appeals" })));
+  });
+
   it("hides editing for read-only projects", () => {
     renderPage({ project: { ...project, canEdit: false, visibility: "clinic" } });
     expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add files" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Rename project/ })).toBeNull();
     expect(screen.getByText(/Only the project owner or an administrator/)).toBeTruthy();
     expect(screen.getByText("Shared with the clinic")).toBeTruthy();
   });
