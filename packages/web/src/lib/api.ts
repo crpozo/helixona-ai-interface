@@ -380,3 +380,9 @@ export function adminConfirmAgreement(id: string): Promise<{ file: AgreementFile
 export function adminRemoveAgreement(id: string): Promise<void> {
   return request<void>(`/api/admin/agreements/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
+
+// ---- Bug reports (emailed to the maintainer; the app keeps no text) ----
+
+export function reportBug(description: string, page: string): Promise<{ ok: true }> {
+  return request("/api/feedback/bug", { method: "POST", body: { description, page } });
+}

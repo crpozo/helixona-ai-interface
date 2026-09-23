@@ -238,3 +238,12 @@ then takes precedence; an uploaded copy is stored under
 `agreements/` in the attachments bucket (encrypted with the PHI key, private, outside the retention
 rule that expires conversation attachments) and signed-in staff download it through the API
 (`GET /api/agreements/:id/file`, audited). Visitors see the status only.
+
+## Bug reports
+
+"Report a bug" in the sidebar opens a small text box; the description, the reporter's name and
+email, the page and the browser go by email to the maintainer through an SNS topic
+(`FEEDBACK_TOPIC_ARN`, key-encrypted, the address in the `feedbackEmail` context of the
+infrastructure; SNS asks that inbox to confirm the subscription once). The form tells staff not to
+include patient information, the API rate-limits reports per user, and the audit log records only
+that a report was sent (length and page), never its text.

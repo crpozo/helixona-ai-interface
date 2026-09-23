@@ -8,6 +8,7 @@ import { SessionService } from "../src/auth/session.js";
 import { memoryRepos, MemoryUserDirectory } from "../src/repos/memory.js";
 import { MemoryAttachmentStore } from "../src/attachments/store.js";
 import type { DirectoryUser } from "../src/repos/types.js";
+import { MemoryFeedbackSender, formatBugReport } from "../src/feedback.js";
 import { PDFDocument } from "pdf-lib";
 import type { Deps } from "../src/deps.js";
 import type { IdentityProvider } from "../src/auth/cognito.js";
@@ -36,6 +37,7 @@ async function makeApp(extraEnv: Record<string, string> = {}, identity?: Identit
     systemPrompt: { text: "prompt de sistema de prueba", version: "v1" },
     attachments: new MemoryAttachmentStore(),
     passwordAuth,
+    feedback: new MemoryFeedbackSender(),
   };
   const app = await buildApp(deps);
   return { app, repos, deps };
@@ -638,6 +640,27 @@ describe("Account safety", () => {
     const blocked = await app.inject({ method: "POST", url: "/api/auth/dev-login", headers: H, payload: { username: "gone", role: "staff" } });
     expect(blocked.statusCode).toBe(403);
     expect(blocked.json().error.code).toBe("account_disabled");
+    await app.close();
+  });
+});
+
+describe("Bug reports", () => {
+  it("a signed-in user's report reaches the maintainer with who and where; the audit log keeps only that it was sent", async () => {
+    const { app, repos, deps } = await makeApp();
+    expect((await app.inject({ method: "POST", url: "/api/feedback/bug", headers: H, payload: { description: "The send button does nothing" } })).statusCode).toBe(401);
+    const { cookie } = await login(app, "ana");
+    expect((await app.inject({ method: "POST", url: "/api/feedback/bug", headers: { ...H, cookie }, payload: { description: "short" } })).statusCode).toBe(400);
+    const r = await app.inject({ method: "POST", url: "/api/feedback/bug", headers: { ...H, cookie, "user-agent": "TestBrowser/1.0" }, payload: { description: "The Send button does nothing after I attach a PDF.", page: "/c/01ABC?x=1" } });
+    expect(r.statusCode).toBe(200);
+    const sender = deps.feedback as MemoryFeedbackSender;
+    expect(sender.reports).toHaveLength(1);
+    expect(sender.reports[0]).toMatchObject({ reporterEmail: "ana@dev.local", description: "The Send button does nothing after I attach a PDF.", page: "/c/01ABC", userAgent: "TestBrowser/1.0" });
+    const { subject, body } = formatBugReport(sender.reports[0]!);
+    expect(subject).toContain("Bug report from");
+    expect(body).toContain("ana@dev.local");
+    expect(body).toContain("Page: /c/01ABC");
+    expect(repos.audit.events.some((e) => e.action === "bug_reported")).toBe(true);
+    expect(JSON.stringify(repos.audit.events)).not.toContain("attach a PDF");
     await app.close();
   });
 });

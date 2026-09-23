@@ -17,6 +17,7 @@
     "imageTag": "latest",
     "desiredCount": 1,
     "alertEmail": "",
+    "feedbackEmail": "carlos@mindfultech.ec",
     "monthlyBudgetUsd": 1500,
     "enableCloudTrail": false,
     "enableConfig": false,

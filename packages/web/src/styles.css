@@ -2363,3 +2363,35 @@ td {
     text-align: right;
   }
 }
+
+/* ---- Report a bug (sidebar) ---- */
+.bug-report-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.15rem 0.25rem 0.5rem;
+  padding: 0.65rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.bug-report-form textarea {
+  min-height: 0;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  resize: vertical;
+}
+.bug-report-form .notice {
+  margin: 0;
+}
+.bug-report-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+.bug-report-sent {
+  margin: 0;
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+  color: #9fd8ad;
+}

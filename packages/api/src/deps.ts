@@ -6,6 +6,7 @@ import type { Repos, UserDirectory } from "./repos/types.js";
 import type { SystemPrompt } from "./system-prompt.js";
 import type { AttachmentStore } from "./attachments/store.js";
 import type { PasswordAuth } from "./auth/password.js";
+import type { FeedbackSender } from "./feedback.js";
 
 export interface Deps {
   config: Config;
@@ -22,5 +23,7 @@ export interface Deps {
   attachments: AttachmentStore | null;
   /** In-app password sign-in (Cognito USER_PASSWORD_AUTH); null in dev mode. */
   passwordAuth: PasswordAuth | null;
+  /** Delivers bug reports (SNS email in production, memory in dev/tests); null = the form is off. */
+  feedback: FeedbackSender | null;
   now?: () => Date;
 }

@@ -29,6 +29,8 @@ export interface DeployConfig {
   readonly desiredCount: number;
   /** Email para las alertas (SNS). Vacío = sin suscripción. */
   readonly alertEmail?: string;
+  /** Inbox that receives the bug reports sent from the app's sidebar. */
+  readonly feedbackEmail?: string;
   /** Presupuesto mensual (USD) para AWS Budgets. */
   readonly monthlyBudgetUsd: number;
   /** Crear CloudTrail propio (normalmente ya existe a nivel de organización). */
@@ -101,6 +103,7 @@ export function loadConfig(app: cdk.App): DeployConfig {
     imageTag: str(app, 'imageTag', 'latest'),
     desiredCount,
     alertEmail: opt(str(app, 'alertEmail')),
+    feedbackEmail: opt(str(app, 'feedbackEmail')),
     monthlyBudgetUsd: num(app, 'monthlyBudgetUsd', 1500),
     enableCloudTrail: bool(app, 'enableCloudTrail', false),
     enableConfig: bool(app, 'enableConfig', false),

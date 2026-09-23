@@ -6,6 +6,7 @@ import { CognitoIdentityProvider, CognitoUserDirectory } from "./auth/cognito.js
 import { MemoryAttachmentStore, S3AttachmentStore } from "./attachments/store.js";
 import { CognitoPasswordAuth } from "./auth/password.js";
 import { DevIdentityProvider } from "./auth/dev.js";
+import { MemoryFeedbackSender, SnsFeedbackSender } from "./feedback.js";
 import { SessionService } from "./auth/session.js";
 import { dynamoRepos } from "./repos/dynamo.js";
 import { memoryRepos, MemoryUserDirectory } from "./repos/memory.js";
@@ -36,7 +37,10 @@ export async function createDeps(env: NodeJS.ProcessEnv = process.env): Promise<
   const passwordAuth = config.AUTH_MODE === "dev"
     ? null
     : new CognitoPasswordAuth({ region: config.COGNITO_REGION!, userPoolId: config.COGNITO_USER_POOL_ID!, clientId: config.COGNITO_CLIENT_ID!, clientSecret: config.COGNITO_CLIENT_SECRET! });
-  return { config, log, catalog, repos, sessions, identity, directory, provider, router, systemPrompt, attachments, passwordAuth };
+  const feedback = config.FEEDBACK_TOPIC_ARN
+    ? new SnsFeedbackSender(config.AWS_REGION!, config.FEEDBACK_TOPIC_ARN)
+    : config.STORE_MODE === "memory" ? new MemoryFeedbackSender() : null;
+  return { config, log, catalog, repos, sessions, identity, directory, provider, router, systemPrompt, attachments, passwordAuth, feedback };
 }
 
 async function main() {

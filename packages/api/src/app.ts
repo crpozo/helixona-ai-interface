@@ -13,6 +13,7 @@ import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerChatRoute } from "./routes/chat.js";
 import { registerAgreementRoutes } from "./routes/agreements.js";
 import { registerAttachmentRoutes } from "./routes/attachments.js";
+import { registerFeedbackRoutes } from "./routes/feedback.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { registerTrainingRoutes } from "./routes/training.js";
@@ -116,6 +117,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   registerAdminRoutes(app, deps);
   registerTrainingRoutes(app, deps);
   registerAgreementRoutes(app, deps);
+  registerFeedbackRoutes(app, deps);
 
   // SPA compilada (mismo origen, sin CORS). Cualquier ruta no-API devuelve index.html.
   const dist = config.WEB_DIST ?? resolve(process.cwd(), "../web/dist");

@@ -1,5 +1,6 @@
 import { Logo } from "./Logo";
 import { Icon } from "./Icon";
+import { BugReport } from "./BugReport";
 import { useState } from "react";
 import type { Conversation, Me, Project } from "../lib/types";
 import { modelLabel } from "../lib/models";
@@ -149,6 +150,7 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
         {link("/training", "Training", "cap", onTraining)}
         {link("/documentation", "Documentation", "book", onDocs)}
         {isAdmin && link("/admin", "Administration", "sliders", onAdmin)}
+        <BugReport />
       </nav>
 
       <div className="sidebar-scroll">

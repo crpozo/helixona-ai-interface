@@ -12,6 +12,8 @@ import * as kms from 'aws-cdk-lib/aws-kms';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
 import { NagSuppressions } from 'cdk-nag';
 import { Construct } from 'constructs';
@@ -124,6 +126,24 @@ export class AppStack extends cdk.Stack {
     const cognitoClientSecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'CognitoClientSecretRef', props.cognitoClientSecret.secretArn);
     const anthropicApiKeySecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'AnthropicApiKeySecretRef', props.anthropicApiKeySecret.secretArn);
 
+    // Bug reports from the sidebar: the API publishes them to this topic and the maintainer's inbox is
+    // subscribed (SNS asks that address to confirm once). Its own key: the PHI key stays with the data.
+    const feedbackKey = new kms.Key(this, 'FeedbackKey', {
+      alias: `alias/${resourceName(stage, 'feedback')}`,
+      description: `CMK for the bug-report SNS topic - ${stage}`,
+      enableKeyRotation: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+    const feedbackTopic = new sns.Topic(this, 'FeedbackTopic', {
+      topicName: resourceName(stage, 'feedback'),
+      displayName: `Helixona ${stage} bug reports`,
+      masterKey: feedbackKey,
+      enforceSSL: true,
+    });
+    if (cfg.feedbackEmail) feedbackTopic.addSubscription(new subscriptions.EmailSubscription(cfg.feedbackEmail));
+    else cdk.Annotations.of(this).addWarningV2('helixona:no-feedback-email', 'No feedbackEmail in context: bug reports have no recipient.');
+    feedbackTopic.grantPublish(this.taskRole);
+
     const containerPort = 3000;
     const containerProtocol = cfg.tlsToContainer ? 'https' : 'http';
     const tableNames = props.tables;
@@ -185,6 +205,7 @@ export class AppStack extends cdk.Stack {
         LLM_TIMEOUT_MS: '600000',
         LOG_LEVEL: 'info',
         ATTACHMENTS_BUCKET: props.attachmentsBucket.bucketName,
+        FEEDBACK_TOPIC_ARN: feedbackTopic.topicArn,
         TLS_TO_CONTAINER: String(cfg.tlsToContainer),
       },
       secrets: {
