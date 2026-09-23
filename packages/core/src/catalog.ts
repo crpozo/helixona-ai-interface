@@ -62,12 +62,12 @@ export const DEFAULT_CATALOG: Catalog = CatalogSchema.parse({
   defaultAlias: "opus",
   effort: "medium",
   models: [
-    { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, priceInPerM: 2, priceOutPerM: 10, priceCacheReadPerM: 0.2, priceCacheWritePerM: 2.5, refusalFallbacks: [], availabilityFallbacks: [] },
+    { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet 5", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, priceInPerM: 2, priceOutPerM: 10, priceCacheReadPerM: 0.2, priceCacheWritePerM: 2.5, refusalFallbacks: [], availabilityFallbacks: [] },
     // Claude Opus 5.5: thinking is always on (effort is the control) and the safety classifiers are
     // broader than Opus 5's (bio joins cyber), so a medical false positive falls back to Opus 5. Opus 5
     // also covers availability until every organization has access to the new model.
-    { alias: "opus", modelId: "anthropic.claude-opus-5-5", label: "Opus", description: "Recommended balance for everyday work", costFactor: 2, priceInPerM: 4, priceOutPerM: 20, priceCacheReadPerM: 0.2, priceCacheWritePerM: 5, refusalFallbacks: ["anthropic.claude-opus-5"], availabilityFallbacks: ["anthropic.claude-opus-5"] },
-    { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, priceInPerM: 10, priceOutPerM: 50, priceCacheReadPerM: 0.25, priceCacheWritePerM: 12.5, refusalFallbacks: ["anthropic.claude-opus-5-5"], availabilityFallbacks: ["anthropic.claude-opus-5-5"] },
+    { alias: "opus", modelId: "anthropic.claude-opus-5-5", label: "Opus 5.5", description: "Recommended balance for everyday work", costFactor: 2, priceInPerM: 4, priceOutPerM: 20, priceCacheReadPerM: 0.2, priceCacheWritePerM: 5, refusalFallbacks: ["anthropic.claude-opus-5"], availabilityFallbacks: ["anthropic.claude-opus-5"] },
+    { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable 5.1", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, priceInPerM: 10, priceOutPerM: 50, priceCacheReadPerM: 0.25, priceCacheWritePerM: 12.5, refusalFallbacks: ["anthropic.claude-opus-5-5"], availabilityFallbacks: ["anthropic.claude-opus-5-5"] },
   ],
   fallbackModels: [
     { modelId: "anthropic.claude-opus-5", label: "Opus 5", priceInPerM: 5, priceOutPerM: 25, priceCacheReadPerM: 0.5, priceCacheWritePerM: 6.25 },

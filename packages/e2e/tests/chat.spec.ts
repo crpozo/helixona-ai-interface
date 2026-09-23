@@ -39,7 +39,7 @@ test.describe("Conversations", () => {
     await box.fill("Third question");
     await box.press("Enter");
     await expect(page.locator(".msg-assistant")).toHaveCount(3);
-    await expect(page.locator(".msg-assistant").nth(2).locator(".badge-model")).toHaveText("Sonnet");
+    await expect(page.locator(".msg-assistant").nth(2).locator(".badge-model")).toHaveText("Sonnet 5");
     await expect(page.locator(".msg-assistant").nth(2)).toContainText("claude-sonnet-5");
     await expect(page.locator(".composer-stop")).toHaveCount(0);
 

@@ -6,9 +6,9 @@ import type { AdminUser, AttachmentMeta, AuditEvent, Conversation, Me, Message, 
 import trainingQuiz from "./training-quiz.json";
 
 const MODELS = [
-  { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, available: true },
-  { alias: "opus", modelId: "anthropic.claude-opus-5-5", label: "Opus", description: "Recommended balance for everyday work", costFactor: 2, available: true },
-  { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, available: true },
+  { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet 5", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, available: true },
+  { alias: "opus", modelId: "anthropic.claude-opus-5-5", label: "Opus 5.5", description: "Recommended balance for everyday work", costFactor: 2, available: true },
+  { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable 5.1", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, available: true },
   { alias: "anthropic.claude-opus-5", modelId: "anthropic.claude-opus-5", label: "Opus 5", description: "Fallback only", costFactor: 0, available: false },
 ];
 const PRICES: Record<string, [number, number]> = { "anthropic.claude-sonnet-5": [2, 10], "anthropic.claude-opus-5-5": [4, 20], "anthropic.claude-fable-5-1": [10, 50], "anthropic.claude-opus-5": [5, 25] };
