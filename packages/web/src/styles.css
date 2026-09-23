@@ -110,6 +110,10 @@ p {
   width: 100%;
   text-align: center;
 }
+/* Links styled as buttons: keep the label vertically centered like a real button. */
+.btn.block {
+  display: flex;
+}
 .only-mobile {
   display: none !important; /* beats .btn's display, which is declared later */
 }
@@ -1614,7 +1618,7 @@ td {
   flex-direction: column;
   gap: 0.3rem;
 }
-.docs-toc a {
+.docs-toc ol a {
   display: block;
   color: #d9d4c8;
   text-decoration: none;
@@ -1622,7 +1626,7 @@ td {
   border-left: 2px solid transparent;
   line-height: 1.4;
 }
-.docs-toc a:hover {
+.docs-toc ol a:hover {
   color: #ffffff;
   border-color: var(--brand-primary);
 }
@@ -1633,8 +1637,16 @@ td {
   margin-top: 1.25rem;
 }
 .docs-toc-actions .btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.6rem 0.9rem;
   text-decoration: none;
   text-align: center;
+}
+.docs-toc-actions .btn-primary {
+  color: var(--primary-text);
 }
 .doc {
   min-width: 0;
