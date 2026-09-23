@@ -23,6 +23,7 @@ COPY --from=build --chown=app:app /app/packages/core/dist /app/packages/core/dis
 COPY --from=build --chown=app:app /app/packages/api/package.json /app/packages/api/package.json
 COPY --from=build --chown=app:app /app/packages/api/dist /app/packages/api/dist
 COPY --from=build --chown=app:app /app/packages/api/prompts /app/packages/api/prompts
+COPY --from=build --chown=app:app /app/packages/api/agreements /app/packages/api/agreements
 COPY --from=build --chown=app:app /app/packages/web/dist /app/packages/web/dist
 USER app
 EXPOSE 3000

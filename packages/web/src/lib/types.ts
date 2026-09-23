@@ -284,7 +284,12 @@ export type ChatSseEvent =
   | { type: "done"; data: SseDone };
 
 // ---- Business associate agreements ----
-export interface AgreementFile { size: number; uploadedAt: string | null }
+export interface AgreementFile {
+  size: number;
+  uploadedAt: string | null;
+  /** The clinic's uploaded copy, or the vendor's document bundled with the app. */
+  source: "uploaded" | "bundled";
+}
 export interface Agreement {
   id: string;
   vendor: string;

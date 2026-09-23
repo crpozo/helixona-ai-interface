@@ -1,23 +1,39 @@
+import { readFile, stat } from "node:fs/promises";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Deps } from "../deps.js";
 import { apiError, audit, requireAuth } from "../app.js";
-import { AGREEMENTS, MAX_AGREEMENT_MB, agreementFileName, agreementKey } from "../agreements.js";
+import { AGREEMENTS, MAX_AGREEMENT_MB, agreementFileName, agreementKey, bundledAgreementPath } from "../agreements.js";
 
-interface AgreementFile { size: number; uploadedAt: string | null }
+interface AgreementFile { size: number; uploadedAt: string | null; source: "uploaded" | "bundled" }
 
 /**
  * Business associate agreements: the list is public (status and where the originals live, the same
  * facts as the risk analysis); the clinic's PDF copy is uploaded by an administrator (presigned PUT,
- * like attachments) and downloaded by signed-in staff through the API.
+ * like attachments) and downloaded by signed-in staff through the API. Until then, the vendor's
+ * document bundled with the app is what they download.
  */
 export function registerAgreementRoutes(app: FastifyInstance, deps: Deps): void {
   const auth = requireAuth();
   const admin = requireAuth(["admin"]);
   const find = (id: string) => AGREEMENTS.find((a) => a.id === id);
+  const bundled = async (id: string): Promise<AgreementFile | null> => {
+    try {
+      const s = await stat(bundledAgreementPath(id));
+      return { size: s.size, uploadedAt: null, source: "bundled" };
+    } catch {
+      return null;
+    }
+  };
   const fileInfo = async (id: string): Promise<AgreementFile | null> => {
-    const head = await deps.attachments?.head(agreementKey(id));
-    return head ? { size: head.size, uploadedAt: head.lastModified ?? null } : null;
+    try {
+      const head = await deps.attachments?.head(agreementKey(id));
+      if (head) return { size: head.size, uploadedAt: head.lastModified ?? null, source: "uploaded" };
+    } catch (e) {
+      // Storage trouble must not take the documentation page down; the bundled copy still serves.
+      deps.log.warn("agreement_head_failed", { agreement: id, errorClass: e instanceof Error ? e.name : "unknown" });
+    }
+    return bundled(id);
   };
 
   app.get("/api/agreements", async (req) => {
@@ -30,11 +46,11 @@ export function registerAgreementRoutes(app: FastifyInstance, deps: Deps): void 
   app.get("/api/agreements/:id/file", { preHandler: auth }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const a = find(id);
-    if (!a || !deps.attachments) return apiError(reply, 404, "not_found", "No copy of this agreement is on file");
-    const head = await deps.attachments.head(agreementKey(id));
-    if (!head) return apiError(reply, 404, "not_found", "No copy of this agreement is on file");
-    const bytes = await deps.attachments.get(agreementKey(id));
-    await audit(deps, req, { action: "agreement_downloaded", meta: { agreement: id } });
+    if (!a) return apiError(reply, 404, "not_found", "No copy of this agreement is on file");
+    const info = await fileInfo(id);
+    if (!info) return apiError(reply, 404, "not_found", "No copy of this agreement is on file");
+    const bytes = info.source === "uploaded" && deps.attachments ? await deps.attachments.get(agreementKey(id)) : await readFile(bundledAgreementPath(id));
+    await audit(deps, req, { action: "agreement_downloaded", meta: { agreement: id, source: info.source } });
     return reply
       .header("content-type", "application/pdf")
       .header("content-disposition", `attachment; filename="${agreementFileName(a)}"`)
@@ -68,7 +84,7 @@ export function registerAgreementRoutes(app: FastifyInstance, deps: Deps): void 
       return apiError(reply, 400, "unsupported_type", "Upload the agreement as a PDF");
     }
     await audit(deps, req, { action: "admin_agreement_uploaded", meta: { agreement: id, size: head.size } });
-    return { file: { size: head.size, uploadedAt: head.lastModified ?? null } satisfies AgreementFile };
+    return { file: { size: head.size, uploadedAt: head.lastModified ?? null, source: "uploaded" } satisfies AgreementFile };
   });
 
   app.delete("/api/admin/agreements/:id", { preHandler: admin }, async (req, reply) => {

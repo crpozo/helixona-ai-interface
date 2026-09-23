@@ -34,7 +34,7 @@ vi.mock("../lib/api", () => ({
   listAgreements: vi.fn(async () => ({
     items: [
       { id: "aws-baa", vendor: "Amazon Web Services", title: "AWS Business Associate Addendum", since: "2026-09-22", status: "Accepted by the account owner on September 22, 2026", reference: "AWS Artifact", url: "https://example.test/aws", note: "Covers AWS.", file: null },
-      { id: "anthropic-baa", vendor: "Anthropic", title: "Business Associate Agreement (HIPAA readiness)", since: "2026-09-15", status: "Enabled on September 15, 2026", reference: "Claude Console", url: "https://example.test/anthropic", note: "Covers the API.", file: { size: 240000, uploadedAt: "2026-09-23T01:00:00Z" } },
+      { id: "anthropic-baa", vendor: "Anthropic", title: "Business Associate Agreement (HIPAA readiness)", since: "2026-09-15", status: "Enabled on September 15, 2026", reference: "Claude Console", url: "https://example.test/anthropic", note: "Covers the API.", file: { size: 240000, uploadedAt: "2026-09-23T01:00:00Z", source: "uploaded" } },
     ],
     canDownload: false,
     uploads: false,

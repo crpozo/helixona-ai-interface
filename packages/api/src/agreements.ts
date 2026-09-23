@@ -1,3 +1,6 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 /**
  * The clinic's business associate agreements behind the assistant. The originals live with each
  * vendor; the clinic may keep its own PDF copy on file in the attachments bucket (never expiring,
@@ -40,6 +43,14 @@ export const AGREEMENTS: readonly AgreementDef[] = [
 ];
 
 export const MAX_AGREEMENT_MB = 25;
+
+/**
+ * The vendor's document shipped with the app (packages/api/agreements/<id>.pdf). It is served to
+ * signed-in staff until an administrator uploads the clinic's own copy, which then takes precedence.
+ */
+export function bundledAgreementPath(id: string): string {
+  return path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "agreements", `${id}.pdf`);
+}
 
 export function agreementKey(id: string): string {
   return `agreements/${id}.pdf`;

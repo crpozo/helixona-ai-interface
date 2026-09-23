@@ -517,13 +517,14 @@ export class AppStack extends cdk.Stack {
       }),
     );
 
-    // Deleting a conversation removes its attachments (list by prefix, then delete).
+    // Deleting a conversation or a project removes its files (list by prefix, then delete), and a HEAD on a
+    // missing key (an agreement not uploaded yet) is a 404 only when the caller may list that prefix.
     this.taskRole.addToPolicy(
       new iam.PolicyStatement({
         sid: 'AttachmentsList',
         actions: ['s3:ListBucket'],
         resources: [props.attachmentsBucket.bucketArn],
-        conditions: { StringLike: { 's3:prefix': ['conversations/*'] } },
+        conditions: { StringLike: { 's3:prefix': ['conversations/*', 'projects/*', 'agreements/*'] } },
       }),
     );
     // Adjuntos: solo objetos del bucket propio.

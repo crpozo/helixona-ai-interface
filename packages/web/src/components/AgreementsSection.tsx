@@ -56,7 +56,7 @@ export function AgreementsSection({ me }: { me?: Me | null }) {
   };
 
   const remove = async (a: Agreement) => {
-    if (!window.confirm(`Remove the clinic's copy of "${a.title}"? The agreement itself stays in force at ${a.vendor}; only the PDF on file here is deleted.`)) return;
+    if (!window.confirm(`Remove the uploaded copy of "${a.title}"? The agreement itself stays in force at ${a.vendor}; the document included with the app is served again.`)) return;
     setError(null);
     try {
       await adminRemoveAgreement(a.id);
@@ -67,6 +67,7 @@ export function AgreementsSection({ me }: { me?: Me | null }) {
   };
 
   const copyLine = (a: Agreement) => {
+    if (a.file?.source === "bundled") return `PDF, ${formatSize(a.file.size)}: the vendor's document, included with the app`;
     if (a.file) return `PDF, ${formatSize(a.file.size)}${a.file.uploadedAt ? `, uploaded ${dateFmt.format(new Date(a.file.uploadedAt))}` : ""}`;
     if (!me) return "Sign in to download the clinic's copy";
     return isAdmin ? "None on file yet: upload the PDF from the vendor" : "None on file yet";
@@ -118,8 +119,8 @@ export function AgreementsSection({ me }: { me?: Me | null }) {
                     <input type="file" accept="application/pdf,.pdf" hidden disabled={pct !== undefined} onChange={(e) => void upload(a, e.target.files?.[0])} />
                   </label>
                 )}
-                {isAdmin && a.file && (
-                  <button type="button" className="btn btn-danger" onClick={() => void remove(a)}>
+                {isAdmin && a.file?.source === "uploaded" && (
+                  <button type="button" className="btn btn-danger" onClick={() => void remove(a)} title="Removes the uploaded copy; the document included with the app is served again">
                     Remove copy
                   </button>
                 )}

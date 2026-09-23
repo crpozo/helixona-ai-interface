@@ -36,7 +36,7 @@ const state = {
   usage: [] as UsageRow[],
   audit: [] as AuditEvent[],
   training: null as TrainingRecord | null,
-  agreements: {} as Record<string, { size: number; uploadedAt: string }>,
+  agreements: {} as Record<string, { size: number; uploadedAt: string; source: "uploaded" }>,
   agreementSizes: {} as Record<string, number>,
   projects: [
     { id: "p-appeals", ownerId: "u-ana", name: "Insurance appeals", description: "Denied claims and prior authorizations", instructions: "You help the billing team write appeal letters. Always cite the claim number, the denial reason and the relevant policy language. Keep a professional, factual tone.", visibility: "clinic", knowledge: [{ id: "k-1", name: "Appeal letter template.md", contentType: "text/markdown", size: 4_210, pages: null }], createdAt: "2026-09-10T16:00:00Z", updatedAt: "2026-09-12T10:00:00Z", canEdit: true },
@@ -217,14 +217,14 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     record: state.training,
   });
   // Business associate agreements (the demo administrator can "upload" a copy).
-  if (path === "/api/agreements" && method === "GET") return json({ items: AGREEMENTS.map((a) => ({ ...a, file: state.agreements[a.id] ?? null })), canDownload: true, uploads: true });
+  if (path === "/api/agreements" && method === "GET") return json({ items: AGREEMENTS.map((a) => ({ ...a, file: state.agreements[a.id] ?? { size: a.id === "aws-baa" ? 456589 : 164064, uploadedAt: null, source: "bundled" } })), canDownload: true, uploads: true });
   const mAgr = path.match(/^\/api\/admin\/agreements\/([^/]+)(?:\/(upload|confirm))?$/);
   if (mAgr && method === "POST" && mAgr[2] === "upload") {
     state.agreementSizes[mAgr[1]!] = Number(body["size"] ?? 0);
     return json({ upload: { url: "mock://upload", method: "PUT", headers: {}, expiresAt: now() } });
   }
   if (mAgr && method === "POST" && mAgr[2] === "confirm") {
-    state.agreements[mAgr[1]!] = { size: state.agreementSizes[mAgr[1]!] ?? 0, uploadedAt: now() };
+    state.agreements[mAgr[1]!] = { size: state.agreementSizes[mAgr[1]!] ?? 0, uploadedAt: now(), source: "uploaded" };
     return json({ file: state.agreements[mAgr[1]!] });
   }
   if (mAgr && method === "DELETE" && !mAgr[2]) {

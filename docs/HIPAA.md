@@ -232,7 +232,9 @@ remove the option.
 
 The same page lists the two business associate agreements (AWS and Anthropic) with their status,
 dates and where the originals live (`GET /api/agreements`, public: the same facts as Appendix B of
-the risk analysis). An administrator can upload the clinic's PDF copy of each one; it is stored under
+the risk analysis). The vendors' documents ship with the app (`packages/api/agreements/`) and are
+what signed-in staff download until an administrator uploads the clinic's own copy of each one, which
+then takes precedence; an uploaded copy is stored under
 `agreements/` in the attachments bucket (encrypted with the PHI key, private, outside the retention
 rule that expires conversation attachments) and signed-in staff download it through the API
 (`GET /api/agreements/:id/file`, audited). Visitors see the status only.

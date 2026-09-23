@@ -61,11 +61,14 @@ test.describe("Documentation", () => {
     const errs = watchErrors(admin);
     await admin.goto("/documentation", { waitUntil: "load" });
     const aws = admin.locator(".agreement-card", { hasText: "AWS Business Associate Addendum" });
-    await expect(aws.getByText("Upload PDF")).toBeVisible();
-    await aws.locator('input[type="file"]').setInputFiles({ name: "aws-baa.pdf", mimeType: "application/pdf", buffer: await samplePdf("AWS BAA") });
+    // The vendor's document ships with the app, so there is always something to download.
+    await expect(aws.locator(".agreement-meta")).toContainText("included with the app");
     await expect(aws.getByRole("link", { name: "Download PDF" })).toBeVisible();
-    await expect(aws.locator(".agreement-meta")).toContainText("PDF, ");
     await expect(aws.getByText("Replace PDF")).toBeVisible();
+    await expect(aws.getByRole("button", { name: "Remove copy" })).toHaveCount(0);
+    await aws.locator('input[type="file"]').setInputFiles({ name: "aws-baa.pdf", mimeType: "application/pdf", buffer: await samplePdf("AWS BAA") });
+    await expect(aws.locator(".agreement-meta")).toContainText("uploaded");
+    await expect(aws.getByRole("button", { name: "Remove copy" })).toBeVisible();
     errs.expectNone();
 
     const staffCtx = await browser.newContext();
@@ -83,7 +86,8 @@ test.describe("Documentation", () => {
 
     admin.once("dialog", (d) => void d.accept());
     await aws.getByRole("button", { name: "Remove copy" }).click();
-    await expect(aws.getByRole("link", { name: "Download PDF" })).toHaveCount(0);
+    await expect(aws.locator(".agreement-meta")).toContainText("included with the app");
+    await expect(aws.getByRole("button", { name: "Remove copy" })).toHaveCount(0);
     await adminCtx.close();
     await staffCtx.close();
   });

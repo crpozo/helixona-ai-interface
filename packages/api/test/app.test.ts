@@ -576,7 +576,14 @@ describe("Agreements", () => {
     expect(pub).toMatchObject({ canDownload: false, uploads: false });
     expect(pub.items[0].file).toBeNull();
     const staff = await login(app, "ana");
-    expect((await app.inject({ method: "GET", url: "/api/agreements/aws-baa/file", headers: { cookie: staff.cookie } })).statusCode).toBe(404);
+    // Before any upload, signed-in staff get the vendor's document bundled with the app.
+    const initial = (await app.inject({ method: "GET", url: "/api/agreements", headers: { cookie: staff.cookie } })).json();
+    expect(initial.items.map((a: { file: { source: string } }) => a.file.source)).toEqual(["bundled", "bundled"]);
+    const bundledDl = await app.inject({ method: "GET", url: "/api/agreements/aws-baa/file", headers: { cookie: staff.cookie } });
+    expect(bundledDl.statusCode).toBe(200);
+    expect(bundledDl.headers["content-type"]).toBe("application/pdf");
+    expect(bundledDl.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(bundledDl.rawPayload.length).toBe(initial.items[0].file.size);
     expect((await app.inject({ method: "POST", url: "/api/admin/agreements/aws-baa/upload", headers: { ...H, cookie: staff.cookie }, payload: { size: 10, contentType: "application/pdf" } })).statusCode).toBe(403);
     const admin = await login(app, "root", "admin");
     expect((await app.inject({ method: "POST", url: "/api/admin/agreements/aws-baa/upload", headers: { ...H, cookie: admin.cookie }, payload: { size: 10, contentType: "image/png" } })).json().error.code).toBe("unsupported_type");
@@ -592,14 +599,14 @@ describe("Agreements", () => {
     const fake = (await app.inject({ method: "POST", url: "/api/admin/agreements/anthropic-baa/upload", headers: { ...H, cookie: admin.cookie }, payload: { size: 12, contentType: "application/pdf" } })).json();
     expect((await app.inject({ method: "PUT", url: fake.upload.url, headers: { "content-type": "application/pdf", "x-requested-with": "helixona" }, payload: Buffer.from("not a pdf!!") })).statusCode).toBe(200);
     expect((await app.inject({ method: "POST", url: "/api/admin/agreements/anthropic-baa/confirm", headers: { ...H, cookie: admin.cookie }, payload: {} })).json().error.code).toBe("unsupported_type");
-    expect((await app.inject({ method: "GET", url: "/api/agreements/anthropic-baa/file", headers: { cookie: admin.cookie } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: "/api/agreements", headers: { cookie: admin.cookie } })).json().items[1].file.source).toBe("bundled");
     const confirmed = (await app.inject({ method: "POST", url: "/api/admin/agreements/aws-baa/confirm", headers: { ...H, cookie: admin.cookie }, payload: {} })).json();
     expect(confirmed.file).toMatchObject({ size: bytes.length });
     expect(confirmed.file.uploadedAt).toBeTruthy();
     // Signed-in staff see and download the copy; visitors see the status only.
     const listed = (await app.inject({ method: "GET", url: "/api/agreements", headers: { cookie: staff.cookie } })).json();
     expect(listed).toMatchObject({ canDownload: true, uploads: false });
-    expect(listed.items[0].file).toMatchObject({ size: bytes.length });
+    expect(listed.items[0].file).toMatchObject({ size: bytes.length, source: "uploaded" });
     expect((await app.inject({ method: "GET", url: "/api/agreements" })).json().items[0].file).toBeNull();
     const dl = await app.inject({ method: "GET", url: "/api/agreements/aws-baa/file", headers: { cookie: staff.cookie } });
     expect(dl.statusCode).toBe(200);
@@ -609,7 +616,10 @@ describe("Agreements", () => {
     expect((await app.inject({ method: "GET", url: "/api/agreements/aws-baa/file" })).statusCode).toBe(401);
     expect((await app.inject({ method: "GET", url: "/api/agreements", headers: { cookie: admin.cookie } })).json().uploads).toBe(true);
     expect((await app.inject({ method: "DELETE", url: "/api/admin/agreements/aws-baa", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(204);
-    expect((await app.inject({ method: "GET", url: "/api/agreements/aws-baa/file", headers: { cookie: staff.cookie } })).statusCode).toBe(404);
+    // Removing the uploaded copy brings the bundled one back.
+    const after = (await app.inject({ method: "GET", url: "/api/agreements", headers: { cookie: staff.cookie } })).json();
+    expect(after.items[0].file.source).toBe("bundled");
+    expect((await app.inject({ method: "GET", url: "/api/agreements/aws-baa/file", headers: { cookie: staff.cookie } })).rawPayload.length).toBe(after.items[0].file.size);
     expect(repos.audit.events.map((e) => e.action)).toEqual(expect.arrayContaining(["admin_agreement_uploaded", "agreement_downloaded", "admin_agreement_removed"]));
     await app.close();
   });
