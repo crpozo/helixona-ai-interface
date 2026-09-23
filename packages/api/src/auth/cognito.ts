@@ -148,7 +148,7 @@ export class CognitoUserDirectory implements UserDirectory {
     await this.client.send(new AdminUserGlobalSignOutCommand({ UserPoolId: this.userPoolId, Username: username })).catch(() => {});
   }
 
-  // The temporary password in the invitation expires after 3 days, and "Forgot your password?" does
+  // The temporary password in the invitation expires after 30 days, and "Forgot your password?" does
   // not work until the first sign-in is complete, so a new invitation is the only way back in.
   async resendInvitation(id: string): Promise<void> {
     const { username, email } = await this.userFor(id);

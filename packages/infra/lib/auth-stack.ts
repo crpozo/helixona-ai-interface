@@ -42,7 +42,8 @@ export class AuthStack extends cdk.Stack {
         requireUppercase: true,
         requireDigits: true,
         requireSymbols: true,
-        tempPasswordValidity: cdk.Duration.days(3),
+        // Invitations are handed out ahead of training and often sit in a junk folder for a while.
+        tempPasswordValidity: cdk.Duration.days(30),
         passwordHistorySize: 12,
       },
       // HIPAA baseline (2026-09-15): MFA required for everyone. Users without an authenticator get

@@ -102,7 +102,7 @@ export function AdminPage({ me, onBack }: Props) {
   };
 
   const resendInvitation = async (u: AdminUser) => {
-    if (!window.confirm(`Send a new invitation to ${u.email}? It contains a new temporary password valid for 3 days.`)) return;
+    if (!window.confirm(`Send a new invitation to ${u.email}? It contains a new temporary password valid for 30 days.`)) return;
     setUsersError(null);
     try {
       await adminResendInvitation(u.id);
@@ -226,7 +226,7 @@ export function AdminPage({ me, onBack }: Props) {
                     <td>
                       <div className="row gap wrap">
                         {u.enabled && u.status === "invited" && (
-                          <button type="button" className="btn btn-small" onClick={() => void resendInvitation(u)} title="New invitation email with a new temporary password (valid 3 days)">
+                          <button type="button" className="btn btn-small" onClick={() => void resendInvitation(u)} title="New invitation email with a new temporary password (valid 30 days)">
                             Resend invitation
                           </button>
                         )}
