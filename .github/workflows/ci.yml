@@ -63,8 +63,10 @@ jobs:
             packages/e2e/test-results
           retention-days: 14
 
-      - name: CDK synth (fictitious account and region; cdk-nag fails on errors)
-        run: npm run synth -w @helixona/infra
+      # cdk.json carries the production domain; the certificate only exists in the production
+      # environment, so the synth gets a placeholder ARN of the right shape.
+      - name: CDK synth (fictitious account, region and certificate; cdk-nag fails on errors)
+        run: npm run synth -w @helixona/infra -- -c certificateArn=arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000
         env:
           CDK_DEFAULT_ACCOUNT: '123456789012'
           CDK_DEFAULT_REGION: us-east-1
