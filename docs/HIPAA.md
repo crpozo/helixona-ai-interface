@@ -229,3 +229,10 @@ unlocks the user and keeps the log complete. A user may also choose "Skip traini
 this": that is an attestation, recorded and shown in the log as "Skipped (attested by user)" rather
 than as a completed check, so the Privacy Officer can follow up; set `TRAINING_ALLOW_SKIP=false` to
 remove the option.
+
+The same page lists the two business associate agreements (AWS and Anthropic) with their status,
+dates and where the originals live (`GET /api/agreements`, public: the same facts as Appendix B of
+the risk analysis). An administrator can upload the clinic's PDF copy of each one; it is stored under
+`agreements/` in the attachments bucket (encrypted with the PHI key, private, outside the retention
+rule that expires conversation attachments) and signed-in staff download it through the API
+(`GET /api/agreements/:id/file`, audited). Visitors see the status only.

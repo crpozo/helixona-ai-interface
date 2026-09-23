@@ -4,6 +4,7 @@ import { docxUrl, documents, findDocument, type Cell, type DocNode, type HipaaDo
 import { documentSlug, navigate, usePath, type Path } from "../lib/router";
 import type { Me } from "../lib/types";
 import { Logo } from "./Logo";
+import { AgreementsSection } from "./AgreementsSection";
 import { TrainingCheck, TrainingLog } from "./TrainingSections";
 
 interface Props {
@@ -303,6 +304,7 @@ function IndexView({ me }: { me?: Me | null }) {
           </section>
         ))}
       </div>
+      <AgreementsSection me={me} />
       <section className="docs-how" aria-labelledby="docs-how">
         <h2 id="docs-how">How the clinic uses them</h2>
         <ol>

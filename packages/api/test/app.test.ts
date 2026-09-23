@@ -557,3 +557,45 @@ describe("temporaryPassword", () => {
     }
   });
 });
+
+describe("Agreements", () => {
+  it("lists the BAAs publicly and lets an administrator keep the clinic's PDF copy on file for staff", async () => {
+    const { app, repos } = await makeApp();
+    const pub = (await app.inject({ method: "GET", url: "/api/agreements" })).json();
+    expect(pub.items.map((a: { id: string }) => a.id)).toEqual(["aws-baa", "anthropic-baa"]);
+    expect(pub).toMatchObject({ canDownload: false, uploads: false });
+    expect(pub.items[0].file).toBeNull();
+    const staff = await login(app, "ana");
+    expect((await app.inject({ method: "GET", url: "/api/agreements/aws-baa/file", headers: { cookie: staff.cookie } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "POST", url: "/api/admin/agreements/aws-baa/upload", headers: { ...H, cookie: staff.cookie }, payload: { size: 10, contentType: "application/pdf" } })).statusCode).toBe(403);
+    const admin = await login(app, "root", "admin");
+    expect((await app.inject({ method: "POST", url: "/api/admin/agreements/aws-baa/upload", headers: { ...H, cookie: admin.cookie }, payload: { size: 10, contentType: "image/png" } })).json().error.code).toBe("unsupported_type");
+    expect((await app.inject({ method: "POST", url: "/api/admin/agreements/nope/upload", headers: { ...H, cookie: admin.cookie }, payload: { size: 10, contentType: "application/pdf" } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "POST", url: "/api/admin/agreements/aws-baa/confirm", headers: { ...H, cookie: admin.cookie }, payload: {} })).json().error.code).toBe("upload_missing");
+    const pdf = await PDFDocument.create();
+    pdf.addPage();
+    const bytes = Buffer.from(await pdf.save());
+    const presign = (await app.inject({ method: "POST", url: "/api/admin/agreements/aws-baa/upload", headers: { ...H, cookie: admin.cookie }, payload: { size: bytes.length, contentType: "application/pdf" } })).json();
+    expect(presign.upload.url).toMatch(/^\/api\/dev\/upload\/agreements\/aws-baa\.pdf$/);
+    expect((await app.inject({ method: "PUT", url: presign.upload.url, headers: { "content-type": "application/pdf", "x-requested-with": "helixona" }, payload: bytes })).statusCode).toBe(200);
+    const confirmed = (await app.inject({ method: "POST", url: "/api/admin/agreements/aws-baa/confirm", headers: { ...H, cookie: admin.cookie }, payload: {} })).json();
+    expect(confirmed.file).toMatchObject({ size: bytes.length });
+    expect(confirmed.file.uploadedAt).toBeTruthy();
+    // Signed-in staff see and download the copy; visitors see the status only.
+    const listed = (await app.inject({ method: "GET", url: "/api/agreements", headers: { cookie: staff.cookie } })).json();
+    expect(listed).toMatchObject({ canDownload: true, uploads: false });
+    expect(listed.items[0].file).toMatchObject({ size: bytes.length });
+    expect((await app.inject({ method: "GET", url: "/api/agreements" })).json().items[0].file).toBeNull();
+    const dl = await app.inject({ method: "GET", url: "/api/agreements/aws-baa/file", headers: { cookie: staff.cookie } });
+    expect(dl.statusCode).toBe(200);
+    expect(dl.headers["content-type"]).toBe("application/pdf");
+    expect(dl.headers["content-disposition"]).toContain('filename="AWS-Business-Associate-Addendum.pdf"');
+    expect(dl.rawPayload.length).toBe(bytes.length);
+    expect((await app.inject({ method: "GET", url: "/api/agreements/aws-baa/file" })).statusCode).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/api/agreements", headers: { cookie: admin.cookie } })).json().uploads).toBe(true);
+    expect((await app.inject({ method: "DELETE", url: "/api/admin/agreements/aws-baa", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(204);
+    expect((await app.inject({ method: "GET", url: "/api/agreements/aws-baa/file", headers: { cookie: staff.cookie } })).statusCode).toBe(404);
+    expect(repos.audit.events.map((e) => e.action)).toEqual(expect.arrayContaining(["admin_agreement_uploaded", "agreement_downloaded", "admin_agreement_removed"]));
+    await app.close();
+  });
+});

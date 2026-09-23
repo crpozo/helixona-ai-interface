@@ -280,3 +280,19 @@ export type ChatSseEvent =
   | { type: "refused"; data: SseRefused }
   | { type: "error"; data: SseError }
   | { type: "done"; data: SseDone };
+
+// ---- Business associate agreements ----
+export interface AgreementFile { size: number; uploadedAt: string | null }
+export interface Agreement {
+  id: string;
+  vendor: string;
+  title: string;
+  since: string;
+  status: string;
+  reference: string;
+  url: string;
+  note: string;
+  /** The clinic's PDF copy on file; null when none, or for visitors. */
+  file: AgreementFile | null;
+}
+export interface AgreementsInfo { items: Agreement[]; canDownload: boolean; uploads: boolean }

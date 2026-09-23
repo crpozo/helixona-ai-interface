@@ -1,4 +1,4 @@
-import { DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export interface PresignedUpload {
@@ -17,8 +17,10 @@ export interface AttachmentStore {
   /** Origin the browser uploads to (added to the CSP `connect-src`); null when uploads stay same-origin. */
   readonly uploadOrigin: string | null;
   presignUpload(key: string, contentType: string, expiresSeconds?: number): Promise<PresignedUpload>;
-  head(key: string): Promise<{ size: number; contentType: string | null } | null>;
+  head(key: string): Promise<{ size: number; contentType: string | null; lastModified: string | null } | null>;
   get(key: string): Promise<Buffer>;
+  /** Deletes one object (a delete marker on the versioned bucket). */
+  delete(key: string): Promise<void>;
   /** Deletes every object under the prefix; returns how many were deleted. */
   deletePrefix(prefix: string): Promise<number>;
 }
@@ -40,10 +42,10 @@ export class S3AttachmentStore implements AttachmentStore {
     return { url, method: "PUT", headers: { "content-type": contentType }, expiresAt: new Date(Date.now() + expiresSeconds * 1000).toISOString() };
   }
 
-  async head(key: string): Promise<{ size: number; contentType: string | null } | null> {
+  async head(key: string): Promise<{ size: number; contentType: string | null; lastModified: string | null } | null> {
     try {
       const r = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
-      return { size: r.ContentLength ?? 0, contentType: r.ContentType ?? null };
+      return { size: r.ContentLength ?? 0, contentType: r.ContentType ?? null, lastModified: r.LastModified ? r.LastModified.toISOString() : null };
     } catch (e) {
       const err = e as { name?: string; $metadata?: { httpStatusCode?: number } };
       if (err.name === "NotFound" || err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) return null;
@@ -55,6 +57,10 @@ export class S3AttachmentStore implements AttachmentStore {
     const r = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
     if (!r.Body) throw new Error("empty object body");
     return Buffer.from(await r.Body.transformToByteArray());
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
   async deletePrefix(prefix: string): Promise<number> {
@@ -77,7 +83,7 @@ export class S3AttachmentStore implements AttachmentStore {
 /** In-memory store for development and tests. Uploads go to a dev-only route on the API itself. */
 export class MemoryAttachmentStore implements AttachmentStore {
   readonly uploadOrigin = null;
-  readonly objects = new Map<string, { body: Buffer; contentType: string }>();
+  readonly objects = new Map<string, { body: Buffer; contentType: string; lastModified: string }>();
 
   async presignUpload(key: string, contentType: string, expiresSeconds = 900): Promise<PresignedUpload> {
     return {
@@ -89,12 +95,16 @@ export class MemoryAttachmentStore implements AttachmentStore {
   }
 
   put(key: string, body: Buffer, contentType: string): void {
-    this.objects.set(key, { body, contentType });
+    this.objects.set(key, { body, contentType, lastModified: new Date().toISOString() });
   }
 
-  async head(key: string): Promise<{ size: number; contentType: string | null } | null> {
+  async head(key: string): Promise<{ size: number; contentType: string | null; lastModified: string | null } | null> {
     const o = this.objects.get(key);
-    return o ? { size: o.body.length, contentType: o.contentType } : null;
+    return o ? { size: o.body.length, contentType: o.contentType, lastModified: o.lastModified } : null;
+  }
+
+  async delete(key: string): Promise<void> {
+    this.objects.delete(key);
   }
 
   async get(key: string): Promise<Buffer> {

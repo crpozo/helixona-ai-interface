@@ -14,6 +14,11 @@ const MODELS = [
 const PRICES: Record<string, [number, number]> = { "anthropic.claude-sonnet-5": [2, 10], "anthropic.claude-opus-5-5": [4, 20], "anthropic.claude-fable-5-1": [10, 50], "anthropic.claude-opus-5": [5, 25] };
 const FALLBACK: Record<string, string | undefined> = { "anthropic.claude-fable-5-1": "anthropic.claude-opus-5-5", "anthropic.claude-opus-5-5": "anthropic.claude-opus-5" };
 
+const AGREEMENTS = [
+  { id: "aws-baa", vendor: "Amazon Web Services", title: "AWS Business Associate Addendum", since: "2026-09-22", status: "Accepted by the account owner on September 22, 2026", reference: "AWS Artifact (account 148274106093), Agreements, AWS Business Associate Addendum", url: "https://console.aws.amazon.com/artifact/home#/agreements", note: "Covers the HIPAA-eligible AWS services the assistant runs on (Appendix A of the risk analysis)." },
+  { id: "anthropic-baa", vendor: "Anthropic", title: "Business Associate Agreement (HIPAA readiness)", since: "2026-09-15", status: "Enabled by the account owner on September 15, 2026", reference: "Claude Console, Settings, Privacy (HIPAA readiness)", url: "https://platform.claude.com/", note: "Covers the assistant's calls to the Anthropic API for every model in the catalog." },
+];
+
 let seq = 100;
 const id = () => `demo${(seq++).toString(36).padStart(6, "0")}`;
 const now = () => new Date().toISOString();
@@ -31,6 +36,8 @@ const state = {
   usage: [] as UsageRow[],
   audit: [] as AuditEvent[],
   training: null as TrainingRecord | null,
+  agreements: {} as Record<string, { size: number; uploadedAt: string }>,
+  agreementSizes: {} as Record<string, number>,
   projects: [
     { id: "p-appeals", ownerId: "u-ana", name: "Insurance appeals", description: "Denied claims and prior authorizations", instructions: "You help the billing team write appeal letters. Always cite the claim number, the denial reason and the relevant policy language. Keep a professional, factual tone.", visibility: "clinic", knowledge: [{ id: "k-1", name: "Appeal letter template.md", contentType: "text/markdown", size: 4_210, pages: null }], createdAt: "2026-09-10T16:00:00Z", updatedAt: "2026-09-12T10:00:00Z", canEdit: true },
   ] as Project[],
@@ -209,6 +216,21 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     modules: quiz.modules.map((m) => ({ id: m.id, title: m.title, questions: quiz.questions.map((q, i) => (q.module === m.id ? i + 1 : 0)).filter(Boolean) })),
     record: state.training,
   });
+  // Business associate agreements (the demo administrator can "upload" a copy).
+  if (path === "/api/agreements" && method === "GET") return json({ items: AGREEMENTS.map((a) => ({ ...a, file: state.agreements[a.id] ?? null })), canDownload: true, uploads: true });
+  const mAgr = path.match(/^\/api\/admin\/agreements\/([^/]+)(?:\/(upload|confirm))?$/);
+  if (mAgr && method === "POST" && mAgr[2] === "upload") {
+    state.agreementSizes[mAgr[1]!] = Number(body["size"] ?? 0);
+    return json({ upload: { url: "mock://upload", method: "PUT", headers: {}, expiresAt: now() } });
+  }
+  if (mAgr && method === "POST" && mAgr[2] === "confirm") {
+    state.agreements[mAgr[1]!] = { size: state.agreementSizes[mAgr[1]!] ?? 0, uploadedAt: now() };
+    return json({ file: state.agreements[mAgr[1]!] });
+  }
+  if (mAgr && method === "DELETE" && !mAgr[2]) {
+    delete state.agreements[mAgr[1]!];
+    return new Response(null, { status: 204 });
+  }
   if (path === "/api/training" && method === "GET") return json(trainingInfo());
   const mModule = path.match(/^\/api\/training\/modules\/(\d+)$/);
   if (mModule && method === "POST") {

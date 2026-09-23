@@ -31,6 +31,19 @@ vi.mock("../lib/api", () => ({
   submitTrainingModule: vi.fn(),
   attestTraining: vi.fn(),
   adminRecordPaperTraining: vi.fn(),
+  listAgreements: vi.fn(async () => ({
+    items: [
+      { id: "aws-baa", vendor: "Amazon Web Services", title: "AWS Business Associate Addendum", since: "2026-09-22", status: "Accepted by the account owner on September 22, 2026", reference: "AWS Artifact", url: "https://example.test/aws", note: "Covers AWS.", file: null },
+      { id: "anthropic-baa", vendor: "Anthropic", title: "Business Associate Agreement (HIPAA readiness)", since: "2026-09-15", status: "Enabled on September 15, 2026", reference: "Claude Console", url: "https://example.test/anthropic", note: "Covers the API.", file: { size: 240000, uploadedAt: "2026-09-23T01:00:00Z" } },
+    ],
+    canDownload: false,
+    uploads: false,
+  })),
+  agreementFileUrl: (id: string) => `/api/agreements/${id}/file`,
+  adminAgreementUpload: vi.fn(),
+  adminConfirmAgreement: vi.fn(),
+  adminRemoveAgreement: vi.fn(),
+  uploadFile: vi.fn(),
 }));
 
 import { submitTrainingCheck } from "../lib/api";
@@ -92,6 +105,20 @@ describe("DocumentationPage", () => {
       "/docs/Helixona-Assistant-Workforce-Training.docx",
     ]);
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
+  });
+
+  it("lists the two business associate agreements; visitors see the status, signed-in staff can download a copy on file", async () => {
+    window.history.replaceState(null, "", "/documentation");
+    const { unmount } = render(<DocumentationPage backLabel="Sign in" backTo="/login" />);
+    expect(await screen.findByRole("heading", { name: "AWS Business Associate Addendum" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Business Associate Agreement (HIPAA readiness)" })).toBeTruthy();
+    expect(screen.getByText(/Accepted by the account owner on September 22, 2026/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Download PDF" })).toBeNull();
+    expect(screen.queryByText(/Upload PDF/)).toBeNull();
+    unmount();
+    render(<DocumentationPage backLabel="Back" backTo="/" me={me} />);
+    expect((await screen.findByRole("link", { name: "Download PDF" })).getAttribute("href")).toBe("/api/agreements/anthropic-baa/file");
+    expect(screen.queryByText(/Upload PDF/)).toBeNull();
   });
 
   it("opens a document from its card and renders its sections, tables and approval table, with no signature line", () => {

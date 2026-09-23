@@ -1,4 +1,7 @@
 import type {
+  Agreement,
+  AgreementFile,
+  AgreementsInfo,
   AdminTrainingLog,
   AdminUser,
   ApiErrorBody,
@@ -353,4 +356,27 @@ export function adminTraining(): Promise<AdminTrainingLog> {
 /** Records a completion done on paper (the paper knowledge check is on file) so the user is unlocked and the log is complete. */
 export function adminRecordPaperTraining(userId: string, input: { completedAt: string; score: number }): Promise<{ record: TrainingRecord }> {
   return request(`/api/admin/training/${encodeURIComponent(userId)}/paper`, { method: "POST", body: input });
+}
+
+// ---- Business associate agreements (status public; the clinic's PDF copy for signed-in staff) ----
+
+export function listAgreements(): Promise<AgreementsInfo> {
+  return request<AgreementsInfo>("/api/agreements");
+}
+
+/** Same-origin download of the clinic's copy (the session cookie authorizes it). */
+export function agreementFileUrl(id: Agreement["id"]): string {
+  return `/api/agreements/${encodeURIComponent(id)}/file`;
+}
+
+export function adminAgreementUpload(id: string, input: { size: number; contentType: string }): Promise<{ upload: UploadTarget }> {
+  return request(`/api/admin/agreements/${encodeURIComponent(id)}/upload`, { method: "POST", body: input });
+}
+
+export function adminConfirmAgreement(id: string): Promise<{ file: AgreementFile }> {
+  return request(`/api/admin/agreements/${encodeURIComponent(id)}/confirm`, { method: "POST", body: {} });
+}
+
+export function adminRemoveAgreement(id: string): Promise<void> {
+  return request<void>(`/api/admin/agreements/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
