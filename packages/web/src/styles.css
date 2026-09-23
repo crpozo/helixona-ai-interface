@@ -1754,9 +1754,6 @@ td {
   font-weight: 600;
   color: var(--brand-ink);
 }
-.doc-signatures td {
-  height: 3.2rem;
-}
 .doc-break {
   border: 0;
   border-top: 1px dashed var(--brand-line-gold);
@@ -1858,7 +1855,7 @@ td {
   }
 }
 
-/* ---- Workforce training: the knowledge check and acknowledgment, completed online ---- */
+/* ---- Workforce training: the knowledge check, completed online ---- */
 
 .training-status {
   margin: 0.5rem 0 1rem;
@@ -1935,16 +1932,6 @@ td {
   margin-bottom: 0.35rem;
   color: #ffffff;
 }
-.ack-form {
-  margin-top: 1rem;
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.02);
-}
-.ack-form .btn {
-  margin-top: 0.5rem;
-}
 .doc .training-log th,
 .doc .training-log td {
   white-space: nowrap;
@@ -1974,9 +1961,134 @@ td {
 .training-skip .link:hover {
   color: var(--text);
 }
+
+/* ---- Training course: one module per screen, questions after each ---- */
+
+.course {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--brand-black);
+  background-image: var(--brand-glow);
+  background-attachment: fixed;
+  color: var(--text);
+}
+.course-progress {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.course-progress span {
+  display: block;
+  height: 100%;
+  background: var(--brand-primary);
+  transition: width 0.3s ease;
+}
+.course-layout {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 2rem 2rem 4rem;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+.course-nav {
+  position: sticky;
+  top: 1rem;
+}
+.course-nav ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.course-step button {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: #d9d4c8;
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  line-height: 1.35;
+  cursor: pointer;
+}
+.course-step button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.course-step button:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.6;
+}
+.course-step.current button {
+  border-color: var(--brand-line-gold);
+  background: rgba(214, 185, 129, 0.08);
+  color: #ffffff;
+}
+.course-mark {
+  flex: 0 0 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--brand-line-gold);
+  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-primary);
+}
+.course-step.done .course-mark {
+  background: var(--brand-primary);
+  color: var(--brand-primary-contrast);
+}
+.course-card h1 {
+  font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+  font-weight: 400;
+  margin: 0 0 1rem;
+}
+.course-card > .eyebrow {
+  margin-bottom: 0.4rem;
+}
+.course-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+.course-done p {
+  font-size: 1.05rem;
+}
+@media (max-width: 900px) {
+  .course-layout {
+    grid-template-columns: 1fr;
+    padding: 1.25rem 1rem 3rem;
+  }
+  .course-nav {
+    position: static;
+  }
+  .course-nav ol {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .course-step button span:last-child {
+    display: none;
+  }
+  .course-step.current button span:last-child {
+    display: inline;
+  }
+}
 @media print {
   .quiz-q input,
-  .ack-form,
   .quiz-result .btn {
     display: none;
   }

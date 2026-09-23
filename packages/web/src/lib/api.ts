@@ -9,6 +9,7 @@ import type {
   Message,
   TrainingCheckResult,
   TrainingInfo,
+  TrainingModuleResult,
   TrainingRecord,
   Project,
   ProjectVisibility,
@@ -324,7 +325,7 @@ export async function adminAudit(day: string): Promise<AuditEvent[]> {
   return r.items;
 }
 
-// ---- Workforce training (knowledge check and acknowledgment, completed online) ----
+// ---- Workforce training (knowledge check, completed online; nothing to sign) ----
 
 export function getTraining(): Promise<TrainingInfo> {
   return request<TrainingInfo>("/api/training");
@@ -335,8 +336,9 @@ export function submitTrainingCheck(answers: string[]): Promise<{ record: Traini
   return request("/api/training/check", { method: "POST", body: { answers } });
 }
 
-export function acknowledgeTraining(): Promise<{ record: TrainingRecord }> {
-  return request("/api/training/acknowledgment", { method: "POST", body: { accepted: true } });
+/** In-app course: the answers to one module's questions (keyed by question number). */
+export function submitTrainingModule(moduleId: number, answers: Record<number, string>): Promise<{ record: TrainingRecord; result: TrainingModuleResult }> {
+  return request(`/api/training/modules/${moduleId}`, { method: "POST", body: { answers } });
 }
 
 /** "Skip training, I already know this": the user's attestation, recorded as such in the training log. */
@@ -348,7 +350,7 @@ export function adminTraining(): Promise<AdminTrainingLog> {
   return request<AdminTrainingLog>("/api/admin/training");
 }
 
-/** Records a completion done on paper (signed acknowledgment on file) so the user is unlocked and the log is complete. */
+/** Records a completion done on paper (the paper knowledge check is on file) so the user is unlocked and the log is complete. */
 export function adminRecordPaperTraining(userId: string, input: { completedAt: string; score: number }): Promise<{ record: TrainingRecord }> {
   return request(`/api/admin/training/${encodeURIComponent(userId)}/paper`, { method: "POST", body: input });
 }

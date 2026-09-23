@@ -156,16 +156,30 @@ export interface TrainingRecord {
   lastAttemptAt: string;
   bestScore: number;
   passedAt: string | null;
-  acknowledgedAt: string | null;
   source?: "online" | "paper" | "attested";
   recordedBy?: string;
   recordedAt?: string;
+  moduleProgress?: Record<string, TrainingModuleProgress>;
 }
 
 export interface TrainingQuestion {
   n: number;
+  module: number;
   text: string;
   options: { letter: string; text: string }[];
+}
+
+export interface TrainingModule {
+  id: number;
+  title: string;
+  questions: number[];
+}
+
+export interface TrainingModuleProgress {
+  attempts: number;
+  firstTryCorrect: number;
+  total: number;
+  completedAt: string | null;
 }
 
 export interface TrainingInfo {
@@ -173,7 +187,16 @@ export interface TrainingInfo {
   passingScore: number;
   total: number;
   questions: TrainingQuestion[];
+  modules: TrainingModule[];
   record: TrainingRecord | null;
+}
+
+export interface TrainingModuleResult {
+  results: { n: number; correct: boolean; why?: string }[];
+  correct: number;
+  total: number;
+  moduleComplete: boolean;
+  courseComplete: boolean;
 }
 
 export interface TrainingCheckResult {

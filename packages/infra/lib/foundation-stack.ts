@@ -153,7 +153,7 @@ export class FoundationStack extends cdk.Stack {
       tableName: resourceName(stage, 'projects'),
       partitionKey: { name: 'projectId', type: s },
     });
-    // Training: one row per user with the knowledge-check result and the acknowledgment (the
+    // Training: one row per user with the knowledge-check result (the
     // training log the Privacy Officer keeps for six years; no TTL).
     const training = new dynamodb.Table(this, 'TrainingTable', {
       ...tableDefaults,

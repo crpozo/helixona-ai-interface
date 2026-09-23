@@ -403,39 +403,67 @@ describe("Projects and model switching", () => {
 });
 
 describe("Workforce training", () => {
-  it("grades the check server-side, records every attempt, and signs the acknowledgment only after passing", async () => {
+  it("grades the check server-side and records every attempt; passing completes the training with nothing to sign", async () => {
     const { app, repos } = await makeApp();
     const { cookie } = await login(app, "bea");
     const info = (await app.inject({ method: "GET", url: "/api/training", headers: { cookie } })).json();
-    expect(info).toMatchObject({ total: 10, passingScore: 8, record: null });
+    expect(info).toMatchObject({ total: 12, passingScore: 10, record: null });
+    expect(info.modules.map((m: { id: number }) => m.id)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(info.questions[0].options.map((o: { letter: string }) => o.letter)).toEqual(["A", "B", "C"]);
     expect(JSON.stringify(info)).not.toContain('"answer"');
-    // The acknowledgment needs a passed check.
-    expect((await app.inject({ method: "POST", url: "/api/training/acknowledgment", headers: { ...H, cookie }, payload: { accepted: true } })).statusCode).toBe(409);
     // Wrong number of answers.
     expect((await app.inject({ method: "POST", url: "/api/training/check", headers: { ...H, cookie }, payload: { answers: ["A"] } })).statusCode).toBe(400);
     // All "A": only question 2 is right.
-    const fail = (await app.inject({ method: "POST", url: "/api/training/check", headers: { ...H, cookie }, payload: { answers: Array(10).fill("a") } })).json();
-    expect(fail.result).toMatchObject({ score: 1, total: 10, passed: false });
+    const fail = (await app.inject({ method: "POST", url: "/api/training/check", headers: { ...H, cookie }, payload: { answers: Array(12).fill("a") } })).json();
+    expect(fail.result).toMatchObject({ score: 1, total: 12, passed: false });
     expect(fail.result.results[0].why).toBeTruthy();
     expect(fail.result.results[1]).toEqual({ n: 2, correct: true });
-    expect(fail.record).toMatchObject({ attempts: 1, lastScore: 1, bestScore: 1, passedAt: null, acknowledgedAt: null, email: "bea@dev.local" });
+    expect(fail.record).toMatchObject({ attempts: 1, lastScore: 1, bestScore: 1, passedAt: null, email: "bea@dev.local" });
     expect(fail.record.answers).toBeUndefined();
     // The right answers.
-    const pass = (await app.inject({ method: "POST", url: "/api/training/check", headers: { ...H, cookie }, payload: { answers: ["B", "A", "B", "B", "B", "B", "B", "B", "B", "C"] } })).json();
-    expect(pass.result).toMatchObject({ score: 10, passed: true });
-    expect(pass.record).toMatchObject({ attempts: 2, bestScore: 10, version: "1.1" });
+    const pass = (await app.inject({ method: "POST", url: "/api/training/check", headers: { ...H, cookie }, payload: { answers: ["B", "A", "B", "C", "B", "B", "B", "B", "B", "B", "B", "B"] } })).json();
+    expect(pass.result).toMatchObject({ score: 12, passed: true });
+    expect(pass.record).toMatchObject({ attempts: 2, bestScore: 12, version: "1.2" });
     expect(pass.record.passedAt).toBeTruthy();
-    const ack = (await app.inject({ method: "POST", url: "/api/training/acknowledgment", headers: { ...H, cookie }, payload: { accepted: true } })).json();
-    expect(ack.record.acknowledgedAt).toBeTruthy();
-    expect(repos.audit.events.map((e) => e.action)).toEqual(expect.arrayContaining(["training_check_failed", "training_check_passed", "training_acknowledged"]));
+    expect(repos.audit.events.map((e) => e.action)).toEqual(expect.arrayContaining(["training_check_failed", "training_check_passed"]));
     // The training log is for administrators.
     expect((await app.inject({ method: "GET", url: "/api/admin/training", headers: { cookie } })).statusCode).toBe(403);
     const admin = await login(app, "root", "admin");
     const log = (await app.inject({ method: "GET", url: "/api/admin/training", headers: { cookie: admin.cookie } })).json();
     const row = log.items.find((r: { id: string }) => r.id === "dev-bea");
-    expect(row).toMatchObject({ email: "bea@dev.local", record: { attempts: 2, bestScore: 10 } });
-    expect(row.record.acknowledgedAt).toBeTruthy();
+    expect(row).toMatchObject({ email: "bea@dev.local", record: { attempts: 2, bestScore: 12 } });
+    expect(row.record.passedAt).toBeTruthy();
+    await app.close();
+  });
+
+  it("the in-app course grades one module at a time and completes the training once every module is done", async () => {
+    const { app, repos } = await makeApp({ TRAINING_REQUIRED: "true" });
+    const { cookie } = await login(app, "bea");
+    expect((await app.inject({ method: "POST", url: "/api/training/modules/99", headers: { ...H, cookie }, payload: { answers: { "1": "B" } } })).statusCode).toBe(404);
+    // Module 3 has two questions; answering one is not enough.
+    expect((await app.inject({ method: "POST", url: "/api/training/modules/3", headers: { ...H, cookie }, payload: { answers: { "3": "B" } } })).statusCode).toBe(400);
+    // A wrong first try is recorded and the module stays open.
+    const wrong = (await app.inject({ method: "POST", url: "/api/training/modules/1", headers: { ...H, cookie }, payload: { answers: { "1": "A" } } })).json();
+    expect(wrong.result).toMatchObject({ correct: 0, total: 1, moduleComplete: false, courseComplete: false });
+    expect(wrong.result.results[0]).toMatchObject({ n: 1, correct: false });
+    expect(wrong.result.results[0].why).toBeTruthy();
+    expect(wrong.record.moduleProgress["1"]).toMatchObject({ attempts: 1, firstTryCorrect: 0, total: 1, completedAt: null });
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().training.complete).toBe(false);
+    // Every module right (module 1 on the second try).
+    const key: Record<string, Record<string, string>> = { 1: { "1": "B" }, 2: { "2": "A" }, 3: { "3": "B", "4": "C" }, 4: { "5": "B", "6": "B", "7": "B" }, 5: { "8": "B", "9": "B", "10": "B" }, 6: { "11": "B" }, 7: { "12": "B" } };
+    let last: { result: { moduleComplete: boolean; courseComplete: boolean }; record: Record<string, unknown> & { moduleProgress: Record<string, unknown> } } | undefined;
+    for (const [id, answers] of Object.entries(key)) {
+      last = (await app.inject({ method: "POST", url: `/api/training/modules/${id}`, headers: { ...H, cookie }, payload: { answers } })).json();
+      expect(last!.result.moduleComplete).toBe(true);
+    }
+    expect(last!.result.courseComplete).toBe(true);
+    // The log scores the first attempts: 11 of 12. Passing is the completion; there is nothing to sign.
+    expect(last!.record).toMatchObject({ bestScore: 11, lastScore: 11, source: "online", version: "1.2" });
+    expect(last!.record.passedAt).toBeTruthy();
+    expect(last!.record.moduleProgress["1"]).toMatchObject({ attempts: 2, firstTryCorrect: 0 });
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().training.complete).toBe(true);
+    expect(repos.audit.events.filter((e) => e.action === "training_module_completed")).toHaveLength(7);
+    expect(repos.audit.events.map((e) => e.action)).toContain("training_check_passed");
     await app.close();
   });
 });
@@ -467,17 +495,15 @@ describe("Training gate", () => {
   it("blocks the assistant for everyone, administrators included, until the training is complete", async () => {
     const { app } = await makeApp({ TRAINING_REQUIRED: "true" });
     const { cookie } = await login(app, "nora");
-    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().training).toEqual({ required: true, complete: false, canSkip: true, version: "1.1" });
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().training).toEqual({ required: true, complete: false, canSkip: true, version: "1.2" });
     const blocked = await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "sonnet" } });
     expect(blocked.statusCode).toBe(403);
     expect(blocked.json().error.code).toBe("training_required");
     // Administrators are not exempt.
     const admin = await login(app, "root", "admin");
     expect((await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: admin.cookie }, payload: { modelAlias: "sonnet" } })).statusCode).toBe(403);
-    // Pass the check and sign: unlocked.
-    await app.inject({ method: "POST", url: "/api/training/check", headers: { ...H, cookie }, payload: { answers: ["B", "A", "B", "B", "B", "B", "B", "B", "B", "C"] } });
-    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().training.complete).toBe(false);
-    await app.inject({ method: "POST", url: "/api/training/acknowledgment", headers: { ...H, cookie }, payload: { accepted: true } });
+    // Pass the check: unlocked, with nothing to sign.
+    await app.inject({ method: "POST", url: "/api/training/check", headers: { ...H, cookie }, payload: { answers: ["B", "A", "B", "C", "B", "B", "B", "B", "B", "B", "B", "B"] } });
     expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().training.complete).toBe(true);
     const conv = await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "sonnet" } });
     expect(conv.statusCode).toBe(201);
@@ -486,22 +512,22 @@ describe("Training gate", () => {
     expect(parseSse(turn.body).at(-1)?.event).toBe("done");
     // A paper completion recorded by an administrator unlocks a user too, and shows in the log.
     const created = (await app.inject({ method: "POST", url: "/api/admin/users", headers: { ...H, cookie: admin.cookie }, payload: { email: "paper@clinic.test", name: "Paper Person", role: "staff" } })).json();
-    expect((await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie: admin.cookie }, payload: { completedAt: "2026-09-20", score: 7 } })).statusCode).toBe(400);
-    const paper = await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie: admin.cookie }, payload: { completedAt: "2026-09-20", score: 9 } });
+    expect((await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie: admin.cookie }, payload: { completedAt: "2026-09-20", score: 9 } })).statusCode).toBe(400);
+    const paper = await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie: admin.cookie }, payload: { completedAt: "2026-09-20", score: 11 } });
     expect(paper.statusCode).toBe(200);
-    expect(paper.json().record).toMatchObject({ source: "paper", bestScore: 9, recordedBy: "dev-root", version: "1.1" });
+    expect(paper.json().record).toMatchObject({ source: "paper", bestScore: 11, recordedBy: "dev-root", version: "1.2" });
     expect(paper.json().record.passedAt).toContain("2026-09-20");
     const log = (await app.inject({ method: "GET", url: "/api/admin/training", headers: { cookie: admin.cookie } })).json();
-    expect(log.version).toBe("1.1");
+    expect(log.version).toBe("1.2");
     expect(log.items.find((r: { id: string }) => r.id === created.id).record.source).toBe("paper");
-    expect((await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie }, payload: { completedAt: "2026-09-20", score: 9 } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie }, payload: { completedAt: "2026-09-20", score: 11 } })).statusCode).toBe(403);
     // "Skip training, I already know this": unlocks, and the log shows it as an attestation.
     const skipper = await login(app, "sam");
     expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie: skipper.cookie } })).json().training).toMatchObject({ complete: false, canSkip: true });
     expect((await app.inject({ method: "POST", url: "/api/training/attest", headers: { ...H, cookie: skipper.cookie }, payload: { attested: false } })).statusCode).toBe(400);
     const att = await app.inject({ method: "POST", url: "/api/training/attest", headers: { ...H, cookie: skipper.cookie }, payload: { attested: true } });
     expect(att.statusCode).toBe(200);
-    expect(att.json().record).toMatchObject({ source: "attested", bestScore: 0, version: "1.1" });
+    expect(att.json().record).toMatchObject({ source: "attested", bestScore: 0, version: "1.2" });
     expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie: skipper.cookie } })).json().training.complete).toBe(true);
     expect((await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: skipper.cookie }, payload: { modelAlias: "sonnet" } })).statusCode).toBe(201);
     const log2 = (await app.inject({ method: "GET", url: "/api/admin/training", headers: { cookie: admin.cookie } })).json();

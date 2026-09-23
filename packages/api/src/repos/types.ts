@@ -120,6 +120,15 @@ export interface UserDirectory {
   setTemporaryPassword(id: string): Promise<string>;
 }
 
+export interface TrainingModuleProgress {
+  attempts: number;
+  /** Questions answered correctly on the first attempt (the score the log reports). */
+  firstTryCorrect: number;
+  total: number;
+  /** Set when every question of the module has been answered correctly. */
+  completedAt: string | null;
+}
+
 /** Workforce training: one row per user, the training log the Privacy Officer keeps. */
 export interface TrainingRecord {
   userId: string;
@@ -132,15 +141,16 @@ export interface TrainingRecord {
   lastAttemptAt: string;
   bestScore: number;
   passedAt: string | null;
-  acknowledgedAt: string | null;
   /**
-   * How the record was completed: the check and acknowledgment in the app, a paper completion
+   * How the record was completed: the check in the app, a paper completion
    * recorded by an administrator, or the user's own attestation that they already know the material.
    */
   source?: "online" | "paper" | "attested";
   /** Administrator who recorded a paper completion, and when. */
   recordedBy?: string;
   recordedAt?: string;
+  /** In-app course: progress per module (keyed by module id). */
+  moduleProgress?: Record<string, TrainingModuleProgress>;
   /** Letters of the last attempt (kept for the record; never sent to the browser). */
   answers: string[];
 }

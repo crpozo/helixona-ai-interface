@@ -4,14 +4,14 @@ import { docxUrl, documents, findDocument, type Cell, type DocNode, type HipaaDo
 import { documentSlug, navigate, usePath, type Path } from "../lib/router";
 import type { Me } from "../lib/types";
 import { Logo } from "./Logo";
-import { TrainingAcknowledgment, TrainingCheck, TrainingLog } from "./TrainingSections";
+import { TrainingCheck, TrainingLog } from "./TrainingSections";
 
 interface Props {
   /** Label of the link that leaves the documentation. */
   backLabel: string;
   /** Where that link goes: the sign-in page for visitors, the assistant for signed-in staff. */
   backTo: "/login" | "/";
-  /** The signed-in user, when there is one: enables the online knowledge check and acknowledgment. */
+  /** The signed-in user, when there is one: enables the online knowledge check. */
   me?: Me | null;
 }
 
@@ -26,7 +26,7 @@ const keepSection: SectionRender = ({ heading, body }) => (
 );
 const hideSection: SectionRender = () => null;
 
-/** The workforce training: the check and the acknowledgment are completed online by signed-in staff. */
+/** The workforce training: the check is completed online by signed-in staff; there is nothing to sign. */
 function trainingSections(me: Me | null | undefined): Record<string, SectionRender> {
   // The answer key is for the trainer: administrators, and only once their own training is done.
   const isAdmin = !!me?.user.roles.includes("admin") && (!me?.training?.required || !!me.training.complete);
@@ -41,19 +41,11 @@ function trainingSections(me: Me | null | undefined): Record<string, SectionRend
       : ({ heading, body }) => (
           <>
             {heading}
-            <aside className="doc-note">Staff complete this check online after signing in: the score and the acknowledgment are saved to the training log. The paper version below is the alternative.</aside>
+            <aside className="doc-note">Staff complete this check online after signing in: the score is saved to the training log. The paper version below is the alternative.</aside>
             {body}
           </>
         ),
     "Answer key (for the trainer)": isAdmin ? keepSection : hideSection,
-    Acknowledgment: me
-      ? ({ heading, body }) => (
-          <>
-            {heading}
-            <TrainingAcknowledgment me={me}>{body}</TrainingAcknowledgment>
-          </>
-        )
-      : keepSection,
     "Training log": isAdmin
       ? ({ heading }) => (
           <>
@@ -64,8 +56,6 @@ function trainingSections(me: Me | null | undefined): Record<string, SectionRend
       : hideSection,
   };
 }
-
-const SIGNATURE_WIDTHS = [3400, 3600, 2360];
 
 function go(to: Path) {
   return (e: React.MouseEvent) => {
@@ -194,13 +184,22 @@ function Node({ node, id }: { node: DocNode; id: string }) {
       return <DataTable headers={node.headers} rows={node.rows} widths={node.widths} />;
     case "kv":
       return <KvTable rows={node.rows} />;
-    case "signatures":
-      return <DataTable className="doc-signatures" headers={["Name and role", "Signature", "Date"]} rows={node.roles.map((r) => [r, "", ""])} widths={SIGNATURE_WIDTHS} />;
     case "spacer":
       return null;
     case "pageBreak":
       return <hr className="doc-break" />;
   }
+}
+
+/** Renders a list of document nodes (used by the training course to show one module at a time). */
+export function DocNodes({ nodes, idPrefix }: { nodes: DocNode[]; idPrefix: string }) {
+  return (
+    <>
+      {nodes.map((n, k) => (
+        <Node key={k} node={n} id={`${idPrefix}-${k}`} />
+      ))}
+    </>
+  );
 }
 
 function jumpTo(id: string) {
@@ -273,15 +272,15 @@ function DocumentView({ doc, me }: { doc: HipaaDocument; me?: Me | null }) {
   );
 }
 
-function IndexView() {
+function IndexView({ me }: { me?: Me | null }) {
   return (
     <>
       <p className="eyebrow">HIPAA documentation</p>
       <h1 className="docs-index-title">Compliance documents</h1>
       <p className="docs-intro">
         The three documents the clinic keeps for the {brand.productName}: what the risks are and how they are controlled, the rules staff and
-        administrators follow, and the training every user completes before their first sign-in. Read them here, or download the Word files to
-        fill in, sign and file.
+        administrators follow, and the training every user completes before their first sign-in. Read them here, or download the Word files for
+        the clinic's records. Nothing needs to be signed.
       </p>
       <div className="docs-cards">
         {documents.map((d) => (
@@ -289,7 +288,12 @@ function IndexView() {
             <h2 id={`card-${d.slug}`}>{d.title}</h2>
             <p>{d.summary}</p>
             <div className="docs-card-actions">
-              <a className="btn btn-primary" href={`/documentation/${d.slug}`} onClick={go(`/documentation/${d.slug}`)}>
+              {me && d.slug === "workforce-training" && (
+                <a className="btn btn-primary" href="/training" onClick={go("/training")}>
+                  Start the course
+                </a>
+              )}
+              <a className={me && d.slug === "workforce-training" ? "btn" : "btn btn-primary"} href={`/documentation/${d.slug}`} onClick={go(`/documentation/${d.slug}`)}>
                 Read online
               </a>
               <a className="btn" href={docxUrl(d)} download>
@@ -302,9 +306,9 @@ function IndexView() {
       <section className="docs-how" aria-labelledby="docs-how">
         <h2 id="docs-how">How the clinic uses them</h2>
         <ol>
-          <li>Fill in the bracketed names and dates, and have the Privacy Officer, the Security Officer and the owner sign the risk analysis and the policies.</li>
-          <li>Deliver the training to every user before their first sign-in and keep each signed acknowledgment.</li>
-          <li>Keep the signed copies with the clinic's compliance records for at least six years, and review them every year or after any major change.</li>
+          <li>Fill in the bracketed names and dates in the risk analysis and the policies, and have the Privacy Officer, the Security Officer and the owner approve them. No signatures are needed.</li>
+          <li>Every user completes the training inside the assistant before their first conversation; the training log on the Administration page records it.</li>
+          <li>Keep the documents with the clinic's compliance records for at least six years, and review them every year or after any major change.</li>
         </ol>
       </section>
     </>
@@ -342,7 +346,7 @@ export function DocumentationPage({ backLabel, backTo, me }: Props) {
           </a>
         </nav>
       </header>
-      <main className="docs-main">{doc ? <DocumentView doc={doc} me={me} /> : <IndexView />}</main>
+      <main className="docs-main">{doc ? <DocumentView doc={doc} me={me} /> : <IndexView me={me} />}</main>
     </div>
   );
 }

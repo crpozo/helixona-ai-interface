@@ -18,7 +18,6 @@ export type DocNode =
   | { type: "list"; ordered: boolean; items: Run[][] }
   | { type: "table"; headers: string[]; rows: Cell[][]; widths: number[] }
   | { type: "kv"; rows: [string, string][]; widths: [number, number] }
-  | { type: "signatures"; roles: string[] }
   | { type: "spacer" }
   | { type: "pageBreak" };
 

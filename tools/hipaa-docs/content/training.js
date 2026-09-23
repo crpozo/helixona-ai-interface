@@ -1,38 +1,41 @@
-const { h1, h2, h3, p, b, i, note, bullets, numbered, table, kv, signatures, spacer, pageBreak, titleBlock, build } = require("../lib");
+const { h1, h2, h3, p, b, i, note, bullets, numbered, table, kv, spacer, pageBreak, titleBlock, build } = require("../lib");
 /**
  * Knowledge check. The same list feeds the Word file, the answer key and the online check in the
  * app (build.js writes it to packages/core/src/training-quiz.generated.ts, where the API grades it).
  */
 const LETTERS = ["A", "B", "C", "D"];
-const passingScore = 8;
+const passingScore = 10;
+// `module` ties each question to the module it checks; the in-app course asks them module by module.
 const quiz = [
-  { text: "A coworker is out sick and asks you to sign in with your account so they can finish a letter. What do you do?", options: ["Share the code once.", "Decline; accounts are personal and an administrator can create one for them.", "Sign in for them on your computer."], answer: "B", why: "Accounts are personal; every action must be attributable to one person." },
-  { text: "Which of these is PHI?", options: ["A patient's name next to an appointment date.", "The clinic's address.", "A blank claim form."], answer: "A", why: "A name with a date of care identifies the patient and relates to care." },
-  { text: "You need the assistant to summarize one patient's EOB. The PDF you have covers ten patients. What is the right step?", options: ["Upload the whole file.", "Upload only the pages for that patient, or redact the others.", "Paste all ten into the message."], answer: "B", why: "Minimum necessary: include only the information the task needs." },
-  { text: "The assistant drafts an appeal letter with a claim number and denial code. Before sending it you must:", options: ["Send it; the assistant is accurate.", "Check the claim number, dates and reasons against the source document.", "Ask the assistant if it is sure."], answer: "B", why: "The assistant can be wrong; the person is responsible for the result." },
-  { text: "Which tool may receive patient information?", options: ["Any AI chatbot with a good privacy policy.", "Only the Helixona Assistant at ai.helixona.com.", "Your personal account on a consumer AI product, if you delete the chat afterwards."], answer: "B", why: "Only the approved tool has HIPAA agreements and the clinic's safeguards." },
-  { text: "Your phone with the authenticator app is stolen on Saturday. When do you report it?", options: ["Monday morning.", "The same day, to the Security Officer.", "Only if you notice unusual activity."], answer: "B", why: "Same-day reporting lets an administrator disable the account or reset the authenticator." },
-  { text: "How long are conversations kept?", options: ["Forever.", "30 days after the last activity, or until you delete them.", "Until the end of the year."], answer: "B", why: "Retention is 30 days after the last activity; users may delete sooner." },
-  { text: "You notice a conversation in a shared project that contains a patient's full record for no work reason. What do you do?", options: ["Ignore it.", "Report it to the Security Officer within an hour.", "Delete it yourself and say nothing."], answer: "B", why: "Suspected incidents are reported within an hour and never handled alone." },
-  { text: "You are on a shared front-desk computer and step away for lunch. What do you do first?", options: ["Nothing; the screen locks eventually.", "Sign out of the assistant.", "Close the browser tab only."], answer: "B", why: "Signing out prevents someone else from using your session." },
-  { text: "Who is responsible for a clinical or billing decision made using the assistant's output?", options: ["The assistant.", "Anthropic.", "The licensed staff member who reviews and uses it."], answer: "C", why: "Licensed staff own every clinical and billing decision." },
+  { module: 1, text: "Who does HIPAA apply to at Helixona?", options: ["Only the doctors.", "The clinic and every member of its workforce, including administrative staff.", "Only the company that runs the software."], answer: "B", why: "HIPAA duties apply to the clinic and to each workforce member." },
+  { module: 2, text: "Which of these is PHI?", options: ["A patient's name next to an appointment date.", "The clinic's address.", "A blank claim form."], answer: "A", why: "A name with a date of care identifies the patient and relates to care." },
+  { module: 3, text: "Which tool may receive patient information?", options: ["Any AI chatbot with a good privacy policy.", "Only the Helixona Assistant at ai.helixona.com.", "Your personal account on a consumer AI product, if you delete the chat afterwards."], answer: "B", why: "Only the approved tool has HIPAA agreements and the clinic's safeguards." },
+  { module: 3, text: "Who is responsible for a clinical or billing decision made using the assistant's output?", options: ["The assistant.", "Anthropic.", "The licensed staff member who reviews and uses it."], answer: "C", why: "Licensed staff own every clinical and billing decision." },
+  { module: 4, text: "A coworker is out sick and asks you to sign in with your account so they can finish a letter. What do you do?", options: ["Share the code once.", "Decline; accounts are personal and an administrator can create one for them.", "Sign in for them on your computer."], answer: "B", why: "Accounts are personal; every action must be attributable to one person." },
+  { module: 4, text: "Your phone with the authenticator app is stolen on Saturday. When do you report it?", options: ["Monday morning.", "The same day, to the Security Officer.", "Only if you notice unusual activity."], answer: "B", why: "Same-day reporting lets an administrator disable the account or reset the authenticator." },
+  { module: 4, text: "You are on a shared front-desk computer and step away for lunch. What do you do first?", options: ["Nothing; the screen locks eventually.", "Sign out of the assistant.", "Close the browser tab only."], answer: "B", why: "Signing out prevents someone else from using your session." },
+  { module: 5, text: "You need the assistant to summarize one patient's EOB. The PDF you have covers ten patients. What is the right step?", options: ["Upload the whole file.", "Upload only the pages for that patient, or redact the others.", "Paste all ten into the message."], answer: "B", why: "Minimum necessary: include only the information the task needs." },
+  { module: 5, text: "The assistant drafts an appeal letter with a claim number and denial code. Before sending it you must:", options: ["Send it; the assistant is accurate.", "Check the claim number, dates and reasons against the source document.", "Ask the assistant if it is sure."], answer: "B", why: "The assistant can be wrong; the person is responsible for the result." },
+  { module: 5, text: "How long are conversations kept?", options: ["Forever.", "30 days after the last activity, or until you delete them.", "Until the end of the year."], answer: "B", why: "Retention is 30 days after the last activity; users may delete sooner." },
+  { module: 6, text: "You notice a conversation in a shared project that contains a patient's full record for no work reason. What do you do?", options: ["Ignore it.", "Report it to the Security Officer within an hour.", "Delete it yourself and say nothing."], answer: "B", why: "Suspected incidents are reported within an hour and never handled alone." },
+  { module: 7, text: "What can happen if you look at a patient's information without a work reason?", options: ["Nothing, as long as you do not share it.", "Sanctions from retraining up to termination, and possibly legal penalties.", "A reminder email."], answer: "B", why: "Access without a work reason is a violation; sanctions range up to termination and legal penalties may apply." },
 ];
 const optionsLine = (q) => q.options.map((o, k) => `${LETTERS[k]}. ${o}`).join(" ");
 const children = [
   ...titleBlock("Workforce Training", "HIPAA and the Helixona Assistant", [
-    ["Document", "Training module, knowledge check, acknowledgment and training log"],
+    ["Document", "Training modules, knowledge check and training log"],
     ["Audience", "Every workforce member with an account; administrators complete the additional section"],
     ["Duration", "About 25 minutes"],
-    ["Version and date", "1.1, September 22, 2026"],
+    ["Version and date", "1.2, September 23, 2026"],
     ["Owner", "[Name], Privacy Officer"],
     ["Frequency", "Before first sign-in, yearly, and after material policy changes"],
   ]),
   pageBreak(),
   h1("How to use this training"),
   ...numbered([
-    "Read modules 1 to 7 (about 20 minutes).",
-    "Complete the knowledge check. A score of 8 out of 10 or better is required; retake it if needed. Signed-in staff complete it online at ai.helixona.com/documentation/workforce-training, where the score is recorded automatically; the paper version below is the alternative. The assistant stays locked, for administrators too, until the check is passed and the acknowledgment signed (or a paper completion is recorded by an administrator).",
-    "Sign the acknowledgment: online, after passing the check, or on the last page of this document, returned to the Privacy Officer.",
+    "Read modules 1 to 7 (about 20 minutes). Signed-in staff can take the training as a course inside the assistant (Training in the sidebar): each module is followed by its own questions, with feedback, and progress is saved as you go.",
+    `Complete the knowledge check. A score of ${passingScore} out of ${quiz.length} or better is required; retake it if needed. Online, the questions are asked module by module in the course, or all at once at ai.helixona.com/documentation/workforce-training; the paper version below is the alternative. The assistant stays locked, for administrators too, until the check is passed (or a paper completion is recorded by an administrator).`,
+    "Nothing to sign: passing the check is recorded in the training log with your name, email and the date, and confirms the statements in \"What completing the training means\" below.",
     "The training log in the Administration page records every online completion; the Privacy Officer adds paper completions to it.",
   ]),
   h1("Module 1. Why this matters"),
@@ -90,7 +93,7 @@ const children = [
   p("Violating the clinic's policies, for example sharing an account, entering patient information into an unapproved tool, or looking at a patient's information without a work reason, results in sanctions from retraining up to termination, and may involve legal penalties. The policies exist to protect patients and to protect you."),
   h1("For administrators only"),
   ...bullets([
-    [b("Creating accounts: "), "only after the Privacy Officer's approval and the user's signed training acknowledgment. Give the staff role unless the administrator role is approved in writing."],
+    [b("Creating accounts: "), "only after the Privacy Officer's approval. Give the staff role unless the administrator role is approved in writing. The new user completes the training inside the assistant before their first conversation."],
     [b("Disabling accounts: "), "the same business day someone leaves. Disable revokes every session immediately."],
     [b("Reset MFA: "), "only after verifying the person's identity in person or by calling a known number."],
     [b("Weekly audit review: "), "open Administration, Audit; look for sign-ins outside working hours, repeated failures, and administrative changes you did not expect. Report anything unusual."],
@@ -117,29 +120,32 @@ const children = [
   h1("Answer key (for the trainer)"),
   table(["Question", "Answer", "Why"], quiz.map((q, n) => [String(n + 1), q.answer, q.why]), [1200, 1000, 7160]),
   pageBreak(),
-  h1("Acknowledgment"),
-  p("I confirm that:"),
+  h1("What completing the training means"),
+  p("Passing the knowledge check, online or on paper, is recorded in the training log with the workforce member's name, email and the date. No signature is required. By completing it, the workforce member confirms that they:"),
   ...numbered([
-    "I completed the training \"HIPAA and the Helixona Assistant\" and passed the knowledge check.",
-    "I received and read the Helixona Assistant Policies and Procedures.",
-    "I will use only the minimum necessary patient information, review every output before using it, and enter patient information only into the Helixona Assistant.",
-    "I will keep my password and authenticator private, sign out on shared computers, and report a lost device or any suspected incident within one hour.",
-    "I understand that violations lead to sanctions up to and including termination.",
+    "Completed the training \"HIPAA and the Helixona Assistant\" and passed the knowledge check.",
+    "Received and read the Helixona Assistant Policies and Procedures.",
+    "Will use only the minimum necessary patient information, review every output before using it, and enter patient information only into the Helixona Assistant.",
+    "Will keep their password and authenticator private, sign out on shared computers, and report a lost device or any suspected incident within one hour.",
+    "Understand that violations lead to sanctions up to and including termination.",
   ]),
-  spacer(),
-  signatures(["Workforce member: [Name and role]", "Trainer / Privacy Officer: [Name]"]),
   pageBreak(),
   h1("Training log"),
   p("Kept by the Privacy Officer for six years.", { italics: true, size: 18 }),
-  table(["Name", "Role", "Training date", "Trainer", "Score", "Acknowledgment on file"], Array.from({ length: 12 }, () => ["", "", "", "", "", ""]), [2400, 1500, 1500, 1700, 900, 1360]),
+  table(["Name", "Role", "Training date", "Trainer", "Score"], Array.from({ length: 12 }, () => ["", "", "", "", ""]), [2800, 1800, 1800, 2000, 960]),
 ];
 module.exports = {
   slug: "workforce-training",
   title: "Workforce Training",
   runningTitle: "Workforce Training: HIPAA and the Helixona Assistant",
   subtitle: "HIPAA and the Helixona Assistant",
-  summary: "The training every user completes before their first sign-in: seven short modules, a quick reference, a knowledge check and the acknowledgment form.",
+  summary: "The training every user completes before their first sign-in: seven short modules, a quick reference and a knowledge check, with nothing to sign.",
   docx: "Helixona-Assistant-Workforce-Training.docx",
   children,
-  quiz: { version: "1.1", passingScore, questions: quiz },
+  quiz: {
+    version: "1.2",
+    passingScore,
+    questions: quiz,
+    modules: children.filter((n) => n.type === "h" && n.level === 1 && /^Module \d+\./.test(n.text)).map((n) => ({ id: Number(n.text.match(/^Module (\d+)\./)[1]), title: n.text })),
+  },
 };

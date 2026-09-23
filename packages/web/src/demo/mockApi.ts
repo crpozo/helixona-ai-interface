@@ -202,13 +202,30 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
   if (path === "/api/admin/usage") return json({ items: state.usage.filter((u) => u.day === (url.searchParams.get("day") ?? today())) });
   if (path === "/api/admin/audit") return json({ items: state.audit });
   // Workforce training (the signed-in demo user is Ana).
-  const quiz = trainingQuiz as { version: string; passingScore: number; questions: { text: string; options: string[]; answer: string; why: string }[] };
+  const quiz = trainingQuiz as { version: string; passingScore: number; questions: { module: number; text: string; options: string[]; answer: string; why: string }[]; modules: { id: number; title: string }[] };
   const trainingInfo = () => ({
     version: quiz.version, passingScore: quiz.passingScore, total: quiz.questions.length,
-    questions: quiz.questions.map((q, i) => ({ n: i + 1, text: q.text, options: q.options.map((text, k) => ({ letter: "ABCDEF"[k]!, text })) })),
+    questions: quiz.questions.map((q, i) => ({ n: i + 1, module: q.module, text: q.text, options: q.options.map((text, k) => ({ letter: "ABCDEF"[k]!, text })) })),
+    modules: quiz.modules.map((m) => ({ id: m.id, title: m.title, questions: quiz.questions.map((q, i) => (q.module === m.id ? i + 1 : 0)).filter(Boolean) })),
     record: state.training,
   });
   if (path === "/api/training" && method === "GET") return json(trainingInfo());
+  const mModule = path.match(/^\/api\/training\/modules\/(\d+)$/);
+  if (mModule && method === "POST") {
+    const id = Number(mModule[1]);
+    const answers = (body["answers"] ?? {}) as Record<string, string>;
+    const qs = quiz.questions.map((q, i) => ({ ...q, n: i + 1 })).filter((q) => q.module === id);
+    const results = qs.map((q) => (String(answers[String(q.n)] ?? "").toUpperCase() === q.answer ? { n: q.n, correct: true } : { n: q.n, correct: false, why: q.why }));
+    const correct = results.filter((r) => r.correct).length;
+    const prev = state.training;
+    const progress = { ...(prev?.moduleProgress ?? {}) };
+    const before = progress[String(id)];
+    progress[String(id)] = { attempts: (before?.attempts ?? 0) + 1, firstTryCorrect: before ? before.firstTryCorrect : correct, total: qs.length, completedAt: before?.completedAt ?? (correct === qs.length ? now() : null) };
+    const courseComplete = quiz.modules.every((m) => progress[String(m.id)]?.completedAt);
+    const score = quiz.modules.reduce((s, m) => s + (progress[String(m.id)]?.firstTryCorrect ?? 0), 0);
+    state.training = { userId: "u-ana", name: "Ana Perez", email: "ana@helixona.com", version: quiz.version, attempts: prev?.attempts ?? 0, lastScore: courseComplete ? score : (prev?.lastScore ?? 0), lastAttemptAt: now(), bestScore: courseComplete ? score : (prev?.bestScore ?? 0), passedAt: prev?.passedAt ?? (courseComplete ? now() : null), source: "online", moduleProgress: progress };
+    return json({ record: state.training, result: { results, correct, total: qs.length, moduleComplete: correct === qs.length, courseComplete } });
+  }
   if (path === "/api/training/check" && method === "POST") {
     const answers = Array.isArray(body["answers"]) ? (body["answers"] as string[]).map((a) => String(a).toUpperCase()) : [];
     if (answers.length !== quiz.questions.length) return error(400, "bad_request", "Answer every question");
@@ -216,16 +233,11 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     const score = results.filter((r) => r.correct).length;
     const passed = score >= quiz.passingScore;
     const prev = state.training;
-    state.training = { userId: "u-ana", name: "Ana Perez", email: "ana@helixona.com", version: quiz.version, attempts: (prev?.attempts ?? 0) + 1, lastScore: score, lastAttemptAt: now(), bestScore: Math.max(prev?.bestScore ?? 0, score), passedAt: prev?.passedAt ?? (passed ? now() : null), acknowledgedAt: prev?.acknowledgedAt ?? null };
+    state.training = { userId: "u-ana", name: "Ana Perez", email: "ana@helixona.com", version: quiz.version, attempts: (prev?.attempts ?? 0) + 1, lastScore: score, lastAttemptAt: now(), bestScore: Math.max(prev?.bestScore ?? 0, score), passedAt: prev?.passedAt ?? (passed ? now() : null) };
     return json({ record: state.training, result: { score, total: quiz.questions.length, passed, results } });
   }
   if (path === "/api/training/attest" && method === "POST") {
-    state.training = { userId: "u-ana", name: "Ana Perez", email: "ana@helixona.com", version: quiz.version, attempts: state.training?.attempts ?? 0, lastScore: state.training?.lastScore ?? 0, lastAttemptAt: state.training?.lastAttemptAt ?? now(), bestScore: state.training?.bestScore ?? 0, passedAt: state.training?.passedAt ?? now(), acknowledgedAt: now(), source: "attested" };
-    return json({ record: state.training });
-  }
-  if (path === "/api/training/acknowledgment" && method === "POST") {
-    if (!state.training?.passedAt) return error(409, "check_not_passed", "Pass the knowledge check before signing the acknowledgment");
-    state.training = { ...state.training, acknowledgedAt: state.training.acknowledgedAt ?? now() };
+    state.training = { userId: "u-ana", name: "Ana Perez", email: "ana@helixona.com", version: quiz.version, attempts: state.training?.attempts ?? 0, lastScore: state.training?.lastScore ?? 0, lastAttemptAt: state.training?.lastAttemptAt ?? now(), bestScore: state.training?.bestScore ?? 0, passedAt: state.training?.passedAt ?? now(), source: "attested" };
     return json({ record: state.training });
   }
   if (path === "/api/admin/training" && method === "GET") return json({ items: state.users.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, enabled: u.enabled, record: u.id === "u-ana" ? state.training : null })), version: quiz.version, passingScore: quiz.passingScore, total: quiz.questions.length });
@@ -234,7 +246,7 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     const u = state.users.find((x) => x.id === decodeURIComponent(mPaper[1]!));
     if (!u) return error(404, "not_found", "User not found");
     const at = `${String(body["completedAt"])}T12:00:00.000Z`;
-    const record: TrainingRecord = { userId: u.id, name: u.name, email: u.email, version: quiz.version, attempts: 0, lastScore: Number(body["score"]), lastAttemptAt: at, bestScore: Number(body["score"]), passedAt: at, acknowledgedAt: at, source: "paper" };
+    const record: TrainingRecord = { userId: u.id, name: u.name, email: u.email, version: quiz.version, attempts: 0, lastScore: Number(body["score"]), lastAttemptAt: at, bestScore: Number(body["score"]), passedAt: at, source: "paper" };
     if (u.id === "u-ana") state.training = record;
     return json({ record });
   }

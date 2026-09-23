@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-export type Route = "/login" | "/" | "/admin" | "/documentation";
+export type Route = "/login" | "/" | "/admin" | "/documentation" | "/training";
 /** Paths `navigate` accepts: a route, or one document inside the documentation. */
 export type Path = Route | `/documentation/${string}`;
 
@@ -22,6 +22,7 @@ export function normalizeRoute(pathname: string): Route {
   if (pathname === "/login" || pathname.startsWith("/login/")) return "/login";
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return "/admin";
   if (pathname === "/documentation" || pathname.startsWith("/documentation/")) return "/documentation";
+  if (pathname === "/training" || pathname.startsWith("/training/")) return "/training";
   return "/";
 }
 

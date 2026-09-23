@@ -21,11 +21,10 @@ const numbered = (items) => [{ type: "list", ordered: true, items: items.map(run
 const table = (headers, rows, widths) => ({ type: "table", headers, rows, widths });
 /** Two-column key/value table without a header row. */
 const kv = (rows, widths = [2600, 6760]) => ({ type: "kv", rows, widths });
-const signatures = (roles) => ({ type: "signatures", roles });
 const spacer = () => ({ type: "spacer" });
 const pageBreak = () => ({ type: "pageBreak" });
 const FILL_IN_NOTE =
-  "Fill in the bracketed fields, review with the clinic's Privacy Officer and Security Officer, and keep the signed copy with the compliance records for at least six years. Legal review is recommended before adoption.";
+  "Fill in the bracketed fields, review with the clinic's Privacy Officer and Security Officer, and keep a copy with the compliance records for at least six years. Legal review is recommended before adoption.";
 const titleBlock = (title, subtitle, meta) => [{ type: "title", title, subtitle, meta }, note(FILL_IN_NOTE)];
 
-module.exports = { h1, h2, h3, p, b, i, note, bullets, numbered, table, kv, signatures, spacer, pageBreak, titleBlock };
+module.exports = { h1, h2, h3, p, b, i, note, bullets, numbered, table, kv, spacer, pageBreak, titleBlock };

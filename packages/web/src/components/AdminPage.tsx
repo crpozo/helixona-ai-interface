@@ -287,7 +287,7 @@ export function AdminPage({ me, onBack }: Props) {
 
       <section aria-labelledby="training-title" className="card">
         <h2 id="training-title">Training log</h2>
-        <p className="muted small">Knowledge-check results and acknowledgments completed online in the workforce training. Keep this log for six years; add paper completions by hand.</p>
+        <p className="muted small">Knowledge-check results from the workforce training completed online. Keep this log for six years; add paper completions by hand.</p>
         <TrainingLog />
       </section>
 

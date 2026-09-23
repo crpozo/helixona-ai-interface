@@ -74,17 +74,6 @@ function render(node) {
         columnWidths: node.widths,
         rows: node.rows.map((r) => new TableRow({ children: [cell(r[0], node.widths[0], { fill: "EFEFEF", bold: true }), cell(r[1], node.widths[1])] })),
       });
-    case "signatures": {
-      const w = [3400, 3600, 2360];
-      return new Table({
-        width: { size: 9360, type: WidthType.DXA },
-        columnWidths: w,
-        rows: [
-          headerRow(["Name and role", "Signature", "Date"], w),
-          ...node.roles.map((r) => new TableRow({ height: { value: 700, rule: "atLeast" }, children: [cell(r, w[0]), cell("", w[1]), cell("", w[2])] })),
-        ],
-      });
-    }
     case "spacer":
       return spacer();
     case "pageBreak":

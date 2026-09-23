@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ApiError, acknowledgeTraining, adminRecordPaperTraining, adminTraining, attestTraining, getTraining, submitTrainingCheck } from "../lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { ApiError, adminRecordPaperTraining, adminTraining, attestTraining, getTraining, submitTrainingCheck } from "../lib/api";
 import { navigate } from "../lib/router";
 import type { AdminTrainingLog, AdminTrainingRow, Me, TrainingCheckResult, TrainingInfo, TrainingRecord } from "../lib/types";
 
@@ -8,13 +8,6 @@ const when = (iso: string) => dateFmt.format(new Date(iso));
 
 function errMsg(e: unknown): string {
   return e instanceof ApiError ? e.message : "Something went wrong. Please try again.";
-}
-
-// The check and the acknowledgment are separate sections of the document; when one changes the
-// record, the other reloads.
-const listeners = new Set<() => void>();
-function notifyRecordChanged() {
-  for (const l of listeners) l();
 }
 
 function useTraining(): { info: TrainingInfo | null; error: string | null; reload: () => Promise<void>; setRecord: (r: TrainingRecord) => void } {
@@ -30,10 +23,6 @@ function useTraining(): { info: TrainingInfo | null; error: string | null; reloa
   }, []);
   useEffect(() => {
     void reload();
-    listeners.add(reload);
-    return () => {
-      listeners.delete(reload);
-    };
   }, [reload]);
   const setRecord = useCallback((record: TrainingRecord) => setInfo((prev) => (prev ? { ...prev, record } : prev)), []);
   return { info, error, reload, setRecord };
@@ -44,7 +33,7 @@ function current(info: TrainingInfo): TrainingRecord | null {
   return info.record && info.record.version === info.version ? info.record : null;
 }
 
-/** One line on where the signed-in user stands. */
+/** One line on where the signed-in user stands. Passing the check is the completion; nothing is signed. */
 export function TrainingStatus({ info }: { info: TrainingInfo }) {
   const r = current(info);
   if (!r) {
@@ -55,25 +44,18 @@ export function TrainingStatus({ info }: { info: TrainingInfo }) {
       </p>
     );
   }
-  if (r.acknowledgedAt && r.source === "attested") {
+  if (r.passedAt && r.source === "attested") {
     return (
       <p className="training-status passed">
-        Training skipped on {when(r.acknowledgedAt)}: you attested that you already know this material. You can still take the check below; a passed check replaces the attestation in the log.
-      </p>
-    );
-  }
-  if (r.acknowledgedAt) {
-    return (
-      <p className="training-status passed">
-        Completed. Passed on {when(r.passedAt ?? r.lastAttemptAt)} with {r.bestScore} of {info.total}; acknowledgment signed on {when(r.acknowledgedAt)}
-        {r.source === "paper" ? " (recorded from the paper form)" : ""}.
+        Training skipped on {when(r.passedAt)}: you attested that you already know this material. You can still take the check below; a passed check replaces the attestation in the log.
       </p>
     );
   }
   if (r.passedAt) {
     return (
       <p className="training-status passed">
-        Passed on {when(r.passedAt)} with {r.bestScore} of {info.total}. Sign the acknowledgment at the end of this document to finish.
+        Completed. Passed on {when(r.passedAt)} with {r.bestScore} of {info.total}
+        {r.source === "paper" ? " (recorded from the paper check)" : ""}. Nothing to sign: the completion is in the training log.
       </p>
     );
   }
@@ -111,7 +93,6 @@ export function TrainingCheck({ me }: { me: Me }) {
       const r = await submitTrainingCheck(info.questions.map((q) => answers[q.n] ?? ""));
       setResult(r.result);
       setRecord(r.record);
-      notifyRecordChanged();
     } catch (err) {
       setSubmitError(errMsg(err));
     } finally {
@@ -164,7 +145,11 @@ export function TrainingCheck({ me }: { me: Me }) {
             <strong>
               Score: {result.score} of {result.total}. {result.passed ? "Passed." : `Not passed (${info.passingScore} needed).`}
             </strong>
-            <p className="muted small">{result.passed ? "Your result is saved. Sign the acknowledgment at the end of this document." : "Your attempt is saved. Review the modules above and try again."}</p>
+            <p className="muted small">
+              {result.passed
+                ? `Your result is saved and the training is complete${me.training?.required ? "; the assistant is unlocked" : ""}. There is nothing to sign.`
+                : "Your attempt is saved. Review the modules above and try again."}
+            </p>
             <button type="button" className="btn" onClick={retry}>
               {result.passed ? "Take it again" : "Try again"}
             </button>
@@ -175,68 +160,6 @@ export function TrainingCheck({ me }: { me: Me }) {
           </button>
         )}
       </form>
-    </div>
-  );
-}
-
-/** The acknowledgment, signed online once the check is passed. `children` is the document's statement list. */
-export function TrainingAcknowledgment({ me, children }: { me: Me; children: ReactNode }) {
-  const { info, error, setRecord } = useTraining();
-  const [accepted, setAccepted] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [signError, setSignError] = useState<string | null>(null);
-
-  const sign = async () => {
-    if (!accepted || busy) return;
-    setBusy(true);
-    setSignError(null);
-    try {
-      const r = await acknowledgeTraining();
-      setRecord(r.record);
-      notifyRecordChanged();
-    } catch (err) {
-      setSignError(errMsg(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const record = info ? current(info) : null;
-  return (
-    <div className="training-ack">
-      {children}
-      {error && (
-        <p className="notice notice-error" role="alert">
-          {error}
-        </p>
-      )}
-      {info && record?.acknowledgedAt ? (
-        <p className="training-status passed" role="status">
-          Signed by {record.name || me.user.name} ({record.email || me.user.email}) on {when(record.acknowledgedAt)}. Recorded in the training log.
-          {me.training?.required ? " The assistant is unlocked: use “Back to the assistant” at the top." : ""}
-        </p>
-      ) : info ? (
-        <div className="ack-form">
-          {!record?.passedAt && <p className="muted small">Pass the knowledge check above to enable the signature.</p>}
-          <label className="quiz-opt">
-            <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} disabled={!record?.passedAt || busy} />
-            <span>
-              I, {me.user.name} ({me.user.email}), confirm the statements above.
-            </span>
-          </label>
-          {signError && (
-            <p className="notice notice-error" role="alert">
-              {signError}
-            </p>
-          )}
-          <button type="button" className="btn btn-primary" disabled={!accepted || !record?.passedAt || busy} onClick={() => void sign()}>
-            {busy ? "Signing…" : "Sign acknowledgment"}
-          </button>
-          <p className="muted small">Your name, email and the date are recorded; this replaces the paper signature.</p>
-        </div>
-      ) : (
-        <p className="muted">Loading…</p>
-      )}
     </div>
   );
 }
@@ -265,25 +188,25 @@ export function TrainingGate({ me, onRefresh }: { me: Me; onRefresh: () => void 
   };
   return (
     <div className="panel-center">
-      <div className="empty training-gate">
+      <div className="training-gate">
         <p className="eyebrow">Workforce training</p>
         <h1>Hello, {me.user.name}. One step before you start.</h1>
-        <p className="muted">
-          Every user of the assistant, administrators included, completes the HIPAA training first: read the seven short modules, pass the
-          knowledge check and sign the acknowledgment. It takes about 25 minutes and your progress is saved as you go.
+        <p className="training-gate-lead">
+          Every user of the assistant, administrators included, completes the HIPAA training first. Seven short modules, each followed by a few
+          questions. About 25 minutes, nothing to sign, and your progress is saved as you go.
         </p>
-        <div className="row gap wrap" style={{ justifyContent: "center" }}>
+        <div className="training-gate-actions">
           <a
-            className="btn btn-primary"
-            href="/documentation/workforce-training"
+            className="btn btn-primary btn-large"
+            href="/training"
             onClick={(e) => {
               e.preventDefault();
-              navigate("/documentation/workforce-training");
+              navigate("/training");
             }}
           >
-            Open the training
+            Start the training
           </a>
-          <button type="button" className="btn" onClick={onRefresh} disabled={busy}>
+          <button type="button" className="btn btn-large" onClick={onRefresh} disabled={busy}>
             I have completed it
           </button>
         </div>
@@ -299,7 +222,7 @@ export function TrainingGate({ me, onRefresh }: { me: Me; onRefresh: () => void 
             {error}
           </p>
         )}
-        <p className="muted small">Completed it on paper? Ask an administrator to record it in the training log.</p>
+        <p className="muted small training-gate-note">Completed it on paper? Ask an administrator to record it in the training log.</p>
       </div>
     </div>
   );
@@ -309,8 +232,7 @@ function status(row: AdminTrainingRow, version: string): string {
   const r = row.record;
   if (!r) return "Not started";
   if (r.version !== version) return `Outdated (version ${r.version})`;
-  if (r.acknowledgedAt) return r.source === "paper" ? "Completed (paper)" : r.source === "attested" ? "Skipped (attested by user)" : "Completed";
-  if (r.passedAt) return "Passed, acknowledgment pending";
+  if (r.passedAt) return r.source === "paper" ? "Completed (paper)" : r.source === "attested" ? "Skipped (attested by user)" : "Completed";
   return "In progress";
 }
 
@@ -359,7 +281,7 @@ export function TrainingLog() {
     );
   }
   if (!log) return <p className="muted">Loading…</p>;
-  const complete = (r: TrainingRecord | null) => !!r && r.version === log.version && !!r.passedAt && !!r.acknowledgedAt;
+  const complete = (r: TrainingRecord | null) => !!r && r.version === log.version && !!r.passedAt;
   return (
     <div className="table-wrap">
       {error && (
@@ -377,8 +299,7 @@ export function TrainingLog() {
             <th scope="col">Status</th>
             <th scope="col">Attempts</th>
             <th scope="col">Best score</th>
-            <th scope="col">Passed</th>
-            <th scope="col">Acknowledged</th>
+            <th scope="col">Completed</th>
             <th scope="col">
               <span className="visually-hidden">Actions</span>
             </th>
@@ -397,10 +318,9 @@ export function TrainingLog() {
               <td>{row.record?.attempts ?? 0}</td>
               <td>{row.record ? row.record.bestScore : "–"}</td>
               <td>{row.record?.passedAt ? when(row.record.passedAt) : "–"}</td>
-              <td>{row.record?.acknowledgedAt ? when(row.record.acknowledgedAt) : "–"}</td>
               <td>
                 {!complete(row.record) && row.enabled && (
-                  <button type="button" className="btn btn-small" onClick={() => void recordPaper(row)} title="The signed paper acknowledgment is on file">
+                  <button type="button" className="btn btn-small" onClick={() => void recordPaper(row)} title="The paper knowledge check is on file">
                     Record paper completion
                   </button>
                 )}
@@ -409,7 +329,7 @@ export function TrainingLog() {
           ))}
           {log.items.length === 0 && (
             <tr>
-              <td colSpan={9} className="muted">
+              <td colSpan={8} className="muted">
                 No users.
               </td>
             </tr>

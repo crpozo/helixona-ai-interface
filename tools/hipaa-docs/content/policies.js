@@ -1,4 +1,4 @@
-const { h1, h2, h3, p, b, i, note, bullets, numbered, table, kv, signatures, spacer, pageBreak, titleBlock, build } = require("../lib");
+const { h1, h2, h3, p, b, i, note, bullets, numbered, table, kv, spacer, pageBreak, titleBlock, build } = require("../lib");
 const policy = (id, title, purpose, statements, procedures) => [
   h1(`${id}. ${title}`),
   p([b("Purpose. "), purpose]),
@@ -55,7 +55,7 @@ const children = [
       "A user whose authenticator is lost or replaced is verified in person or by a call-back to a known number before the authenticator is reset.",
     ],
     [
-      "Onboarding: the manager requests access; the Privacy Officer approves; the user completes training and signs the acknowledgment; an administrator creates the account from the Administration page; the user receives a temporary password by email and, at first sign-in, sets a password and enrolls an authenticator app.",
+      "Onboarding: the manager requests access; the Privacy Officer approves; an administrator creates the account from the Administration page; the user receives a temporary password by email and, at first sign-in, sets a password, enrolls an authenticator app and completes the training inside the assistant before their first conversation.",
       "Role change: an administrator changes the role from the Administration page. The user is signed out and must sign in again.",
       "Offboarding: an administrator clicks Disable on the Administration page. All of the user's sessions are revoked immediately. The account is deleted after 30 days if it is not needed for the audit trail.",
       "Lost authenticator: after identity verification, an administrator clicks Reset MFA. The user is signed out and enrolls a new authenticator at the next sign-in.",
@@ -136,7 +136,7 @@ const children = [
   ...policy("P11", "Training",
     "Make sure everyone with access knows how to protect patient information when using the assistant.",
     [
-      "Every workforce member completes the Helixona Assistant HIPAA training and signs the acknowledgment before their first sign-in, yearly afterwards, and whenever these policies change materially.",
+      "Every workforce member completes the Helixona Assistant HIPAA training before their first conversation with the assistant, yearly afterwards, and whenever these policies change materially. Completion is recorded in the training log; no signature is required.",
       "Training records (name, date, trainer, score) are kept for six years in the training log.",
       "Administrators receive additional instruction on the Administration page, the audit review and the incident procedure.",
     ]),
@@ -151,13 +151,14 @@ const children = [
   table(["Version", "Date", "Change", "Approved by"], [["1.0", "September 16, 2026", "Initial policies", "[Name]"]], [1200, 2200, 4200, 1760]),
   spacer(),
   h1("Approval"),
-  signatures(["[Name], Owner / Medical Director", "[Name], Privacy Officer", "[Name], Security Officer"]),
+  p("Reviewed and approved by the people below. No signature is required: the approval is recorded here, with the name and the date."),
+  table(["Role", "Name", "Date"], [["Owner / Medical Director", "[Name]", "[Date]"], ["Privacy Officer", "[Name]", "[Date]"], ["Security Officer", "[Name]", "[Date]"]], [3400, 3600, 2360]),
   pageBreak(),
   h1("Appendix A. Onboarding and offboarding checklist"),
   kv([["Workforce member", ""], ["Role requested (staff / administrator)", ""], ["Requested by", ""], ["Approved by Privacy Officer (date)", ""]]),
   spacer(),
   table(["Onboarding step", "Done by", "Date"], [
-    ["Training completed and acknowledgment signed", "", ""],
+    ["Training completed in the assistant (or a paper completion recorded in the training log)", "", ""],
     ["Account created on the Administration page with the approved role", "", ""],
     ["User signed in, changed the temporary password and enrolled the authenticator", "", ""],
     ["Device confirmed: screen lock, updates, encryption", "", ""],

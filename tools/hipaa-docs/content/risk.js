@@ -1,4 +1,4 @@
-const { h1, h2, h3, p, b, i, note, bullets, numbered, table, kv, signatures, spacer, pageBreak, titleBlock, build } = require("../lib");
+const { h1, h2, h3, p, b, i, note, bullets, numbered, table, kv, spacer, pageBreak, titleBlock, build } = require("../lib");
 const W7 = [400, 2000, 3000, 480, 480, 760, 2240];
 const risks = [
   ["R1", "Stolen or phished staff password", "Password of 12+ characters with complexity and history; authenticator app (MFA) required for every user; sign-in rate limiting and Cognito lockout; WAF rate limits on the sign-in endpoints", "Low", "High", "Low", "None beyond current controls. Phishing awareness in training. Owner: Security Officer."],
@@ -90,7 +90,7 @@ const children = [
     ["Confirm the AWS Business Associate Addendum shows Active in AWS Artifact", "Account owner", "Before go-live", "Done, September 22, 2026"],
     ["Perform and document a backup restore test", "Security Officer", "30 days after go-live", "[ ]"],
     ["Enable two-factor authentication for every member of the Claude Console organization; keep the production API key in its own workspace with a spend limit", "Security Officer", "Before go-live", "[ ]"],
-    ["Complete workforce training and collect signed acknowledgments", "Privacy Officer", "Before each user's first sign-in", "[ ]"],
+    ["Complete workforce training for every user (recorded in the training log inside the assistant)", "Privacy Officer", "Before each user's first conversation", "[ ]"],
     ["Apply dependency and platform updates", "Security Officer", "Monthly", "Recurring"],
     ["Review the user list, roles and audit log", "Privacy Officer", "Quarterly", "Recurring"],
     ["Review this risk analysis, agreements and retention settings", "Security Officer", "Yearly", "Recurring"],
@@ -99,7 +99,8 @@ const children = [
   h1("7. Conclusion"),
   p("With the safeguards described above in place and the open items in section 6 completed, the residual risk of operating the Helixona Assistant with electronic protected health information is assessed as Low for confidentiality and availability and Medium for integrity of AI-generated content, which is managed through workforce review of every output. The system is appropriate for use with PHI under the clinic's policies."),
   h1("8. Approval"),
-  signatures(["[Name], Security Officer", "[Name], Privacy Officer", "[Name], Owner / Medical Director"]),
+  p("Reviewed and approved by the people below. No signature is required: the approval is recorded here, with the name and the date."),
+  table(["Role", "Name", "Date"], [["Security Officer", "[Name]", "[Date]"], ["Privacy Officer", "[Name]", "[Date]"], ["Owner / Medical Director", "[Name]", "[Date]"]], [3400, 3600, 2360]),
   pageBreak(),
   h1("Appendix A. HIPAA-eligible AWS services in use"),
   p("Every AWS service that stores or transmits PHI for this system appears on the AWS HIPAA Eligible Services list, as the AWS BAA requires."),

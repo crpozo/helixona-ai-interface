@@ -7,13 +7,17 @@ const training: TrainingInfo = {
   passingScore: 2,
   total: 2,
   questions: [
-    { n: 1, text: "First question?", options: [{ letter: "A", text: "Yes" }, { letter: "B", text: "No" }] },
-    { n: 2, text: "Second question?", options: [{ letter: "A", text: "Up" }, { letter: "B", text: "Down" }] },
+    { n: 1, module: 1, text: "First question?", options: [{ letter: "A", text: "Yes" }, { letter: "B", text: "No" }] },
+    { n: 2, module: 2, text: "Second question?", options: [{ letter: "A", text: "Up" }, { letter: "B", text: "Down" }] },
+  ],
+  modules: [
+    { id: 1, title: "Module 1. Why this matters", questions: [1] },
+    { id: 2, title: "Module 2. What counts as protected health information", questions: [2] },
   ],
   record: null,
 };
-const record: TrainingRecord = { userId: "u1", name: "Ana", email: "ana@example.test", version: "1.1", attempts: 1, lastScore: 2, lastAttemptAt: "2026-09-22T10:00:00Z", bestScore: 2, passedAt: "2026-09-22T10:00:00Z", acknowledgedAt: null };
-// The fake API keeps the user's record like the real one does, so the acknowledgment section sees the passed check.
+const record: TrainingRecord = { userId: "u1", name: "Ana", email: "ana@example.test", version: "1.1", attempts: 1, lastScore: 2, lastAttemptAt: "2026-09-22T10:00:00Z", bestScore: 2, passedAt: "2026-09-22T10:00:00Z", source: "online" };
+// The fake API keeps the user's record like the real one does, so the status line sees the passed check.
 const server: { record: TrainingRecord | null } = { record: null };
 
 vi.mock("../lib/api", () => ({
@@ -23,14 +27,13 @@ vi.mock("../lib/api", () => ({
     server.record = record;
     return { record, result: { score: 2, total: 2, passed: true, results: [{ n: 1, correct: true }, { n: 2, correct: true }] } };
   }),
-  acknowledgeTraining: vi.fn(async () => {
-    server.record = { ...record, acknowledgedAt: "2026-09-22T10:05:00Z" };
-    return { record: server.record };
-  }),
-  adminTraining: vi.fn(async () => []),
+  adminTraining: vi.fn(async () => ({ items: [], version: "1.1", passingScore: 2, total: 2 })),
+  submitTrainingModule: vi.fn(),
+  attestTraining: vi.fn(),
+  adminRecordPaperTraining: vi.fn(),
 }));
 
-import { acknowledgeTraining, submitTrainingCheck } from "../lib/api";
+import { submitTrainingCheck } from "../lib/api";
 import { DocumentationPage } from "./DocumentationPage";
 
 const me: Me = {
@@ -46,7 +49,7 @@ afterEach(() => {
 });
 
 describe("Workforce training online", () => {
-  it("signed-in staff answer the check, see the score, and sign the acknowledgment; the answer key stays hidden", async () => {
+  it("signed-in staff answer the check and see the score, with nothing to sign; the answer key stays hidden", async () => {
     window.history.replaceState(null, "", "/documentation/workforce-training");
     render(<DocumentationPage backLabel="Back" backTo="/" me={me} />);
     expect(await screen.findByText(/First question\?/)).toBeTruthy();
@@ -60,12 +63,9 @@ describe("Workforce training online", () => {
     fireEvent.click(submit);
     await waitFor(() => expect(submitTrainingCheck).toHaveBeenCalledWith(["A", "B"]));
     expect(await screen.findByText(/Score: 2 of 2. Passed./)).toBeTruthy();
-    // The acknowledgment section becomes signable once the check is passed.
-    const confirm = await screen.findByLabelText(/confirm the statements above/);
-    fireEvent.click(confirm);
-    fireEvent.click(screen.getByRole("button", { name: "Sign acknowledgment" }));
-    await waitFor(() => expect(acknowledgeTraining).toHaveBeenCalled());
-    expect(await screen.findByText(/Signed by Ana/)).toBeTruthy();
+    // Passing is the completion: no acknowledgment to sign.
+    expect(await screen.findByText(/Completed\. Passed on/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Sign/ })).toBeNull();
   });
 
   it("visitors see the paper version with a note, and no answer key", () => {
@@ -94,7 +94,7 @@ describe("DocumentationPage", () => {
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
   });
 
-  it("opens a document from its card and renders its sections, tables and signature block", () => {
+  it("opens a document from its card and renders its sections, tables and approval table, with no signature line", () => {
     window.history.replaceState(null, "", "/documentation");
     render(<DocumentationPage backLabel="Back to the assistant" backTo="/" />);
     fireEvent.click(screen.getAllByRole("link", { name: "Read online" })[0]!);
@@ -102,7 +102,9 @@ describe("DocumentationPage", () => {
     expect(screen.getByRole("heading", { level: 1, name: "HIPAA Security Risk Analysis" })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: "5. Risk register" })).toBeTruthy();
     expect(screen.getByText("Stolen or phished staff password")).toBeTruthy();
-    expect(screen.getByRole("columnheader", { name: "Signature" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "8. Approval" })).toBeTruthy();
+    expect(screen.getByText(/No signature is required/)).toBeTruthy();
+    expect(screen.queryByRole("columnheader", { name: "Signature" })).toBeNull();
     expect(screen.getByRole("navigation", { name: "Contents" }).textContent).toContain("6. Remediation plan");
     expect(screen.getByRole("link", { name: "Download Word file" }).getAttribute("href")).toBe("/docs/Helixona-Assistant-Risk-Analysis.docx");
     expect(screen.getByRole("link", { name: "All documents" })).toBeTruthy();

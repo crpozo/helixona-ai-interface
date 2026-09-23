@@ -28,6 +28,8 @@ import { ProjectPage } from "./components/ProjectPage";
 import { Sidebar } from "./components/Sidebar";
 import { TrainingGate } from "./components/TrainingSections";
 
+const TrainingCoursePage = lazy(() => import("./components/TrainingCoursePage").then((m) => ({ default: m.TrainingCoursePage })));
+
 // The HIPAA documents ship in their own chunk: the chat bundle stays lean.
 const DocumentationPage = lazy(() => import("./components/DocumentationPage").then((m) => ({ default: m.DocumentationPage })));
 
@@ -413,6 +415,16 @@ export function App() {
     <>
       {route === "/documentation" ? (
         <Docs backLabel="Back to the assistant" backTo="/" me={me} />
+      ) : route === "/training" ? (
+        <Suspense
+          fallback={
+            <main className="center-screen" aria-busy="true">
+              <p className="muted">Loading…</p>
+            </main>
+          }
+        >
+          <TrainingCoursePage me={me} onExit={() => navigate("/")} />
+        </Suspense>
       ) : route === "/admin" && isAdmin ? (
         <AdminPage me={me} onBack={() => navigate("/")} />
       ) : (
@@ -436,6 +448,7 @@ export function App() {
             onLogout={() => void doLogout(null)}
             onAdmin={() => navigate("/admin")}
             onDocs={() => navigate("/documentation")}
+            onTraining={() => navigate("/training")}
           />
           <div className="main">
             <div className="topbar only-mobile">

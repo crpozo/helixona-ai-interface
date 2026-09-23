@@ -1,9 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { TRAINING_INFO, gradeTraining } from "@helixona/core";
+import { TRAINING_INFO, gradeModule, gradeTraining } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import { apiError, audit, requireAuth } from "../app.js";
-import type { TrainingRecord } from "../repos/types.js";
+import type { TrainingModuleProgress, TrainingRecord } from "../repos/types.js";
 
 /** What the browser sees: the record without the raw answers. */
 function publicRecord(r: TrainingRecord | null) {
@@ -12,9 +12,9 @@ function publicRecord(r: TrainingRecord | null) {
   return rest;
 }
 
-/** Passed the check and signed the acknowledgment for the current version of the training. */
+/** Passed the check (online, on paper, or by attestation) for the current version of the training. Nothing is signed. */
 export function trainingComplete(r: TrainingRecord | null): boolean {
-  return !!r && !!r.passedAt && !!r.acknowledgedAt && r.version === TRAINING_INFO.version;
+  return !!r && !!r.passedAt && r.version === TRAINING_INFO.version;
 }
 
 export interface TrainingStatus { required: boolean; complete: boolean; canSkip: boolean; version: string }
@@ -37,9 +37,9 @@ export async function requireTraining(deps: Deps, req: FastifyRequest, reply: Fa
 }
 
 /**
- * Workforce training: the knowledge check and the acknowledgment, completed online. One record per
- * user (attempts, best score, when they passed, when they acknowledged) is the training log the
- * Privacy Officer keeps; every submission is also written to the audit log.
+ * Workforce training: the knowledge check, completed online. One record per user (attempts, best
+ * score, when they passed) is the training log the Privacy Officer keeps; every submission is also
+ * written to the audit log. There is nothing to sign: passing the check completes the training.
  */
 export function registerTrainingRoutes(app: FastifyInstance, deps: Deps): void {
   const auth = requireAuth();
@@ -72,7 +72,6 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: Deps): void {
       lastAttemptAt: t,
       bestScore: Math.max(same?.bestScore ?? 0, result.score),
       passedAt: same?.passedAt ?? (result.passed ? t : null),
-      acknowledgedAt: same?.acknowledgedAt ?? null,
       source: same?.source ?? "online",
       answers: body.data.answers.map((a) => a.toUpperCase()),
     };
@@ -81,17 +80,49 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: Deps): void {
     return { record: publicRecord(record), result };
   });
 
-  app.post("/api/training/acknowledgment", { preHandler: auth }, async (req, reply) => {
-    const body = z.object({ accepted: z.literal(true) }).safeParse(req.body);
-    if (!body.success) return apiError(reply, 400, "bad_request", "Confirm the statements to sign the acknowledgment");
+  // The in-app course: one module at a time. The module's questions are graded; it is complete once
+  // every answer is right (retries allowed, the first attempt is what the log scores). When every
+  // module is complete the check counts as passed and the training is done.
+  app.post("/api/training/modules/:id", { preHandler: auth }, async (req, reply) => {
+    const moduleId = Number((req.params as { id: string }).id);
+    const module = TRAINING_INFO.modules.find((m) => m.id === moduleId);
+    if (!module) return apiError(reply, 404, "not_found", "Unknown module");
+    const body = z.object({ answers: z.record(z.string().regex(/^\d+$/), z.string().trim().regex(/^[A-Z]$/i)) }).safeParse(req.body);
+    if (!body.success) return apiError(reply, 400, "bad_request", "Answer every question of the module with one letter each");
+    const graded = gradeModule(moduleId, body.data.answers);
+    if (!graded) return apiError(reply, 400, "bad_request", "Answer every question of the module");
     const s = req.session!;
+    const t = now().toISOString();
     const prev = await repo.get(s.userId);
-    if (!prev?.passedAt || prev.version !== TRAINING_INFO.version) return apiError(reply, 409, "check_not_passed", "Pass the knowledge check before signing the acknowledgment");
-    if (prev.acknowledgedAt) return { record: publicRecord(prev) };
-    const record: TrainingRecord = { ...prev, name: s.name || prev.name, email: s.email || prev.email, acknowledgedAt: now().toISOString(), source: "online" };
+    const same = prev?.version === TRAINING_INFO.version ? prev : null;
+    const progress: Record<string, TrainingModuleProgress> = { ...(same?.moduleProgress ?? {}) };
+    const before = progress[String(moduleId)];
+    progress[String(moduleId)] = {
+      attempts: (before?.attempts ?? 0) + 1,
+      firstTryCorrect: before ? before.firstTryCorrect : graded.correct,
+      total: graded.total,
+      completedAt: before?.completedAt ?? (graded.allCorrect ? t : null),
+    };
+    const courseComplete = TRAINING_INFO.modules.every((m) => progress[String(m.id)]?.completedAt);
+    const firstTryScore = TRAINING_INFO.modules.reduce((sum, m) => sum + (progress[String(m.id)]?.firstTryCorrect ?? 0), 0);
+    const record: TrainingRecord = {
+      userId: s.userId,
+      name: s.name || prev?.name || "",
+      email: s.email || prev?.email || "",
+      version: TRAINING_INFO.version,
+      attempts: same?.attempts ?? 0,
+      lastScore: courseComplete ? firstTryScore : (same?.lastScore ?? 0),
+      lastAttemptAt: t,
+      bestScore: courseComplete ? Math.max(same?.bestScore ?? 0, firstTryScore) : (same?.bestScore ?? 0),
+      passedAt: same?.passedAt ?? (courseComplete ? t : null),
+      source: same?.source ?? "online",
+      moduleProgress: progress,
+      answers: same?.answers ?? [],
+    };
     await repo.put(record);
-    await audit(deps, req, { action: "training_acknowledged" });
-    return { record: publicRecord(record) };
+    if (graded.allCorrect && !before?.completedAt) await audit(deps, req, { action: "training_module_completed", meta: { module: moduleId, firstTryCorrect: progress[String(moduleId)]!.firstTryCorrect, total: graded.total } });
+    if (courseComplete && !same?.passedAt) await audit(deps, req, { action: "training_check_passed", meta: { course: true, firstTryScore } });
+    return { record: publicRecord(record), result: { results: graded.results, correct: graded.correct, total: graded.total, moduleComplete: graded.allCorrect, courseComplete } };
   });
 
   // "Skip training, I already know this": the user attests they completed the clinic's training
@@ -116,7 +147,6 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: Deps): void {
       lastAttemptAt: same?.lastAttemptAt ?? t,
       bestScore: same?.bestScore ?? 0,
       passedAt: same?.passedAt ?? t,
-      acknowledgedAt: t,
       source: "attested",
       answers: same?.answers ?? [],
     };
@@ -139,7 +169,7 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: Deps): void {
     return { items, version: TRAINING_INFO.version, passingScore: TRAINING_INFO.passingScore, total: TRAINING_INFO.total };
   });
 
-  // A completion done on paper (the signed acknowledgment is on file): the Privacy Officer records it
+  // A completion done on paper (the paper knowledge check is on file): the Privacy Officer records it
   // so the log is complete and the user is not blocked from the assistant.
   app.post("/api/admin/training/:userId/paper", { preHandler: admin }, async (req, reply) => {
     const { userId } = req.params as { userId: string };
@@ -166,8 +196,7 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: Deps): void {
       lastAttemptAt: same?.lastAttemptAt ?? completedAt,
       bestScore: Math.max(same?.bestScore ?? 0, body.data.score),
       passedAt: same?.passedAt ?? completedAt,
-      acknowledgedAt: same?.acknowledgedAt ?? completedAt,
-      source: same?.acknowledgedAt ? same.source : "paper",
+      source: same?.passedAt ? same.source : "paper",
       recordedBy: req.session!.userId,
       recordedAt: now().toISOString(),
       answers: same?.answers ?? [],
