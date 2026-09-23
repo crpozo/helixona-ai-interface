@@ -7,6 +7,7 @@ import { AttemptLimiter, PasswordAuthError, type PasswordAuthResult } from "../a
 import { SESSION_COOKIE } from "../auth/session.js";
 import { apiError, audit, requireAuth } from "../app.js";
 import { ALLOWED_TYPES } from "../attachments/policy.js";
+import { trainingStatus } from "./training.js";
 
 const OIDC_COOKIE = "hx_oidc";
 
@@ -143,6 +144,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
     return {
       user: { id: s.userId, email: s.email, name: s.name, roles: s.roles },
       session: { expiresAt, idleTimeoutSeconds: config.SESSION_IDLE_SECONDS },
+      training: await trainingStatus(deps, s.userId),
       catalog: {
         defaultAlias: deps.catalog.defaultAlias,
         effort: deps.catalog.effort,

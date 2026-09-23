@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ApiError, acknowledgeTraining, adminTraining, getTraining, submitTrainingCheck } from "../lib/api";
-import type { AdminTrainingRow, Me, TrainingCheckResult, TrainingInfo, TrainingRecord } from "../lib/types";
+import { ApiError, acknowledgeTraining, adminRecordPaperTraining, adminTraining, getTraining, submitTrainingCheck } from "../lib/api";
+import { navigate } from "../lib/router";
+import type { AdminTrainingLog, AdminTrainingRow, Me, TrainingCheckResult, TrainingInfo, TrainingRecord } from "../lib/types";
 
 const dateFmt = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 const when = (iso: string) => dateFmt.format(new Date(iso));
@@ -38,14 +39,27 @@ function useTraining(): { info: TrainingInfo | null; error: string | null; reloa
   return { info, error, reload, setRecord };
 }
 
+/** The record counts only for the current version of the training. */
+function current(info: TrainingInfo): TrainingRecord | null {
+  return info.record && info.record.version === info.version ? info.record : null;
+}
+
 /** One line on where the signed-in user stands. */
 export function TrainingStatus({ info }: { info: TrainingInfo }) {
-  const r = info.record;
-  if (!r) return <p className="training-status">Not started. Answer the questions below; your score is saved to the training log.</p>;
+  const r = current(info);
+  if (!r) {
+    return (
+      <p className="training-status">
+        {info.record ? `Your previous completion was for version ${info.record.version}; this is version ${info.version}. ` : "Not started. "}
+        Answer the questions below; your score is saved to the training log.
+      </p>
+    );
+  }
   if (r.acknowledgedAt) {
     return (
       <p className="training-status passed">
-        Completed. Passed on {when(r.passedAt ?? r.lastAttemptAt)} with {r.bestScore} of {info.total}; acknowledgment signed on {when(r.acknowledgedAt)}.
+        Completed. Passed on {when(r.passedAt ?? r.lastAttemptAt)} with {r.bestScore} of {info.total}; acknowledgment signed on {when(r.acknowledgedAt)}
+        {r.source === "paper" ? " (recorded from the paper form)" : ""}.
       </p>
     );
   }
@@ -180,7 +194,7 @@ export function TrainingAcknowledgment({ me, children }: { me: Me; children: Rea
     }
   };
 
-  const record = info?.record ?? null;
+  const record = info ? current(info) : null;
   return (
     <div className="training-ack">
       {children}
@@ -192,6 +206,7 @@ export function TrainingAcknowledgment({ me, children }: { me: Me; children: Rea
       {info && record?.acknowledgedAt ? (
         <p className="training-status passed" role="status">
           Signed by {record.name || me.user.name} ({record.email || me.user.email}) on {when(record.acknowledgedAt)}. Recorded in the training log.
+          {me.training?.required ? " The assistant is unlocked: use “Back to the assistant” at the top." : ""}
         </p>
       ) : info ? (
         <div className="ack-form">
@@ -219,22 +234,60 @@ export function TrainingAcknowledgment({ me, children }: { me: Me; children: Rea
   );
 }
 
-function status(row: AdminTrainingRow): string {
+/** Shown in place of the chat until the signed-in user (administrators included) completes the training. */
+export function TrainingGate({ me, onRefresh }: { me: Me; onRefresh: () => void }) {
+  return (
+    <div className="panel-center">
+      <div className="empty training-gate">
+        <p className="eyebrow">Workforce training</p>
+        <h1>Hello, {me.user.name}. One step before you start.</h1>
+        <p className="muted">
+          Every user of the assistant, administrators included, completes the HIPAA training first: read the seven short modules, pass the
+          knowledge check and sign the acknowledgment. It takes about 25 minutes and your progress is saved as you go.
+        </p>
+        <div className="row gap wrap" style={{ justifyContent: "center" }}>
+          <a
+            className="btn btn-primary"
+            href="/documentation/workforce-training"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("/documentation/workforce-training");
+            }}
+          >
+            Open the training
+          </a>
+          <button type="button" className="btn" onClick={onRefresh}>
+            I have completed it
+          </button>
+        </div>
+        <p className="muted small">Completed it on paper? Ask an administrator to record it in the training log.</p>
+      </div>
+    </div>
+  );
+}
+
+function status(row: AdminTrainingRow, version: string): string {
   const r = row.record;
   if (!r) return "Not started";
-  if (r.acknowledgedAt) return "Completed";
+  if (r.version !== version) return `Outdated (version ${r.version})`;
+  if (r.acknowledgedAt) return r.source === "paper" ? "Completed (paper)" : "Completed";
   if (r.passedAt) return "Passed, acknowledgment pending";
   return "In progress";
 }
 
-/** The training log (administrators): one row per user. */
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** The training log (administrators): one row per user, with a way to record paper completions. */
 export function TrainingLog() {
-  const [rows, setRows] = useState<AdminTrainingRow[] | null>(null);
+  const [log, setLog] = useState<AdminTrainingLog | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
     setError(null);
     try {
-      setRows(await adminTraining());
+      setLog(await adminTraining());
     } catch (e) {
       setError(errMsg(e));
     }
@@ -243,16 +296,39 @@ export function TrainingLog() {
     void load();
   }, [load]);
 
-  if (error) {
+  const recordPaper = async (row: AdminTrainingRow) => {
+    if (!log) return;
+    const date = window.prompt(`Date ${row.name} completed the training on paper (YYYY-MM-DD):`, todayIso());
+    if (!date) return;
+    const scoreText = window.prompt(`Score on the paper knowledge check (${log.passingScore} of ${log.total} or better):`, String(log.total));
+    if (scoreText === null) return;
+    const score = Number(scoreText);
+    if (!Number.isInteger(score)) return setError("The score must be a whole number.");
+    try {
+      await adminRecordPaperTraining(row.id, { completedAt: date.trim(), score });
+      await load();
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  };
+
+  if (error && !log) {
     return (
       <p className="notice notice-error" role="alert">
         {error}
       </p>
     );
   }
-  if (!rows) return <p className="muted">Loading…</p>;
+  if (!log) return <p className="muted">Loading…</p>;
+  const complete = (r: TrainingRecord | null) => !!r && r.version === log.version && !!r.passedAt && !!r.acknowledgedAt;
   return (
     <div className="table-wrap">
+      {error && (
+        <p className="notice notice-error" role="alert">
+          {error}
+        </p>
+      )}
+      <p className="muted small">Training version {log.version}. Passing score {log.passingScore} of {log.total}. Users without a completed row cannot use the assistant.</p>
       <table className="training-log">
         <thead>
           <tr>
@@ -264,24 +340,35 @@ export function TrainingLog() {
             <th scope="col">Best score</th>
             <th scope="col">Passed</th>
             <th scope="col">Acknowledged</th>
-            <th scope="col">Version</th>
+            <th scope="col">
+              <span className="visually-hidden">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {log.items.map((row) => (
             <tr key={row.id}>
               <td>{row.name}</td>
               <td>{row.email}</td>
-              <td>{row.role}{row.enabled ? "" : " (disabled)"}</td>
-              <td>{status(row)}</td>
+              <td>
+                {row.role}
+                {row.enabled ? "" : " (disabled)"}
+              </td>
+              <td>{status(row, log.version)}</td>
               <td>{row.record?.attempts ?? 0}</td>
               <td>{row.record ? row.record.bestScore : "–"}</td>
               <td>{row.record?.passedAt ? when(row.record.passedAt) : "–"}</td>
               <td>{row.record?.acknowledgedAt ? when(row.record.acknowledgedAt) : "–"}</td>
-              <td>{row.record?.version ?? "–"}</td>
+              <td>
+                {!complete(row.record) && row.enabled && (
+                  <button type="button" className="btn btn-small" onClick={() => void recordPaper(row)} title="The signed paper acknowledgment is on file">
+                    Record paper completion
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
-          {rows.length === 0 && (
+          {log.items.length === 0 && (
             <tr>
               <td colSpan={9} className="muted">
                 No users.

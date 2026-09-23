@@ -221,5 +221,8 @@ Signed-in staff complete the workforce training online: the knowledge check is g
 (the answer key never reaches the browser), every attempt is stored in the `training` table and the
 audit log, and once the check is passed the acknowledgment is signed with the user's name, email and
 date. Administrators see the resulting training log on the Administration page and at the end of the
-training document; it is the evidence of training the Privacy Officer keeps for six years (add any
-paper completions to it by hand).
+training document; it is the evidence of training the Privacy Officer keeps for six years. The
+assistant itself stays locked (`TRAINING_REQUIRED`, on by default) until the signed-in user has a
+completed record for the current training version; administrators are not exempt. A completion done
+on paper is recorded by an administrator from the training log ("Record paper completion"), which
+unlocks the user and keeps the log complete.

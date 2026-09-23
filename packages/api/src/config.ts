@@ -37,6 +37,8 @@ const Env = z.object({
   CONTEXT_LIMIT_TOKENS: z.coerce.number().int().positive().default(150000),
   DAILY_QUOTA_USD: z.coerce.number().nonnegative().default(10),
   RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+  /** Nobody, administrators included, uses the assistant before completing the workforce training. */
+  TRAINING_REQUIRED: z.enum(["true", "false"]).default("true"),
   FIRST_EVENT_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
   LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(600000),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),

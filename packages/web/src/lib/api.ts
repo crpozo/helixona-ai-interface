@@ -1,5 +1,5 @@
 import type {
-  AdminTrainingRow,
+  AdminTrainingLog,
   AdminUser,
   ApiErrorBody,
   AuditEvent,
@@ -339,7 +339,11 @@ export function acknowledgeTraining(): Promise<{ record: TrainingRecord }> {
   return request("/api/training/acknowledgment", { method: "POST", body: { accepted: true } });
 }
 
-export async function adminTraining(): Promise<AdminTrainingRow[]> {
-  const r = await request<{ items: AdminTrainingRow[] }>("/api/admin/training");
-  return r.items;
+export function adminTraining(): Promise<AdminTrainingLog> {
+  return request<AdminTrainingLog>("/api/admin/training");
+}
+
+/** Records a completion done on paper (signed acknowledgment on file) so the user is unlocked and the log is complete. */
+export function adminRecordPaperTraining(userId: string, input: { completedAt: string; score: number }): Promise<{ record: TrainingRecord }> {
+  return request(`/api/admin/training/${encodeURIComponent(userId)}/paper`, { method: "POST", body: input });
 }

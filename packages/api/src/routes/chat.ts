@@ -6,6 +6,7 @@ import type { AttachmentStore } from "../attachments/store.js";
 import { attachmentKey } from "../attachments/policy.js";
 import { AttachmentProblem, documentBlock, loadDocumentBlocks, verifyUpload } from "../attachments/documents.js";
 import { canReadProject } from "./projects.js";
+import { requireTraining } from "./training.js";
 import { apiError, audit, requireAuth, today } from "../app.js";
 import { SseWriter } from "../sse.js";
 import { CSP } from "../app.js";
@@ -44,6 +45,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
   const limiter = new TurnRateLimiter(deps.config.RATE_LIMIT_TURNS_PER_HOUR);
 
   app.post("/api/conversations/:id/messages", { preHandler: requireAuth() }, async (req, reply) => {
+    if (!(await requireTraining(deps, req, reply))) return;
     const { id } = req.params as { id: string };
     const userId = req.session!.userId;
     const body = z

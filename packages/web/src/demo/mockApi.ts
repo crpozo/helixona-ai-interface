@@ -224,7 +224,16 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     state.training = { ...state.training, acknowledgedAt: state.training.acknowledgedAt ?? now() };
     return json({ record: state.training });
   }
-  if (path === "/api/admin/training") return json({ items: state.users.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, enabled: u.enabled, record: u.id === "u-ana" ? state.training : null })) });
+  if (path === "/api/admin/training" && method === "GET") return json({ items: state.users.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, enabled: u.enabled, record: u.id === "u-ana" ? state.training : null })), version: quiz.version, passingScore: quiz.passingScore, total: quiz.questions.length });
+  const mPaper = path.match(/^\/api\/admin\/training\/([^/]+)\/paper$/);
+  if (mPaper && method === "POST") {
+    const u = state.users.find((x) => x.id === decodeURIComponent(mPaper[1]!));
+    if (!u) return error(404, "not_found", "User not found");
+    const at = `${String(body["completedAt"])}T12:00:00.000Z`;
+    const record: TrainingRecord = { userId: u.id, name: u.name, email: u.email, version: quiz.version, attempts: 0, lastScore: Number(body["score"]), lastAttemptAt: at, bestScore: Number(body["score"]), passedAt: at, acknowledgedAt: at, source: "paper" };
+    if (u.id === "u-ana") state.training = record;
+    return json({ record });
+  }
   return error(404, "not_found", "Resource not found");
 }
 

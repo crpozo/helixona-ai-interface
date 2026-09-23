@@ -26,6 +26,7 @@ import { LoginPage } from "./components/LoginPage";
 import { ModelSelector } from "./components/ModelSelector";
 import { ProjectPage } from "./components/ProjectPage";
 import { Sidebar } from "./components/Sidebar";
+import { TrainingGate } from "./components/TrainingSections";
 
 // The HIPAA documents ship in their own chunk: the chat bundle stays lean.
 const DocumentationPage = lazy(() => import("./components/DocumentationPage").then((m) => ({ default: m.DocumentationPage })));
@@ -152,6 +153,22 @@ export function App() {
       if (route === "/admin" && !auth.me.user.roles.includes("admin")) navigate("/", { replace: true });
     }
   }, [auth, route]);
+
+  // Training gate: coming back from the training document, re-read the profile so the lock lifts.
+  const refreshMe = useCallback(async () => {
+    try {
+      const me = await getMe();
+      setAuth({ status: "authed", me });
+    } catch {
+      // A 401 is handled by the unauthorized handler; anything else keeps the current profile.
+    }
+  }, []);
+  const authRef = useRef<Auth>(auth);
+  authRef.current = auth;
+  useEffect(() => {
+    const a = authRef.current;
+    if (route === "/" && a.status === "authed" && a.me.training?.required && !a.me.training.complete) void refreshMe();
+  }, [route, refreshMe]);
 
   const doLogout = useCallback(
     async (reason: string | null) => {
@@ -390,6 +407,7 @@ export function App() {
 
   const me = auth.me;
   const isAdmin = me.user.roles.includes("admin");
+  const trainingBlocked = !!me.training?.required && !me.training.complete;
 
   return (
     <>
@@ -433,7 +451,9 @@ export function App() {
                 </button>
               </p>
             )}
-            {projectView && projects.some((p) => p.id === projectView) ? (
+            {trainingBlocked ? (
+              <TrainingGate me={me} onRefresh={() => void refreshMe()} />
+            ) : projectView && projects.some((p) => p.id === projectView) ? (
               <ProjectPage
                 project={projects.find((p) => p.id === projectView)!}
                 conversations={conversations.filter((c) => c.projectId === projectView)}

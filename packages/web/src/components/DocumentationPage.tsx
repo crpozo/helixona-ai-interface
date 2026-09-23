@@ -28,7 +28,8 @@ const hideSection: SectionRender = () => null;
 
 /** The workforce training: the check and the acknowledgment are completed online by signed-in staff. */
 function trainingSections(me: Me | null | undefined): Record<string, SectionRender> {
-  const isAdmin = !!me?.user.roles.includes("admin");
+  // The answer key is for the trainer: administrators, and only once their own training is done.
+  const isAdmin = !!me?.user.roles.includes("admin") && (!me?.training?.required || !!me.training.complete);
   return {
     "Knowledge check": me
       ? ({ heading }) => (

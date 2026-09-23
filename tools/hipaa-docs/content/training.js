@@ -31,7 +31,7 @@ const children = [
   h1("How to use this training"),
   ...numbered([
     "Read modules 1 to 7 (about 20 minutes).",
-    "Complete the knowledge check. A score of 8 out of 10 or better is required; retake it if needed. Signed-in staff complete it online at ai.helixona.com/documentation/workforce-training, where the score is recorded automatically; the paper version below is the alternative.",
+    "Complete the knowledge check. A score of 8 out of 10 or better is required; retake it if needed. Signed-in staff complete it online at ai.helixona.com/documentation/workforce-training, where the score is recorded automatically; the paper version below is the alternative. The assistant stays locked, for administrators too, until the check is passed and the acknowledgment signed (or a paper completion is recorded by an administrator).",
     "Sign the acknowledgment: online, after passing the check, or on the last page of this document, returned to the Privacy Officer.",
     "The training log in the Administration page records every online completion; the Privacy Officer adds paper completions to it.",
   ]),

@@ -16,6 +16,8 @@ export interface CatalogModel {
 export interface Me {
   user: { id: string; email: string; name: string; roles: Role[] };
   session: { expiresAt: string; idleTimeoutSeconds: number };
+  /** Workforce training: when `required` and not `complete`, the assistant is locked (administrators included). */
+  training?: { required: boolean; complete: boolean; version: string };
   catalog: {
     defaultAlias: string;
     effort: "low" | "medium" | "high" | "xhigh" | "max";
@@ -155,6 +157,9 @@ export interface TrainingRecord {
   bestScore: number;
   passedAt: string | null;
   acknowledgedAt: string | null;
+  source?: "online" | "paper";
+  recordedBy?: string;
+  recordedAt?: string;
 }
 
 export interface TrainingQuestion {
@@ -185,6 +190,13 @@ export interface AdminTrainingRow {
   role: Role;
   enabled: boolean;
   record: TrainingRecord | null;
+}
+
+export interface AdminTrainingLog {
+  items: AdminTrainingRow[];
+  version: string;
+  passingScore: number;
+  total: number;
 }
 
 export interface ApiErrorBody {

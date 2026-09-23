@@ -133,6 +133,11 @@ export interface TrainingRecord {
   bestScore: number;
   passedAt: string | null;
   acknowledgedAt: string | null;
+  /** How the acknowledgment was signed: in the app, or on paper and recorded by an administrator. */
+  source?: "online" | "paper";
+  /** Administrator who recorded a paper completion, and when. */
+  recordedBy?: string;
+  recordedAt?: string;
   /** Letters of the last attempt (kept for the record; never sent to the browser). */
   answers: string[];
 }

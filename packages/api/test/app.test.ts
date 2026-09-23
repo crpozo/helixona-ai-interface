@@ -23,7 +23,8 @@ function parseSse(body: string): { event: string; data: Record<string, unknown> 
 }
 
 async function makeApp(extraEnv: Record<string, string> = {}, identity?: IdentityProvider, passwordAuth: PasswordAuth | null = null) {
-  const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "1", WEB_DIST: "/nonexistent", ...extraEnv });
+  // The training gate is covered by its own tests; everything else runs with it off.
+  const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "1", WEB_DIST: "/nonexistent", TRAINING_REQUIRED: "false", ...extraEnv });
   const repos = memoryRepos();
   const provider = new FakeProvider({ refusalFallbacks: Object.fromEntries(DEFAULT_CATALOG.models.map((m) => [m.modelId, m.refusalFallbacks])), delayMs: 0 });
   const deps: Deps = {
@@ -458,6 +459,42 @@ describe("Invitations", () => {
     expect(repos.audit.events.map((e) => e.action)).toContain("admin_user_temporary_password");
     expect((await app.inject({ method: "POST", url: "/api/admin/users/unknown/temporary-password", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(404);
     expect((await app.inject({ method: "POST", url: `/api/admin/users/${created.id}/temporary-password`, headers: { ...H, cookie: staff.cookie } })).statusCode).toBe(403);
+    await app.close();
+  });
+});
+
+describe("Training gate", () => {
+  it("blocks the assistant for everyone, administrators included, until the training is complete", async () => {
+    const { app } = await makeApp({ TRAINING_REQUIRED: "true" });
+    const { cookie } = await login(app, "nora");
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().training).toEqual({ required: true, complete: false, version: "1.1" });
+    const blocked = await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "sonnet" } });
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json().error.code).toBe("training_required");
+    // Administrators are not exempt.
+    const admin = await login(app, "root", "admin");
+    expect((await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: admin.cookie }, payload: { modelAlias: "sonnet" } })).statusCode).toBe(403);
+    // Pass the check and sign: unlocked.
+    await app.inject({ method: "POST", url: "/api/training/check", headers: { ...H, cookie }, payload: { answers: ["B", "A", "B", "B", "B", "B", "B", "B", "B", "C"] } });
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().training.complete).toBe(false);
+    await app.inject({ method: "POST", url: "/api/training/acknowledgment", headers: { ...H, cookie }, payload: { accepted: true } });
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().training.complete).toBe(true);
+    const conv = await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "sonnet" } });
+    expect(conv.statusCode).toBe(201);
+    const turn = await app.inject({ method: "POST", url: `/api/conversations/${conv.json().id}/messages`, headers: { ...H, cookie }, payload: { text: "hello" } });
+    expect(turn.statusCode).toBe(200);
+    expect(parseSse(turn.body).at(-1)?.event).toBe("done");
+    // A paper completion recorded by an administrator unlocks a user too, and shows in the log.
+    const created = (await app.inject({ method: "POST", url: "/api/admin/users", headers: { ...H, cookie: admin.cookie }, payload: { email: "paper@clinic.test", name: "Paper Person", role: "staff" } })).json();
+    expect((await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie: admin.cookie }, payload: { completedAt: "2026-09-20", score: 7 } })).statusCode).toBe(400);
+    const paper = await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie: admin.cookie }, payload: { completedAt: "2026-09-20", score: 9 } });
+    expect(paper.statusCode).toBe(200);
+    expect(paper.json().record).toMatchObject({ source: "paper", bestScore: 9, recordedBy: "dev-root", version: "1.1" });
+    expect(paper.json().record.passedAt).toContain("2026-09-20");
+    const log = (await app.inject({ method: "GET", url: "/api/admin/training", headers: { cookie: admin.cookie } })).json();
+    expect(log.version).toBe("1.1");
+    expect(log.items.find((r: { id: string }) => r.id === created.id).record.source).toBe("paper");
+    expect((await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie }, payload: { completedAt: "2026-09-20", score: 9 } })).statusCode).toBe(403);
     await app.close();
   });
 });

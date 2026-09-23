@@ -5,6 +5,7 @@ import type { Deps } from "../deps.js";
 import type { ConversationPatch } from "../repos/types.js";
 import { apiError, audit, requireAuth } from "../app.js";
 import { canReadProject } from "./projects.js";
+import { requireTraining } from "./training.js";
 
 export function publicConversation(c: Conversation) {
   const { userId: _u, systemPromptVersion: _v, lastInputTokens: _t, pinnedUntil: _p, ...rest } = c;
@@ -27,6 +28,7 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
   });
 
   app.post("/api/conversations", { preHandler: requireAuth() }, async (req, reply) => {
+    if (!(await requireTraining(deps, req, reply))) return;
     const body = z.object({ modelAlias: z.string().min(2).max(32), projectId: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/).nullable().optional() }).safeParse(req.body);
     if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
     const entry = modelByAlias(deps.catalog, body.data.modelAlias);
