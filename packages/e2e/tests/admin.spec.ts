@@ -11,7 +11,8 @@ test.describe("Administration", () => {
     await page.getByRole("link", { name: "Administration" }).click();
     await expect(page).toHaveURL(/\/admin$/);
     await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
-    await expect(page.locator("tr", { hasText: adminName })).toBeVisible();
+    // The signed-in administrator appears in the Users table (and, having attested the training, in the log).
+    await expect(page.locator("tr", { hasText: adminName }).first()).toBeVisible();
     // Bug reports: where they go and that the inbox is confirmed (memory sender in this environment).
     await expect(page.getByRole("heading", { name: "Bug reports" })).toBeVisible();
     await expect(page.getByText(/Delivery confirmed/)).toBeVisible();
@@ -49,8 +50,8 @@ test.describe("Administration", () => {
     await row.getByRole("button", { name: "Enable" }).click();
     await expect(row.getByRole("button", { name: "Disable" })).toBeVisible();
     page.off("dialog", acceptAll);
-    // Nobody disables their own account from here.
-    await expect(page.locator("tr", { hasText: adminName }).getByRole("button", { name: "Disable" })).toHaveCount(0);
+    // Nobody disables their own account from here: the button on the administrator's own row is off.
+    await expect(page.locator("tr", { hasText: adminName }).getByRole("button", { name: "Disable" })).toBeDisabled();
 
     // Training log: the new user has not started; a paper completion below the passing score is refused.
     const log = page.locator(".training-log tr", { hasText: email });

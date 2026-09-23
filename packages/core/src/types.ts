@@ -20,18 +20,39 @@ export interface Conversation {
   lastInputTokens: number;
   /** Project this conversation belongs to (its instructions and knowledge are injected on every turn). */
   projectId?: string | null;
+  /** Who started it. In a shared project the conversation is stored under the project, not under a person. */
+  createdBy?: string;
+  createdByName?: string;
+  /** Set while a turn is running: nobody else can send in this conversation until then. */
+  busyUntil?: string | null;
 }
 
-export type ProjectVisibility = "private" | "clinic";
+/**
+ * `private`: the owner's alone. `shared`: the owner plus chosen members, who all see and continue
+ * the same conversations. `clinic`: everyone may use its instructions and files; chats stay personal.
+ */
+export type ProjectVisibility = "private" | "shared" | "clinic";
+
+/** Someone a shared project is shared with (name and email as they were in the directory when added). */
+export interface ProjectMember {
+  id: string;
+  name: string;
+  email: string;
+  addedAt: string;
+}
 
 /** A project: shared instructions plus knowledge files that every conversation inside it receives. */
 export interface Project {
   id: string;
   ownerId: string;
+  /** The owner's name when the project was created (shown in the members list). */
+  ownerName?: string;
   name: string;
   description: string;
   instructions: string;
   visibility: ProjectVisibility;
+  /** Accounts besides the owner that take part in a `shared` project. */
+  members: ProjectMember[];
   knowledge: AttachmentMeta[];
   createdAt: string;
   updatedAt: string;
@@ -59,6 +80,9 @@ export interface StoredMessage {
   content: BetaContentBlock[] | BetaContentBlockParam[];
   /** Files attached to this (user) turn; the document blocks are rebuilt from storage on every request. */
   attachments?: AttachmentMeta[];
+  /** Who wrote a user turn (shown in shared projects, where several people write in one conversation). */
+  authorId?: string;
+  authorName?: string;
   model: string | null;
   fallbackReason: PinReason | null;
   stopReason: string | null;

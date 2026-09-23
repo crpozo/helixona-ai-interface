@@ -39,22 +39,48 @@ export interface Conversation {
   updatedAt: string;
   messageCount: number;
   projectId?: string | null;
+  /** Who started it (named in shared projects, where the chats belong to the team). */
+  createdBy?: string;
+  createdByName?: string;
 }
 
-export type ProjectVisibility = "private" | "clinic";
+/**
+ * `private`: only the owner. `shared`: the owner plus chosen people, who all see and continue the
+ * same chats. `clinic`: everyone may use its instructions and files; chats stay personal.
+ */
+export type ProjectVisibility = "private" | "shared" | "clinic";
+
+export interface ProjectMember {
+  id: string;
+  name: string;
+  email: string;
+  addedAt: string;
+}
+
+/** An account of the clinic, as the member picker shows it. */
+export interface DirectoryEntry {
+  id: string;
+  name: string;
+  email: string;
+}
 
 /** A project: instructions plus knowledge files shared by every conversation inside it. */
 export interface Project {
   id: string;
   ownerId: string;
+  ownerName: string;
   name: string;
   description: string;
   instructions: string;
   visibility: ProjectVisibility;
+  /** Accounts besides the owner that take part in a shared project. */
+  members: ProjectMember[];
   knowledge: AttachmentMeta[];
   createdAt: string;
   updatedAt: string;
   canEdit: boolean;
+  /** Visibility, members and deletion: the owner or an administrator. */
+  canManage: boolean;
 }
 
 export interface Usage {
@@ -91,6 +117,9 @@ export interface Message {
   usage: Usage | null;
   createdAt: string;
   attachments?: AttachmentMeta[];
+  /** Who wrote a user turn (shared projects). */
+  authorId?: string;
+  authorName?: string;
 }
 
 /** A file attached to a user turn (metadata only; bytes stay in the clinic's storage). */
@@ -236,6 +265,7 @@ export type SseErrorCode =
   | "model_unavailable"
   | "bad_request"
   | "internal"
+  | "conversation_busy"
   | (string & {});
 
 export interface SseMessageStart {

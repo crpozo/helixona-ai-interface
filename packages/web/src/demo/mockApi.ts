@@ -39,7 +39,8 @@ const state = {
   agreements: {} as Record<string, { size: number; uploadedAt: string; source: "uploaded" }>,
   agreementSizes: {} as Record<string, number>,
   projects: [
-    { id: "p-appeals", ownerId: "u-ana", name: "Insurance appeals", description: "Denied claims and prior authorizations", instructions: "You help the billing team write appeal letters. Always cite the claim number, the denial reason and the relevant policy language. Keep a professional, factual tone.", visibility: "clinic", knowledge: [{ id: "k-1", name: "Appeal letter template.md", contentType: "text/markdown", size: 4_210, pages: null }], createdAt: "2026-09-10T16:00:00Z", updatedAt: "2026-09-12T10:00:00Z", canEdit: true },
+    { id: "p-appeals", ownerId: "u-ana", name: "Insurance appeals", description: "Denied claims and prior authorizations", instructions: "You help the billing team write appeal letters. Always cite the claim number, the denial reason and the relevant policy language. Keep a professional, factual tone.", visibility: "clinic", knowledge: [{ id: "k-1", name: "Appeal letter template.md", contentType: "text/markdown", size: 4_210, pages: null }], createdAt: "2026-09-10T16:00:00Z", updatedAt: "2026-09-12T10:00:00Z", canEdit: true, canManage: true, members: [], ownerName: "Ana Perez" },
+    { id: "p-frontdesk", ownerId: "u-ana", ownerName: "Ana Perez", name: "Front desk", description: "Letters and calls the whole front desk works on together", instructions: "Draft patient-facing letters in plain, warm language. Never include a diagnosis unless the message asks for it.", visibility: "shared", members: [{ id: "u-luis", name: "Luis Romero", email: "luis@helixona.com", addedAt: "2026-09-14T09:00:00Z" }], knowledge: [], createdAt: "2026-09-14T09:00:00Z", updatedAt: "2026-09-14T09:00:00Z", canEdit: true, canManage: true },
   ] as Project[],
 };
 
@@ -129,7 +130,7 @@ function sse(conv: Conv, text: string, signal: AbortSignal | null | undefined, a
         const usage = { inputTokens: 900 + Math.ceil(text.length / 4), outputTokens: Math.ceil(emitted.length / 4), cacheReadTokens: 620, cacheWriteTokens: 0, estimatedUsd: 0 };
         usage.estimatedUsd = Math.round(((usage.inputTokens * pin + usage.outputTokens * pout) / 1e6) * 1e6) / 1e6;
         const stopReason = cmd === "long" ? "max_tokens" : "end_turn";
-        conv.messages.push({ id: userMessageId, role: "user", content: [{ type: "text", text }], model: null, fallbackReason: null, stopReason: null, usage: null, createdAt: now(), ...(attachments.length > 0 ? { attachments } : {}) });
+        conv.messages.push({ id: userMessageId, role: "user", authorId: "u-ana", authorName: "Ana Perez", content: [{ type: "text", text }], model: null, fallbackReason: null, stopReason: null, usage: null, createdAt: now(), ...(attachments.length > 0 ? { attachments } : {}) });
         conv.messages.push({ id: assistantMessageId, role: "assistant", content: [{ type: "text", text: emitted }], model, fallbackReason, stopReason, usage, createdAt: now() });
         conv.messageCount = conv.messages.length; conv.updatedAt = now();
         if (model !== conv.modelId) { conv.pinnedModel = model; conv.pinReason = fallbackReason ?? "availability"; }
@@ -160,7 +161,15 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
   if (path === "/api/me") return json(me());
   if (path === "/api/conversations" && method === "GET") return json({ items: [...state.conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(publicConv) });
   if (path === "/api/projects" && method === "GET") return json({ items: [...state.projects].sort((a, b) => a.name.localeCompare(b.name)) });
-  if (path === "/api/projects" && method === "POST") { const p: Project = { id: id(), ownerId: "u-ana", name: String(body["name"] ?? "New project"), description: String(body["description"] ?? ""), instructions: String(body["instructions"] ?? ""), visibility: body["visibility"] === "clinic" ? "clinic" : "private", knowledge: [], createdAt: now(), updatedAt: now(), canEdit: true }; state.projects.push(p); return json(p, 201); }
+  if (path === "/api/projects" && method === "POST") { const p: Project = { id: id(), ownerId: "u-ana", name: String(body["name"] ?? "New project"), description: String(body["description"] ?? ""), instructions: String(body["instructions"] ?? ""), visibility: body["visibility"] === "clinic" ? "clinic" : body["visibility"] === "shared" ? "shared" : "private", members: [], knowledge: [], createdAt: now(), updatedAt: now(), canEdit: true, canManage: true, ownerName: "Ana Perez" }; state.projects.push(p); return json(p, 201); }
+  if (path === "/api/users" && method === "GET") return json({ items: state.users.filter((u) => u.enabled).map(({ id, name, email }) => ({ id, name, email })) });
+  const mMem = path.match(/^\/api\/projects\/([^/]+)\/members(?:\/([^/]+))?$/);
+  if (mMem) {
+    const p = state.projects.find((x) => x.id === mMem[1]);
+    if (!p) return error(404, "not_found", "Project not found");
+    if (method === "POST") { const u = state.users.find((x) => x.id === body["userId"] && x.enabled); if (!u) return error(404, "user_not_found", "That account was not found or is disabled"); if (!p.members.some((m) => m.id === u.id)) p.members.push({ id: u.id, name: u.name, email: u.email, addedAt: now() }); p.updatedAt = now(); return json(p); }
+    if (method === "DELETE") { p.members = p.members.filter((m) => m.id !== decodeURIComponent(mMem[2] ?? "")); p.updatedAt = now(); return json(p); }
+  }
   const mProj = path.match(/^\/api\/projects\/([^/]+)(?:\/knowledge(?:\/([^/]+))?)?$/);
   if (mProj) {
     const p = state.projects.find((x) => x.id === mProj[1]);
@@ -169,14 +178,14 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     if (mProj[2] && method === "POST") { const name = String(body["name"] ?? "file.pdf"); p.knowledge.push({ id: mProj[2], name, contentType: name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "text/plain", size: 120_000, pages: name.toLowerCase().endsWith(".pdf") ? 8 : null }); p.updatedAt = now(); return json(p); }
     if (mProj[2] && method === "DELETE") { p.knowledge = p.knowledge.filter((k) => k.id !== mProj[2]); p.updatedAt = now(); return json(p); }
     if (method === "GET") return json(p);
-    if (method === "PATCH") { Object.assign(p, { name: String(body["name"] ?? p.name), description: String(body["description"] ?? p.description), instructions: String(body["instructions"] ?? p.instructions), visibility: body["visibility"] === "clinic" ? "clinic" : body["visibility"] === "private" ? "private" : p.visibility, updatedAt: now() }); return json(p); }
+    if (method === "PATCH") { Object.assign(p, { name: String(body["name"] ?? p.name), description: String(body["description"] ?? p.description), instructions: String(body["instructions"] ?? p.instructions), visibility: body["visibility"] === "clinic" ? "clinic" : body["visibility"] === "shared" ? "shared" : body["visibility"] === "private" ? "private" : p.visibility, updatedAt: now() }); return json(p); }
     if (method === "DELETE") { state.projects = state.projects.filter((x) => x.id !== p.id); state.conversations.forEach((c) => { if (c.projectId === p.id) c.projectId = null; }); return new Response(null, { status: 204 }); }
   }
   if (path === "/api/conversations" && method === "POST") {
     const m = MODELS.find((x) => x.alias === body["modelAlias"]);
     if (!m) return error(400, "unknown_model", "Model not available");
     const f = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-    const c: Conv = { id: id(), title: `Conversation ${f.format(new Date())}`, modelAlias: m.alias, modelId: m.modelId, pinnedModel: null, pinReason: null, createdAt: now(), updatedAt: now(), messageCount: 0, messages: [], projectId: typeof body["projectId"] === "string" ? String(body["projectId"]) : null };
+    const c: Conv = { id: id(), title: `Conversation ${f.format(new Date())}`, modelAlias: m.alias, modelId: m.modelId, pinnedModel: null, pinReason: null, createdAt: now(), updatedAt: now(), messageCount: 0, messages: [], projectId: typeof body["projectId"] === "string" ? String(body["projectId"]) : null, createdBy: "u-ana", createdByName: "Ana Perez" };
     state.conversations.push(c);
     return json(publicConv(c), 201);
   }

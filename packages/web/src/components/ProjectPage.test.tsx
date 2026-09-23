@@ -5,6 +5,9 @@ import type { CatalogModel, Conversation, Project } from "../lib/types";
 vi.mock("../lib/api", () => ({
   ApiError: class ApiError extends Error {},
   updateProject: vi.fn(async (_id: string, patch: Partial<Project>) => ({ ...project, ...patch })),
+  listUsers: vi.fn(async () => []),
+  addProjectMember: vi.fn(),
+  removeProjectMember: vi.fn(),
   createProjectKnowledge: vi.fn(),
   deleteProjectKnowledge: vi.fn(),
   registerProjectKnowledge: vi.fn(),
@@ -21,14 +24,17 @@ const models: CatalogModel[] = [
 const project: Project = {
   id: "p1",
   ownerId: "u1",
+  ownerName: "Ana",
   name: "EOB review",
   description: "Explanation-of-benefits checks",
   instructions: "",
   visibility: "private",
+  members: [],
   knowledge: [],
   createdAt: "2026-09-01T00:00:00Z",
   updatedAt: "2026-09-01T00:00:00Z",
   canEdit: true,
+  canManage: true,
 };
 const conv = (id: string, title: string, updatedAt: string): Conversation => ({ id, title, modelAlias: "sonnet", modelId: "anthropic.claude-sonnet-5", pinnedModel: null, pinReason: null, createdAt: updatedAt, updatedAt, messageCount: 2, projectId: "p1" });
 
@@ -40,6 +46,7 @@ function renderPage(over: Partial<React.ComponentProps<typeof ProjectPage>> = {}
     defaultAlias: "opus",
     maxMb: 20,
     uploadsEnabled: true,
+    meId: "u1",
     onBack: vi.fn(),
     onOpenConversation: vi.fn(),
     onStartConversation: vi.fn(async () => {}),

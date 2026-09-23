@@ -29,6 +29,27 @@ export class DynamoConversationRepo implements ConversationRepo {
     return r?.Attributes ? fromItem(r.Attributes) : null;
   }
   async delete(userId: string, id: string) { await this.doc.send(new DeleteCommand({ TableName: this.table, Key: { userId, conversationId: id } })); }
+  async move(fromUserId: string, id: string, toUserId: string, patch: ConversationPatch = {}) {
+    const r = await this.doc.send(new GetCommand({ TableName: this.table, Key: { userId: fromUserId, conversationId: id } }));
+    if (!r.Item) return null;
+    // The item travels whole (its expiry included); the copy is written before the original goes.
+    const item = { ...r.Item, ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)), userId: toUserId };
+    await this.doc.send(new PutCommand({ TableName: this.table, Item: item }));
+    await this.doc.send(new DeleteCommand({ TableName: this.table, Key: { userId: fromUserId, conversationId: id } }));
+    return fromItem(item);
+  }
+  async lock(userId: string, id: string, until: string, now: string) {
+    try {
+      await this.doc.send(new UpdateCommand({ TableName: this.table, Key: { userId, conversationId: id }, UpdateExpression: "SET busyUntil = :until", ConditionExpression: "attribute_exists(conversationId) AND (attribute_not_exists(busyUntil) OR busyUntil < :now)", ExpressionAttributeValues: { ":until": until, ":now": now } }));
+      return true;
+    } catch (e) {
+      if ((e as { name?: string }).name === "ConditionalCheckFailedException") return false;
+      throw e;
+    }
+  }
+  async unlock(userId: string, id: string) {
+    await this.doc.send(new UpdateCommand({ TableName: this.table, Key: { userId, conversationId: id }, UpdateExpression: "REMOVE busyUntil", ConditionExpression: "attribute_exists(conversationId)" })).catch(() => undefined);
+  }
 }
 
 function fromItem(i: Record<string, unknown>): Conversation {
@@ -70,7 +91,7 @@ export class DynamoProjectRepo implements ProjectRepo {
 function projectFromItem(i: Record<string, unknown>): Project {
   const { projectId, ...rest } = i as Record<string, unknown> & { projectId: string };
   const p = rest as unknown as Project;
-  return { ...p, id: projectId, knowledge: Array.isArray(p.knowledge) ? p.knowledge : [] };
+  return { ...p, id: projectId, knowledge: Array.isArray(p.knowledge) ? p.knowledge : [], members: Array.isArray(p.members) ? p.members : [] };
 }
 
 export class DynamoMessageRepo implements MessageRepo {

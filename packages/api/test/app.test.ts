@@ -683,3 +683,111 @@ describe("Bug report delivery (administration)", () => {
     await app.close();
   });
 });
+
+describe("Shared projects", () => {
+  const seed: DirectoryUser[] = [
+    { id: "dev-bea", email: "bea@dev.local", name: "bea", role: "staff", enabled: true, createdAt: "2026-09-01T00:00:00Z", status: "active" },
+    { id: "dev-cara", email: "cara@dev.local", name: "cara", role: "staff", enabled: true, createdAt: "2026-09-01T00:00:00Z", status: "active" },
+    { id: "dev-gone", email: "gone@dev.local", name: "gone", role: "staff", enabled: false, createdAt: "2026-09-01T00:00:00Z", status: "active" },
+  ];
+  type Item = { id: string; projectId: string | null; createdBy?: string; createdByName?: string; busyUntil?: string };
+  const listFor = async (app: FastifyInstance, cookie: string) => (await app.inject({ method: "GET", url: "/api/conversations", headers: { cookie } })).json().items as Item[];
+
+  it("members see and continue the same chats; outsiders see nothing; leaving shared hands each chat back to its author", async () => {
+    const { app, repos } = await makeApp({}, undefined, null, seed);
+    const ana = await login(app, "ana");
+    const bea = await login(app, "bea");
+    const cara = await login(app, "cara");
+    // Ana starts a private project with a chat in it, then shares the project with Bea.
+    const p = (await app.inject({ method: "POST", url: "/api/projects", headers: { ...H, cookie: ana.cookie }, payload: { name: "Front desk" } })).json();
+    const c1 = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "sonnet", projectId: p.id } })).json();
+    expect(c1).toMatchObject({ createdBy: "dev-ana", createdByName: "ana" });
+    expect((await app.inject({ method: "POST", url: `/api/projects/${p.id}/members`, headers: { ...H, cookie: ana.cookie }, payload: { userId: "dev-bea" } })).json().error.code).toBe("not_shared");
+    const shared = (await app.inject({ method: "PATCH", url: `/api/projects/${p.id}`, headers: { ...H, cookie: ana.cookie }, payload: { visibility: "shared" } })).json();
+    expect(shared).toMatchObject({ visibility: "shared", members: [], canManage: true });
+    // The picker offers the clinic's enabled accounts, names and emails only.
+    const users = (await app.inject({ method: "GET", url: "/api/users", headers: { cookie: bea.cookie } })).json().items as { id: string; name: string; email: string; role?: string }[];
+    expect(users.map((u) => u.id)).toEqual(expect.arrayContaining(["dev-ana", "dev-bea", "dev-cara"]));
+    expect(users.some((u) => u.id === "dev-gone")).toBe(false);
+    expect(users[0]!.role).toBeUndefined();
+    expect((await app.inject({ method: "POST", url: `/api/projects/${p.id}/members`, headers: { ...H, cookie: ana.cookie }, payload: { userId: "dev-gone" } })).statusCode).toBe(404);
+    const withBea = (await app.inject({ method: "POST", url: `/api/projects/${p.id}/members`, headers: { ...H, cookie: ana.cookie }, payload: { userId: "dev-bea" } })).json();
+    expect(withBea.members).toEqual([expect.objectContaining({ id: "dev-bea", name: "bea", email: "bea@dev.local" })]);
+    // Bea sees the project and Ana's chat; she may edit but not manage.
+    expect((await app.inject({ method: "POST", url: `/api/projects/${p.id}/members`, headers: { ...H, cookie: bea.cookie }, payload: { userId: "dev-cara" } })).statusCode).toBe(403);
+    const beaProjects = (await app.inject({ method: "GET", url: "/api/projects", headers: { cookie: bea.cookie } })).json().items as { id: string; canEdit: boolean; canManage: boolean }[];
+    expect(beaProjects.map((x) => x.id)).toEqual([p.id]);
+    expect(beaProjects[0]).toMatchObject({ canEdit: true, canManage: false });
+    expect((await app.inject({ method: "PATCH", url: `/api/projects/${p.id}`, headers: { ...H, cookie: bea.cookie }, payload: { instructions: "Greet warmly." } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "PATCH", url: `/api/projects/${p.id}`, headers: { ...H, cookie: bea.cookie }, payload: { visibility: "private" } })).statusCode).toBe(403);
+    const beaList = await listFor(app, bea.cookie);
+    expect(beaList.map((x) => x.id)).toEqual([c1.id]);
+    expect(beaList[0]).toMatchObject({ createdBy: "dev-ana", createdByName: "ana", projectId: p.id });
+    expect(beaList[0]!.busyUntil).toBeUndefined();
+    // Cara, not a member, sees nothing of it.
+    expect((await app.inject({ method: "GET", url: "/api/projects", headers: { cookie: cara.cookie } })).json().items).toEqual([]);
+    expect((await app.inject({ method: "GET", url: `/api/projects/${p.id}`, headers: { cookie: cara.cookie } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: `/api/conversations/${c1.id}`, headers: { cookie: cara.cookie } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "POST", url: `/api/conversations/${c1.id}/messages`, headers: { ...H, cookie: cara.cookie }, payload: { text: "Let me in" } })).statusCode).toBe(404);
+    // Bea continues Ana's chat with the project's instructions; her turn carries her name and Ana sees it.
+    const turn = await app.inject({ method: "POST", url: `/api/conversations/${c1.id}/messages`, headers: { ...H, cookie: bea.cookie }, payload: { text: "Hello from Bea" } });
+    expect(turn.statusCode).toBe(200);
+    expect(parseSse(turn.body).some((e) => e.event === "done")).toBe(true);
+    const anaView = (await app.inject({ method: "GET", url: `/api/conversations/${c1.id}`, headers: { cookie: ana.cookie } })).json();
+    expect(anaView.conversation.messageCount).toBe(2);
+    expect(anaView.messages[0]).toMatchObject({ role: "user", authorId: "dev-bea", authorName: "bea" });
+    expect(anaView.messages[1].role).toBe("assistant");
+    // Bea can rename, not delete, Ana's chat; a chat she starts in the project is Ana's to see too.
+    expect((await app.inject({ method: "PATCH", url: `/api/conversations/${c1.id}`, headers: { ...H, cookie: bea.cookie }, payload: { title: "Team chat" } })).json().title).toBe("Team chat");
+    expect((await app.inject({ method: "DELETE", url: `/api/conversations/${c1.id}`, headers: { ...H, cookie: bea.cookie } })).statusCode).toBe(403);
+    const c2 = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: bea.cookie }, payload: { modelAlias: "sonnet", projectId: p.id } })).json();
+    expect(c2).toMatchObject({ createdBy: "dev-bea", createdByName: "bea", projectId: p.id });
+    expect((await listFor(app, ana.cookie)).map((x) => x.id).sort()).toEqual([c1.id, c2.id].sort());
+    // Removing Bea takes the project and its chats away from her; her chat stays with the team.
+    expect((await app.inject({ method: "DELETE", url: `/api/projects/${p.id}/members/dev-bea`, headers: { ...H, cookie: ana.cookie } })).json().members).toEqual([]);
+    expect(await listFor(app, bea.cookie)).toEqual([]);
+    expect((await app.inject({ method: "GET", url: `/api/conversations/${c2.id}`, headers: { cookie: bea.cookie } })).statusCode).toBe(404);
+    expect((await listFor(app, ana.cookie)).map((x) => x.id).sort()).toEqual([c1.id, c2.id].sort());
+    // Back to private: Ana's chat returns to her; Bea's goes back to Bea, outside the project.
+    expect((await app.inject({ method: "PATCH", url: `/api/projects/${p.id}`, headers: { ...H, cookie: ana.cookie }, payload: { visibility: "private" } })).json().visibility).toBe("private");
+    expect((await listFor(app, ana.cookie)).map((x) => [x.id, x.projectId])).toEqual([[c1.id, p.id]]);
+    expect((await listFor(app, bea.cookie)).map((x) => [x.id, x.projectId])).toEqual([[c2.id, null]]);
+    expect((await app.inject({ method: "GET", url: `/api/conversations/${c2.id}`, headers: { cookie: bea.cookie } })).json().conversation.projectId).toBeNull();
+    // Shared again and then deleted: every chat goes home, none is lost.
+    await app.inject({ method: "PATCH", url: `/api/projects/${p.id}`, headers: { ...H, cookie: ana.cookie }, payload: { visibility: "shared" } });
+    await app.inject({ method: "POST", url: `/api/projects/${p.id}/members`, headers: { ...H, cookie: ana.cookie }, payload: { userId: "dev-bea" } });
+    const c3 = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: bea.cookie }, payload: { modelAlias: "sonnet", projectId: p.id } })).json();
+    expect((await app.inject({ method: "DELETE", url: `/api/projects/${p.id}`, headers: { ...H, cookie: bea.cookie } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "DELETE", url: `/api/projects/${p.id}`, headers: { ...H, cookie: ana.cookie } })).statusCode).toBe(204);
+    expect((await listFor(app, ana.cookie)).map((x) => [x.id, x.projectId])).toEqual([[c1.id, null]]);
+    expect((await listFor(app, bea.cookie)).map((x) => [x.id, x.projectId]).sort()).toEqual([[c2.id, null], [c3.id, null]].sort());
+    // The audit log records who was added and removed, never a chat's text.
+    const actions = repos.audit.events.map((e) => e.action);
+    expect(actions).toEqual(expect.arrayContaining(["project_member_add", "project_member_remove", "project_update", "project_delete"]));
+    expect(JSON.stringify(repos.audit.events)).not.toContain("Hello from Bea");
+    await app.close();
+  });
+
+  it("one turn at a time per conversation: a second sender is told it is busy; a stale claim does not block", async () => {
+    const { app, repos } = await makeApp();
+    const ana = await login(app, "ana");
+    const c = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "sonnet" } })).json();
+    const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString();
+    expect(await repos.conversations.lock("dev-ana", c.id, iso(60_000), iso(0))).toBe(true);
+    expect(await repos.conversations.lock("dev-ana", c.id, iso(60_000), iso(0))).toBe(false);
+    const busy = await app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, headers: { ...H, cookie: ana.cookie }, payload: { text: "Hi" } });
+    expect(busy.statusCode).toBe(409);
+    expect(busy.json().error.code).toBe("conversation_busy");
+    expect((await app.inject({ method: "GET", url: `/api/conversations/${c.id}`, headers: { cookie: ana.cookie } })).json().conversation.busyUntil).toBeUndefined();
+    await repos.conversations.unlock("dev-ana", c.id);
+    // A claim whose time has passed (a turn that never released) does not block the next sender.
+    expect(await repos.conversations.lock("dev-ana", c.id, iso(-1000), iso(-2000))).toBe(true);
+    const ok = await app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, headers: { ...H, cookie: ana.cookie }, payload: { text: "Hi again" } });
+    expect(ok.statusCode).toBe(200);
+    expect(parseSse(ok.body).some((e) => e.event === "done")).toBe(true);
+    // The turn released its claim.
+    expect(await repos.conversations.lock("dev-ana", c.id, iso(60_000), iso(0))).toBe(true);
+    expect(await repos.conversations.lock("missing", c.id, iso(60_000), iso(0))).toBe(false);
+    await app.close();
+  });
+});

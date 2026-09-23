@@ -2404,3 +2404,73 @@ td {
 .feedback-delivery .notice {
   margin: 0;
 }
+
+/* ---- Shared projects ---- */
+.msg-author {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.msg-user .msg-head {
+  margin-bottom: 0.25rem;
+}
+.chat-shared {
+  white-space: nowrap;
+}
+.member-list {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.member-row .avatar {
+  width: 28px;
+  height: 28px;
+  font-size: 0.66rem;
+}
+.member-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.member-name,
+.member-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.member-name {
+  font-size: 0.92rem;
+}
+.member-email {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.member-picker {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.member-picker input {
+  width: 100%;
+}
+.member-candidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 240px;
+  overflow-y: auto;
+}

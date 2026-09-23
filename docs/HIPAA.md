@@ -249,3 +249,28 @@ include patient information, the API rate-limits reports per user, and the audit
 that a report was sent (length and page), never its text. The Administration page shows whether the
 inbox has confirmed its subscription, can ask SNS for the confirmation email again, and can send a
 test report.
+
+## Shared projects
+
+A project has one of three kinds, chosen by its owner (or an administrator) under Settings:
+
+- **Private**: only the owner.
+- **Shared with chosen people**: the owner picks members from the clinic's directory (names and
+  emails of enabled accounts, `GET /api/users`). Everyone in the project sees and can continue the
+  same conversations; each user turn records who wrote it, and the sidebar lists these projects under
+  "Shared projects". Members can edit instructions and files; only the owner or an administrator
+  changes the kind, the members, or deletes the project.
+- **Shared with the clinic**: everyone may use the instructions and files; chats stay personal.
+
+How it is stored: a shared project's conversations live under the project's own partition of the
+conversations table (`userId = project:<id>`, with `createdBy` on each), so access follows the
+members list rather than a per-user copy. Making a project shared moves the owner's chats in it to
+the project; making it private again, removing a member, or deleting the project hands each chat
+back to whoever started it (a member's leaves the project). Only one turn runs at a time in a
+conversation (`busyUntil` claim; a second sender gets `409 conversation_busy`). The audit log
+records `project_member_add` / `project_member_remove` with the member's id, and
+`project_update` with how many conversations moved, never any chat text.
+
+Minimum necessary: the policies document tells staff to add only the colleagues who need the work
+and to remove them afterwards; the members list on the project page is the record of who can see
+those conversations.

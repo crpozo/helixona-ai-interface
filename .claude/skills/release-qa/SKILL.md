@@ -42,7 +42,8 @@ screenshot path, plus what was verified working.
 Scopes:
 
 1. **Chat and projects**: start screen, sending, streaming, Stop, model change, rename, delete,
-   counter and limit, attachments (button, drag-and-drop, unsupported file), projects
+   counter and limit, attachments (button, drag-and-drop, unsupported file), projects, shared
+   projects (members from the directory, both accounts see the same chats and who wrote what)
    (settings, instructions, knowledge, chats nested in the sidebar, delete), Markdown rendering.
 2. **Training and documentation**: gate, course (locks, wrong answers, reset, resume after reload,
    completion), skip attestation, documentation index and the three documents, Word downloads,

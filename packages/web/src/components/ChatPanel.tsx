@@ -16,12 +16,14 @@ interface Props {
   onRetry: (message: ChatMessage) => void;
   onChangeModel: (alias: string) => void;
   onOpenProject?: () => void;
+  /** The conversation belongs to a shared project: everyone in it sees it, so each message names its author. */
+  shared?: boolean;
 }
 
 /** Distance from the bottom (px) under which the reader counts as "at the bottom". */
 const FOLLOW_THRESHOLD = 48;
 
-export function ChatPanel({ me, conversation, projectName, state, loading, onSend, onStop, onRetry, onChangeModel, onOpenProject }: Props) {
+export function ChatPanel({ me, conversation, projectName, state, loading, onSend, onStop, onRetry, onChangeModel, onOpenProject, shared = false }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLElement>(null);
   // Follow mode keeps the newest text in view only while the reader is at the bottom. Scrolling up
@@ -106,6 +108,11 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
             {projectName}
           </button>
         )}
+        {shared && (
+          <span className="muted small chat-shared" title="Everyone in this shared project sees this conversation">
+            Shared{conversation.createdByName ? ` · started by ${conversation.createdByName}` : ""}
+          </span>
+        )}
       </header>
 
       <div className="chat-body">
@@ -115,7 +122,7 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
           ) : state.messages.length === 0 ? (
             <p className="muted center">Type your first message to get started.</p>
           ) : (
-            state.messages.map((m) => <MessageBubble key={m.id} message={m} models={models} onRetry={onRetry} />)
+            state.messages.map((m) => <MessageBubble key={m.id} message={m} models={models} onRetry={onRetry} showAuthor={shared} />)
           )}
           {state.transportError && !state.messages.some((m) => m.error) && (
             <p className="notice notice-error" role="alert">

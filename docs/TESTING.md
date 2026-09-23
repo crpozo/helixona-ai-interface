@@ -7,7 +7,7 @@ them automated and enforced by CI and by the deploy workflow.
 | --- | --- | --- | --- |
 | Typecheck | Every package compiles under strict TypeScript | all packages | `npm run typecheck` |
 | Unit and integration | Catalog, router, breaker, quiz grading (core); every API route through Fastify's `inject` with in-memory repos and the fake model (api); components with Testing Library (web); CDK stacks (infra) | `packages/*/test`, `*.test.ts(x)` | `npm test` |
-| End-to-end | The built web app served by the real API (dev authentication, in-memory store, fake model that streams a simulated reply), driven in a real Chromium: sign-in, training gate and course, chat with streaming and Stop, model change, attachments, projects, documentation, agreements, administration, phone layout | `packages/e2e/tests` | `npm run build && npm run e2e` |
+| End-to-end | The built web app served by the real API (dev authentication, in-memory store, fake model that streams a simulated reply), driven in a real Chromium: sign-in, training gate and course, chat with streaming and Stop, model change, attachments, projects, shared projects (two accounts in one project), documentation, agreements, administration, phone layout | `packages/e2e/tests` | `npm run build && npm run e2e` |
 | Agent QA before a release | Exploratory testing by parallel agents acting as end users, each with a scope (chat and projects; training and documentation; administration, sign-in, phone, accessibility), reporting reproduced defects with steps and screenshots. Defects are fixed and turned into tests before the deploy. | `.claude/skills/release-qa` | see the skill |
 
 `npm run verify` runs the first three layers in order.

@@ -13,6 +13,18 @@ export class MemoryConversationRepo implements ConversationRepo {
     this.data.set(this.key(userId, id), next); return { ...next };
   }
   async delete(userId: string, id: string) { this.data.delete(this.key(userId, id)); }
+  async move(fromUserId: string, id: string, toUserId: string, patch: ConversationPatch = {}) {
+    const c = this.data.get(this.key(fromUserId, id)); if (!c) return null;
+    this.data.delete(this.key(fromUserId, id));
+    const next = { ...c, ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)), userId: toUserId } as Conversation;
+    this.data.set(this.key(toUserId, id), next); return { ...next };
+  }
+  async lock(userId: string, id: string, until: string, now: string) {
+    const c = this.data.get(this.key(userId, id)); if (!c) return false;
+    if (c.busyUntil && c.busyUntil > now) return false;
+    c.busyUntil = until; return true;
+  }
+  async unlock(userId: string, id: string) { const c = this.data.get(this.key(userId, id)); if (c) c.busyUntil = null; }
 }
 
 export class MemoryProjectRepo implements ProjectRepo {

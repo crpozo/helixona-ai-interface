@@ -9,6 +9,7 @@ import type {
   AuditEvent,
   ChatSseEvent,
   Conversation,
+  DirectoryEntry,
   Me,
   Message,
   TrainingCheckResult,
@@ -188,6 +189,22 @@ export function registerProjectKnowledge(projectId: string, attachmentId: string
 
 export function deleteProjectKnowledge(projectId: string, attachmentId: string): Promise<Project> {
   return request<Project>(`/api/projects/${encodeURIComponent(projectId)}/knowledge/${encodeURIComponent(attachmentId)}`, { method: "DELETE" });
+}
+
+// ---- Members of a shared project ----
+
+export function addProjectMember(projectId: string, userId: string): Promise<Project> {
+  return request<Project>(`/api/projects/${encodeURIComponent(projectId)}/members`, { method: "POST", body: { userId } });
+}
+
+export function removeProjectMember(projectId: string, userId: string): Promise<Project> {
+  return request<Project>(`/api/projects/${encodeURIComponent(projectId)}/members/${encodeURIComponent(userId)}`, { method: "DELETE" });
+}
+
+/** The clinic's accounts (names and emails), for choosing whom to share a project with. */
+export async function listUsers(): Promise<DirectoryEntry[]> {
+  const r = await request<{ items: DirectoryEntry[] }>("/api/users");
+  return r.items;
 }
 
 export function deleteConversation(id: string): Promise<void> {

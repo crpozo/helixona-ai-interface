@@ -275,9 +275,9 @@ export function App() {
     navigate("/");
   };
 
-  const newProject = async () => {
+  const newProject = async (visibility: "private" | "shared" = "private") => {
     try {
-      const p = await createProject({ name: "New project" });
+      const p = await createProject({ name: visibility === "shared" ? "New shared project" : "New project", visibility });
       setProjects((prev) => [...prev, p].sort((a, b) => a.name.localeCompare(b.name)));
       openProject(p.id);
     } catch (e) {
@@ -337,7 +337,7 @@ export function App() {
   const sendTo = async (conv: Conversation, text: string, attachments: AttachmentMeta[] = []) => {
     const ac = new AbortController();
     abortRef.current = ac;
-    dispatch({ type: "send", text, attachments, userId: localId("u"), assistantId: localId("a") });
+    dispatch({ type: "send", text, attachments, userId: localId("u"), assistantId: localId("a"), authorName: authRef.current.status === "authed" ? authRef.current.me.user.name : undefined });
     try {
       for await (const ev of sendMessage(conv.id, text, ac.signal, attachments.map((a) => ({ id: a.id, name: a.name })))) {
         dispatch({ type: "sse", event: ev });
@@ -355,7 +355,9 @@ export function App() {
               ? "You have reached your daily quota."
               : e.code === "context_limit"
                 ? "This conversation is too long. Please start a new one."
-                : "Could not send the message."
+                : e.code === "conversation_busy"
+                  ? "Someone else is sending a message in this conversation. Wait for the answer, then try again."
+                  : "Could not send the message."
             : "Connection to the server was lost.";
         dispatch({ type: "transport_error", message: msg });
       }
@@ -397,6 +399,30 @@ export function App() {
     const fresh = conversations.find((c) => c.id === selected.id);
     if (fresh && fresh !== selected) setSelected(fresh);
   }, [conversations, selected]);
+
+  // Shared project: colleagues may be writing in the open conversation. While it is idle, the list is
+  // refreshed every 15 seconds; when it reports more messages than are on screen, they are fetched.
+  const selectedShared = !!selected?.projectId && projects.find((p) => p.id === selected.projectId)?.visibility === "shared";
+  const reloadMessages = useCallback(async (id: string) => {
+    const seq = ++loadSeq.current;
+    try {
+      const r = await getConversation(id);
+      if (seq !== loadSeq.current) return;
+      setSelected(r.conversation);
+      dispatch({ type: "load", conversationId: id, messages: r.messages });
+    } catch {
+      // The next refresh tries again; a 401 is handled by the unauthorized handler.
+    }
+  }, []);
+  useEffect(() => {
+    if (auth.status !== "authed" || !selected || !selectedShared || chat.streaming) return;
+    const t = window.setInterval(() => void refreshConversations(), 15_000);
+    return () => window.clearInterval(t);
+  }, [auth.status, selected, selectedShared, chat.streaming, refreshConversations]);
+  useEffect(() => {
+    if (!selected || !selectedShared || chat.streaming || loadingConv) return;
+    if (chat.conversationId === selected.id && selected.messageCount > chat.messages.length) void reloadMessages(selected.id);
+  }, [selected, selectedShared, chat.streaming, chat.conversationId, chat.messages.length, loadingConv, reloadMessages]);
 
   const stop = () => abortStream();
 
@@ -469,7 +495,7 @@ export function App() {
             onDelete={(id) => void removeConversation(id)}
             onRename={rename}
             onOpenProject={openProject}
-            onNewProject={() => void newProject()}
+            onNewProject={(visibility) => void newProject(visibility)}
             onNewInProject={(id) => startNew(id)}
             onLogout={() => void doLogout(null)}
             onAdmin={() => navigate("/admin")}
@@ -506,6 +532,7 @@ export function App() {
                 onStartConversation={(text, alias, files) => startInProject(projectView, text, alias, files)}
                 onUpdated={projectUpdated}
                 onDelete={() => void removeProject(projectView)}
+                meId={me.user.id}
               />
             ) : selected ? (
               <ChatPanel
@@ -519,6 +546,7 @@ export function App() {
                 onRetry={retry}
                 onChangeModel={(alias) => void changeModel(alias)}
                 onOpenProject={selected.projectId ? () => openProject(selected.projectId!) : undefined}
+                shared={selectedShared}
               />
             ) : (
               <div className="panel-center">

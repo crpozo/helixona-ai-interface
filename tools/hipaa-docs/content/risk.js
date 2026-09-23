@@ -48,7 +48,7 @@ const children = [
   spacer(),
   h2("2.2 Users and roles"),
   ...bullets([
-    [b("Staff: "), "use the assistant, their own conversations and files, and any project shared with the clinic."],
+    [b("Staff: "), "use the assistant, their own conversations and files, the shared projects they were added to (whose conversations every member sees), and any project shared with the clinic."],
     [b("Administrator: "), "everything staff can do, plus creating, disabling and re-enabling users, changing roles, resetting a lost authenticator, and reading the audit and usage reports. Administrators cannot read other users' conversations through the application."],
     [b("AWS account administrator: "), "deploys and operates the infrastructure. This is a clinic workforce member, not an outside vendor."],
   ]),

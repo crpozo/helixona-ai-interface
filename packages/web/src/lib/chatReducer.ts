@@ -31,6 +31,8 @@ export interface ChatMessage {
   attachments: AttachmentMeta[];
   /** Attachments of the user turn that produced this response, for "Retry". */
   retryAttachments: AttachmentMeta[];
+  /** Who wrote a user turn; named in shared projects, where several people write in one conversation. */
+  authorName: string | null;
 }
 
 export interface ChatState {
@@ -55,7 +57,7 @@ export const initialChatState: ChatState = {
 export type ChatAction =
   | { type: "reset" }
   | { type: "load"; conversationId: string; messages: Message[] }
-  | { type: "send"; text: string; userId: string; assistantId: string; attachments?: AttachmentMeta[] }
+  | { type: "send"; text: string; userId: string; assistantId: string; attachments?: AttachmentMeta[]; authorName?: string }
   | { type: "sse"; event: ChatSseEvent }
   | { type: "stopped" }
   | { type: "transport_error"; message: string }
@@ -99,6 +101,7 @@ export function fromServerMessage(m: Message): ChatMessage {
     retryText: null,
     attachments: m.attachments ?? [],
     retryAttachments: [],
+    authorName: m.authorName ?? null,
   };
 }
 
@@ -216,6 +219,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         retryText: null,
         attachments: action.attachments ?? [],
         retryAttachments: [],
+        authorName: action.authorName ?? null,
       };
       const assistant: ChatMessage = {
         id: action.assistantId,
@@ -231,6 +235,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         retryText: action.text,
         attachments: [],
         retryAttachments: action.attachments ?? [],
+        authorName: null,
       };
       return {
         ...state,

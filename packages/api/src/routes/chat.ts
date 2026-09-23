@@ -5,11 +5,14 @@ import type { Deps } from "../deps.js";
 import type { AttachmentStore } from "../attachments/store.js";
 import { attachmentKey } from "../attachments/policy.js";
 import { AttachmentProblem, documentBlock, loadDocumentBlocks, verifyUpload } from "../attachments/documents.js";
-import { canReadProject } from "./projects.js";
+import { locateConversation } from "./conversations.js";
 import { requireTraining } from "./training.js";
 import { apiError, audit, requireAuth, today } from "../app.js";
 import { SseWriter } from "../sse.js";
 import { CSP } from "../app.js";
+
+/** A turn's claim on its conversation outlives any model timeout; it is released when the turn ends. */
+const LOCK_MS = 15 * 60_000;
 
 /** Límite simple por usuario: N turnos por hora (en memoria; suficiente para 1-2 tareas). */
 class TurnRateLimiter {
@@ -61,8 +64,9 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     const text = body.data.text.trim();
     if (!text && body.data.attachments.length === 0) return apiError(reply, 400, "bad_request", "Invalid request");
     if (body.data.attachments.length > 0 && !deps.attachments) return apiError(reply, 400, "attachments_disabled", "File uploads are not enabled on this server");
-    const conv = await deps.repos.conversations.get(userId, id);
-    if (!conv) return apiError(reply, 404, "not_found", "Conversation not found");
+    const located = await locateConversation(deps, req.session!, id);
+    if (!located) return apiError(reply, 404, "not_found", "Conversation not found");
+    const { conv, key, project } = located;
 
     // Attached files: verify each upload, read it and build its document block before the SSE starts, so
     // validation problems are plain HTTP errors. Only metadata is stored; the bytes stay in object storage.
@@ -78,8 +82,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
 
     // Project context: instructions become a second cached system block; knowledge files are placed at the
     // very start of the conversation so the cached prefix is shared by every conversation in the project.
-    const project = conv.projectId ? await deps.repos.projects.get(conv.projectId) : null;
-    const projectUsable = project !== null && canReadProject(project, userId);
+    const projectUsable = project !== null;
     const systemExtra = projectUsable && project.instructions.trim() ? `# Project: ${project.name}\n\n${project.instructions.trim()}` : undefined;
     const projectTokens = projectUsable && conv.messageCount === 0 ? project.knowledge.reduce((n, k) => n + estimateAttachmentTokens(k), 0) : 0;
     const userText = text || (attached.length === 1 ? "Please review the attached document." : "Please review the attached documents.");
@@ -88,12 +91,20 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
       { type: "text", text: userText },
     ];
 
+    // One turn at a time per conversation: in a shared project two people may write at once, and the
+    // messages of a turn are numbered from the history read below.
+    if (!(await deps.repos.conversations.lock(key, id, new Date(now().getTime() + LOCK_MS).toISOString(), now().toISOString()))) {
+      return apiError(reply, 409, "conversation_busy", "Someone else is sending a message in this conversation. Wait for the answer, then try again.");
+    }
+    const release = () => deps.repos.conversations.unlock(key, id).catch(() => undefined);
+
     // A partir de aquí la respuesta es SSE: los errores de negocio viajan como evento `error`.
     reply.hijack();
     const sse = new SseWriter(reply.raw, 15_000, { "content-security-policy": CSP });
     const fail = async (code: string, message: string, action = "turn_error") => {
       sse.send("error", { code, message, retryable: false, partial: false });
       await audit(deps, req, { action, conversationId: id, model: conv.modelId, meta: { code } });
+      await release();
       sse.end();
     };
 
@@ -132,14 +143,14 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
       const result = await deps.router.runTurn({ conversation: conv, history, userText, userContent, systemPrompt: deps.systemPrompt.text, systemExtra, signal: ac.signal, emit });
       const latencyMs = now().getTime() - started.getTime();
       const seq = history.length;
-      const storedUserMessage = (createdAt: string): StoredMessage => ({ id: userMessageId, conversationId: id, seq: seq + 1, role: "user", content: [{ type: "text", text: userText }], ...(attached.length > 0 ? { attachments: attached.map((a) => a.meta) } : {}), model: null, fallbackReason: null, stopReason: null, usage: null, createdAt });
+      const storedUserMessage = (createdAt: string): StoredMessage => ({ id: userMessageId, conversationId: id, seq: seq + 1, role: "user", authorId: req.session!.userId, authorName: req.session!.name, content: [{ type: "text", text: userText }], ...(attached.length > 0 ? { attachments: attached.map((a) => a.meta) } : {}), model: null, fallbackReason: null, stopReason: null, usage: null, createdAt });
       if (result.ok && result.servedModel) {
         const createdAt = now().toISOString();
         const userMsg = storedUserMessage(createdAt);
         const assistantMsg: StoredMessage = { id: assistantMessageId, conversationId: id, seq: seq + 2, role: "assistant", content: result.content, model: result.servedModel, fallbackReason: result.fallbackReason, stopReason: result.stopReason, usage: result.usage, createdAt: now().toISOString() };
         await deps.repos.messages.append(userMsg, ttl);
         await deps.repos.messages.append(assistantMsg, ttl);
-        await deps.repos.conversations.update(userId, id, {
+        await deps.repos.conversations.update(key, id, {
           messageCount: seq + 2,
           lastInputTokens: result.usage.inputTokens + result.usage.cacheReadTokens + result.usage.cacheWriteTokens + result.usage.outputTokens,
           // No pin means the conversation's own model answered: clear any earlier pin (expired or stale).
@@ -159,7 +170,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
           await deps.repos.messages.append({ id: assistantMessageId, conversationId: id, seq: seq + 2, role: "assistant", content: result.content, model: result.servedModel ?? conv.modelId, fallbackReason: result.fallbackReason, stopReason: "stopped", usage: null, createdAt: now().toISOString() }, ttl);
           messageCount = seq + 2;
         }
-        await deps.repos.conversations.update(userId, id, { messageCount, lastInputTokens: conv.lastInputTokens + estimateTokens(userText) + attachedTokens + estimateTokens(partialText) });
+        await deps.repos.conversations.update(key, id, { messageCount, lastInputTokens: conv.lastInputTokens + estimateTokens(userText) + attachedTokens + estimateTokens(partialText) });
         await audit(deps, req, { action: "turn_stopped", conversationId: id, model: result.requestedModel, servedBy: result.servedModel ?? undefined, latencyMs, meta: { partial: partialText.length > 0 } });
       } else if (result.stopReason === "refusal") {
         await audit(deps, req, { action: "turn", conversationId: id, model: result.requestedModel, refusalCategory: result.refusalCategory, stopReason: "refusal", latencyMs });
@@ -170,6 +181,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
       deps.log.error("turn_unhandled", { conversationId: id, errorClass: e instanceof Error ? e.name : "unknown", requestId: req.requestId });
       sse.send("error", { code: "internal", message: "The request could not be completed", retryable: true, partial: false });
     } finally {
+      await release();
       sse.end();
     }
   });

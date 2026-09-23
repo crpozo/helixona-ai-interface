@@ -8,6 +8,7 @@ import { SESSION_COOKIE } from "../auth/session.js";
 import { apiError, audit, requireAuth } from "../app.js";
 import { ALLOWED_TYPES } from "../attachments/policy.js";
 import { trainingStatus } from "./training.js";
+import { MemoryUserDirectory } from "../repos/memory.js";
 
 const OIDC_COOKIE = "hx_oidc";
 
@@ -123,6 +124,9 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
     const userId = `dev-${body.data.username.toLowerCase()}`;
     const existing = (await deps.directory.list()).find((u) => u.id === userId);
     if (existing && !existing.enabled) return apiError(reply, 403, "account_disabled", "This account is disabled");
+    if (!existing && deps.directory instanceof MemoryUserDirectory) {
+      deps.directory.users.push({ id: userId, email: `${body.data.username}@dev.local`, name: body.data.username, role: body.data.role, enabled: true, createdAt: new Date().toISOString(), status: "active" });
+    }
     const { cookie } = await deps.sessions.create({ id: userId, email: `${body.data.username}@dev.local`, name: body.data.username, roles }, null);
     reply.setCookie(SESSION_COOKIE, cookie, deps.sessions.cookieOptions(secure));
     await audit(deps, req, { action: "login", userId, meta: { mode: "dev" } });

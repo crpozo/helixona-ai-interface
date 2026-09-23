@@ -43,7 +43,7 @@ const children = [
       "Patient information is never entered into any other AI tool, chatbot or website, including personal accounts on consumer AI products. The Helixona Assistant is the only approved AI tool for PHI.",
       "Accounts are personal. Sharing an account, a password or an authenticator is prohibited.",
       "Use of the assistant for personal matters, or for any purpose outside the clinic's operations, is prohibited.",
-      "Projects shared with the clinic may be seen by every staff member. Do not place patient information in a shared project's name, description or instructions unless every staff member needs it.",
+      "A shared project is seen by the people its owner adds to it, and everyone in it sees and can continue the same conversations: add only the colleagues who need that work, and remove them when they no longer do. Projects shared with the clinic may be seen by every staff member. Do not place patient information in a project's name, description or instructions unless everyone who can see the project needs it.",
     ]),
   ...policy("P3", "Access control and account lifecycle",
     "Ensure that only authorized people have access, with the least privilege needed, and that access ends when it is no longer needed.",

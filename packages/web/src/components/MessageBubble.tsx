@@ -9,6 +9,8 @@ interface Props {
   message: ChatMessage;
   models: CatalogModel[];
   onRetry?: (message: ChatMessage) => void;
+  /** Shared project: name the person who wrote each user turn. */
+  showAuthor?: boolean;
 }
 
 function noticeText(n: Notice, models: CatalogModel[]): string {
@@ -40,7 +42,7 @@ function errorText(code: string, fallback: string): string {
 }
 
 // Memoized: while one message streams, the others must not re-render on every token.
-export const MessageBubble = memo(function MessageBubble({ message: m, models, onRetry }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message: m, models, onRetry, showAuthor = false }: Props) {
   const [showThinking, setShowThinking] = useState(false);
   const isUser = m.role === "user";
   const thinkingWhileWaiting = m.status === "pending";
@@ -53,6 +55,12 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
 
   return (
     <article className={`msg ${isUser ? "msg-user" : "msg-assistant"}`} aria-label={isUser ? "Your message" : "Assistant response"}>
+      {isUser && showAuthor && m.authorName && (
+        <header className="msg-head">
+          <span className="msg-author">{m.authorName}</span>
+        </header>
+      )}
+
       {!isUser && m.model && (
         <header className="msg-head">
           <span className="badge badge-model" title={m.model}>

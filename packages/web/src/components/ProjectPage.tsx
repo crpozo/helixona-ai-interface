@@ -4,6 +4,7 @@ import { ApiError, createProjectKnowledge, deleteProjectKnowledge, registerProje
 import { attachmentType, formatSize } from "../lib/files";
 import { modelLabel } from "../lib/models";
 import { useFileDrop } from "../lib/useFileDrop";
+import { ProjectMembers } from "./ProjectMembers";
 import { StartComposer } from "./StartComposer";
 
 interface Props {
@@ -15,6 +16,8 @@ interface Props {
   uploadsEnabled: boolean;
   /** Upload limits for files sent with the first message; null when uploads are off. */
   attachments?: { maxMb: number; maxPerMessage: number } | null;
+  /** The signed-in user (named "You" in the members list). */
+  meId: string;
   onBack: () => void;
   onOpenConversation: (id: string) => void;
   /** Starts a conversation in this project with its first message; resolves once it exists. */
@@ -46,8 +49,14 @@ export function relativeTime(iso: string, now = Date.now()): string {
   return dayFmt.format(new Date(iso));
 }
 
+/** The badge next to the project's name. */
+export function visibilityLabel(p: Project): string {
+  if (p.visibility === "clinic") return "Shared with the clinic";
+  if (p.visibility === "shared") return `Shared · ${p.members.length + 1} ${p.members.length + 1 === 1 ? "person" : "people"}`;
+  return "Private";
+}
 
-export function ProjectPage({ project, conversations, models, defaultAlias, maxMb, uploadsEnabled, attachments = null, onBack, onOpenConversation, onStartConversation, onUpdated, onDelete }: Props) {
+export function ProjectPage({ project, conversations, models, defaultAlias, maxMb, uploadsEnabled, attachments = null, meId, onBack, onOpenConversation, onStartConversation, onUpdated, onDelete }: Props) {
   // Settings card (name, description, visibility).
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
@@ -81,11 +90,22 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
     setExpanded(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
+  // Visibility can be changed by a colleague (or the members list can change): keep the select honest.
+  useEffect(() => {
+    setVisibility(project.visibility);
+  }, [project.visibility]);
 
   const dirty = name !== project.name || description !== project.description || visibility !== project.visibility;
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (visibility === "shared" && project.visibility !== "shared" && conversations.length > 0) {
+      const n = conversations.length;
+      if (!window.confirm(`Everyone you add to this project will see and can continue ${n === 1 ? "the chat" : `all ${n} chats`} already in it. Share the project?`)) return;
+    }
+    if (visibility !== "shared" && project.visibility === "shared" && project.members.length > 0) {
+      if (!window.confirm("The people in this project will lose access to it. Chats they started go back to them, outside the project. Continue?")) return;
+    }
     setSaving(true);
     setSaveError(null);
     setSaveMsg(null);
@@ -156,7 +176,9 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
   };
 
   const canEdit = project.canEdit;
+  const canManage = project.canManage;
   const canUpload = !!canEdit && uploadsEnabled;
+  const isShared = project.visibility === "shared";
   // Drop files onto the Knowledge card to add them to the project.
   const dragging = useFileDrop(knowledgeRef, addFiles, canUpload);
   const recents = [...conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -166,7 +188,7 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
     <main className="project-page">
       <nav className="crumbs" aria-label="Breadcrumb">
         <button type="button" className="link" onClick={onBack}>
-          Projects
+          {project.visibility === "private" ? "Projects" : "Shared projects"}
         </button>
         <span className="crumb-sep" aria-hidden="true">
           /
@@ -181,7 +203,7 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
           <h1 className="project-title">{project.name}</h1>
           {project.description && <p className="project-desc">{project.description}</p>}
         </div>
-        <span className="badge">{project.visibility === "clinic" ? "Shared with the clinic" : "Private"}</span>
+        <span className="badge">{visibilityLabel(project)}</span>
       </header>
 
       <div className="project-grid">
@@ -193,7 +215,11 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
               Recents
             </h2>
             {recents.length === 0 ? (
-              <p className="muted">No conversations yet. Your first message above starts one with this project's instructions and files.</p>
+              <p className="muted">
+                {isShared
+                  ? "No conversations yet. The first message above starts one that everyone in this project sees."
+                  : "No conversations yet. Your first message above starts one with this project's instructions and files."}
+              </p>
             ) : (
               <ul className="recent-list">
                 {recents.map((c) => (
@@ -201,6 +227,7 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
                     <button type="button" className="recent-row" onClick={() => onOpenConversation(c.id)}>
                       <span className="recent-title">{c.title}</span>
                       <span className="recent-meta" title={dateFmt.format(new Date(c.updatedAt))}>
+                        {isShared && c.createdByName ? `started by ${c.createdBy === meId ? "you" : c.createdByName} · ` : ""}
                         {modelLabel(models, c.modelId)} · {relativeTime(c.updatedAt)}
                       </span>
                     </button>
@@ -212,6 +239,8 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
         </div>
 
         <aside className="project-side">
+          <ProjectMembers project={project} meId={meId} onUpdated={onUpdated} />
+
           <section className="side-card" aria-labelledby="proj-instructions-h">
             <div className="side-card-head">
               <h2 id="proj-instructions-h">Instructions</h2>
@@ -349,9 +378,10 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
                 <label htmlFor="proj-description">Description</label>
                 <input id="proj-description" maxLength={300} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this project is for" />
                 <label htmlFor="proj-visibility">Visibility</label>
-                <select id="proj-visibility" value={visibility} onChange={(e) => setVisibility(e.target.value as ProjectVisibility)}>
+                <select id="proj-visibility" value={visibility} disabled={!canManage} onChange={(e) => setVisibility(e.target.value as ProjectVisibility)} title={canManage ? undefined : "Only the project owner or an administrator can change who sees this project"}>
                   <option value="private">Private (only me)</option>
-                  <option value="clinic">Shared with the clinic</option>
+                  <option value="shared">Shared with chosen people (same chats for everyone)</option>
+                  <option value="clinic">Shared with the clinic (instructions and files; chats stay personal)</option>
                 </select>
                 {saveError && (
                   <p className="notice notice-error" role="alert">
@@ -367,15 +397,20 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
                   <button type="submit" className="btn btn-primary btn-small" disabled={saving || !dirty || !name.trim()}>
                     {saving ? "Saving…" : "Save"}
                   </button>
-                  <button
-                    type="button"
-                    className="btn btn-danger btn-small"
-                    onClick={() => {
-                      if (window.confirm("Delete this project? Its files are removed; conversations are kept without the project context.")) onDelete();
-                    }}
-                  >
-                    Delete project
-                  </button>
+                  {canManage && (
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-small"
+                      onClick={() => {
+                        const question = isShared
+                          ? "Delete this shared project? Its files are removed; each chat goes back to the person who started it, outside the project."
+                          : "Delete this project? Its files are removed; conversations are kept without the project context.";
+                        if (window.confirm(question)) onDelete();
+                      }}
+                    >
+                      Delete project
+                    </button>
+                  )}
                 </div>
               </form>
             ) : (
