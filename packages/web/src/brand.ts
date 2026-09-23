@@ -10,5 +10,6 @@ export const brand = {
   name: "Helixona",
   productName: "Helixona Assistant",
   tagline: "Internal use · authorized staff only",
-  logoImage: null as string | null,
+  // Official wordmark from the clinic (white letters, gold X, transparent background).
+  logoImage: `${import.meta.env.BASE_URL}brand/Helixona-Logo.png` as string | null,
 } as const;
