@@ -184,6 +184,8 @@ export function mapCognitoError(e: unknown): PasswordAuthError {
     case "NotAuthorizedException":
       // Challenge sessions expire after a few minutes; that is not a bad password.
       if (/session/i.test(message)) return new PasswordAuthError("session_expired", 401, "Your sign-in session has expired. Please start again.");
+      // The invitation's temporary password has a validity period; after it only an administrator can help.
+      if (/temporary password has expired/i.test(message)) return new PasswordAuthError("temporary_password_expired", 401, "Your temporary password has expired. Ask an administrator for a new invitation or a new temporary password.");
       return new PasswordAuthError("invalid_credentials", 401, "Incorrect email or password.");
     case "UserNotFoundException":
       return new PasswordAuthError("invalid_credentials", 401, "Incorrect email or password.");

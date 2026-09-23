@@ -58,9 +58,13 @@ export class AuthStack extends cdk.Stack {
       keepOriginal: { email: true },
       userInvitation: {
         emailSubject: 'Your Helixona AI Assistant account',
+        // The password sits on its own line so nothing else (like a period) gets copied with it.
         emailBody:
-          'Hello {username}. Your account for the Helixona AI Assistant has been created. Your temporary password is {####}. ' +
-          'You will be asked to change it on first sign-in.',
+          '<p>Hello {username},</p>' +
+          '<p>Your account for the Helixona AI Assistant has been created. Sign in at <a href="https://ai.helixona.com">ai.helixona.com</a> ' +
+          'with this temporary password (copy it exactly, with nothing before or after it):</p>' +
+          '<p style="font-size:18px;font-family:monospace"><b>{####}</b></p>' +
+          '<p>At your first sign-in you will choose your own password and set up an authenticator app. The temporary password is valid for 30 days.</p>',
       },
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });

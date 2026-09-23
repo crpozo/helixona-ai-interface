@@ -17,7 +17,7 @@ export interface Me {
   user: { id: string; email: string; name: string; roles: Role[] };
   session: { expiresAt: string; idleTimeoutSeconds: number };
   /** Workforce training: when `required` and not `complete`, the assistant is locked (administrators included). */
-  training?: { required: boolean; complete: boolean; version: string };
+  training?: { required: boolean; complete: boolean; canSkip?: boolean; version: string };
   catalog: {
     defaultAlias: string;
     effort: "low" | "medium" | "high" | "xhigh" | "max";
@@ -157,7 +157,7 @@ export interface TrainingRecord {
   bestScore: number;
   passedAt: string | null;
   acknowledgedAt: string | null;
-  source?: "online" | "paper";
+  source?: "online" | "paper" | "attested";
   recordedBy?: string;
   recordedAt?: string;
 }

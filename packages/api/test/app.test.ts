@@ -467,7 +467,7 @@ describe("Training gate", () => {
   it("blocks the assistant for everyone, administrators included, until the training is complete", async () => {
     const { app } = await makeApp({ TRAINING_REQUIRED: "true" });
     const { cookie } = await login(app, "nora");
-    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().training).toEqual({ required: true, complete: false, version: "1.1" });
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().training).toEqual({ required: true, complete: false, canSkip: true, version: "1.1" });
     const blocked = await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "sonnet" } });
     expect(blocked.statusCode).toBe(403);
     expect(blocked.json().error.code).toBe("training_required");
@@ -495,6 +495,25 @@ describe("Training gate", () => {
     expect(log.version).toBe("1.1");
     expect(log.items.find((r: { id: string }) => r.id === created.id).record.source).toBe("paper");
     expect((await app.inject({ method: "POST", url: `/api/admin/training/${created.id}/paper`, headers: { ...H, cookie }, payload: { completedAt: "2026-09-20", score: 9 } })).statusCode).toBe(403);
+    // "Skip training, I already know this": unlocks, and the log shows it as an attestation.
+    const skipper = await login(app, "sam");
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie: skipper.cookie } })).json().training).toMatchObject({ complete: false, canSkip: true });
+    expect((await app.inject({ method: "POST", url: "/api/training/attest", headers: { ...H, cookie: skipper.cookie }, payload: { attested: false } })).statusCode).toBe(400);
+    const att = await app.inject({ method: "POST", url: "/api/training/attest", headers: { ...H, cookie: skipper.cookie }, payload: { attested: true } });
+    expect(att.statusCode).toBe(200);
+    expect(att.json().record).toMatchObject({ source: "attested", bestScore: 0, version: "1.1" });
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie: skipper.cookie } })).json().training.complete).toBe(true);
+    expect((await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: skipper.cookie }, payload: { modelAlias: "sonnet" } })).statusCode).toBe(201);
+    const log2 = (await app.inject({ method: "GET", url: "/api/admin/training", headers: { cookie: admin.cookie } })).json();
+    expect(log2.items.find((r: { id: string }) => r.id === "dev-sam").record.source).toBe("attested");
+    await app.close();
+  });
+
+  it("skipping can be turned off", async () => {
+    const { app } = await makeApp({ TRAINING_REQUIRED: "true", TRAINING_ALLOW_SKIP: "false" });
+    const { cookie } = await login(app, "sam");
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().training.canSkip).toBe(false);
+    expect((await app.inject({ method: "POST", url: "/api/training/attest", headers: { ...H, cookie }, payload: { attested: true } })).statusCode).toBe(403);
     await app.close();
   });
 });

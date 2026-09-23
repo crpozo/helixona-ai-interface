@@ -1949,6 +1949,31 @@ td {
 .doc .training-log td {
   white-space: nowrap;
 }
+.training-gate .eyebrow {
+  margin-bottom: 0.5rem;
+}
+.training-gate .muted {
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.training-skip {
+  margin: 0.9rem 0 0;
+}
+.training-skip .link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.training-skip .link:hover {
+  color: var(--text);
+}
 @media print {
   .quiz-q input,
   .ack-form,

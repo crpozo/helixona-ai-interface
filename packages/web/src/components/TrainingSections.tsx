@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ApiError, acknowledgeTraining, adminRecordPaperTraining, adminTraining, getTraining, submitTrainingCheck } from "../lib/api";
+import { ApiError, acknowledgeTraining, adminRecordPaperTraining, adminTraining, attestTraining, getTraining, submitTrainingCheck } from "../lib/api";
 import { navigate } from "../lib/router";
 import type { AdminTrainingLog, AdminTrainingRow, Me, TrainingCheckResult, TrainingInfo, TrainingRecord } from "../lib/types";
 
@@ -52,6 +52,13 @@ export function TrainingStatus({ info }: { info: TrainingInfo }) {
       <p className="training-status">
         {info.record ? `Your previous completion was for version ${info.record.version}; this is version ${info.version}. ` : "Not started. "}
         Answer the questions below; your score is saved to the training log.
+      </p>
+    );
+  }
+  if (r.acknowledgedAt && r.source === "attested") {
+    return (
+      <p className="training-status passed">
+        Training skipped on {when(r.acknowledgedAt)}: you attested that you already know this material. You can still take the check below; a passed check replaces the attestation in the log.
       </p>
     );
   }
@@ -236,6 +243,26 @@ export function TrainingAcknowledgment({ me, children }: { me: Me; children: Rea
 
 /** Shown in place of the chat until the signed-in user (administrators included) completes the training. */
 export function TrainingGate({ me, onRefresh }: { me: Me; onRefresh: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const skip = async () => {
+    if (
+      !window.confirm(
+        "Skip the online training?\n\nBy continuing you attest that you have already completed the clinic's HIPAA training for the Helixona Assistant (on paper or in a previous session) and that you know its contents: minimum necessary patient information, reviewing every output, using no other AI tool for patient information, keeping your password and authenticator private, and reporting incidents within one hour.\n\nYour name, email and the date are recorded in the training log as an attestation.",
+      )
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      await attestTraining();
+      onRefresh();
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div className="panel-center">
       <div className="empty training-gate">
@@ -256,10 +283,22 @@ export function TrainingGate({ me, onRefresh }: { me: Me; onRefresh: () => void 
           >
             Open the training
           </a>
-          <button type="button" className="btn" onClick={onRefresh}>
+          <button type="button" className="btn" onClick={onRefresh} disabled={busy}>
             I have completed it
           </button>
         </div>
+        {me.training?.canSkip && (
+          <p className="training-skip">
+            <button type="button" className="link" onClick={() => void skip()} disabled={busy}>
+              {busy ? "Recording…" : "Skip training, I already know this"}
+            </button>
+          </p>
+        )}
+        {error && (
+          <p className="notice notice-error" role="alert">
+            {error}
+          </p>
+        )}
         <p className="muted small">Completed it on paper? Ask an administrator to record it in the training log.</p>
       </div>
     </div>
@@ -270,7 +309,7 @@ function status(row: AdminTrainingRow, version: string): string {
   const r = row.record;
   if (!r) return "Not started";
   if (r.version !== version) return `Outdated (version ${r.version})`;
-  if (r.acknowledgedAt) return r.source === "paper" ? "Completed (paper)" : "Completed";
+  if (r.acknowledgedAt) return r.source === "paper" ? "Completed (paper)" : r.source === "attested" ? "Skipped (attested by user)" : "Completed";
   if (r.passedAt) return "Passed, acknowledgment pending";
   return "In progress";
 }

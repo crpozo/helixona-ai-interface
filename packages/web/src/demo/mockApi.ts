@@ -219,6 +219,10 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     state.training = { userId: "u-ana", name: "Ana Perez", email: "ana@helixona.com", version: quiz.version, attempts: (prev?.attempts ?? 0) + 1, lastScore: score, lastAttemptAt: now(), bestScore: Math.max(prev?.bestScore ?? 0, score), passedAt: prev?.passedAt ?? (passed ? now() : null), acknowledgedAt: prev?.acknowledgedAt ?? null };
     return json({ record: state.training, result: { score, total: quiz.questions.length, passed, results } });
   }
+  if (path === "/api/training/attest" && method === "POST") {
+    state.training = { userId: "u-ana", name: "Ana Perez", email: "ana@helixona.com", version: quiz.version, attempts: state.training?.attempts ?? 0, lastScore: state.training?.lastScore ?? 0, lastAttemptAt: state.training?.lastAttemptAt ?? now(), bestScore: state.training?.bestScore ?? 0, passedAt: state.training?.passedAt ?? now(), acknowledgedAt: now(), source: "attested" };
+    return json({ record: state.training });
+  }
   if (path === "/api/training/acknowledgment" && method === "POST") {
     if (!state.training?.passedAt) return error(409, "check_not_passed", "Pass the knowledge check before signing the acknowledgment");
     state.training = { ...state.training, acknowledgedAt: state.training.acknowledgedAt ?? now() };

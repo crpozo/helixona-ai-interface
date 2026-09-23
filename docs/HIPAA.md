@@ -225,4 +225,7 @@ training document; it is the evidence of training the Privacy Officer keeps for 
 assistant itself stays locked (`TRAINING_REQUIRED`, on by default) until the signed-in user has a
 completed record for the current training version; administrators are not exempt. A completion done
 on paper is recorded by an administrator from the training log ("Record paper completion"), which
-unlocks the user and keeps the log complete.
+unlocks the user and keeps the log complete. A user may also choose "Skip training, I already know
+this": that is an attestation, recorded and shown in the log as "Skipped (attested by user)" rather
+than as a completed check, so the Privacy Officer can follow up; set `TRAINING_ALLOW_SKIP=false` to
+remove the option.

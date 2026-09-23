@@ -339,6 +339,11 @@ export function acknowledgeTraining(): Promise<{ record: TrainingRecord }> {
   return request("/api/training/acknowledgment", { method: "POST", body: { accepted: true } });
 }
 
+/** "Skip training, I already know this": the user's attestation, recorded as such in the training log. */
+export function attestTraining(): Promise<{ record: TrainingRecord }> {
+  return request("/api/training/attest", { method: "POST", body: { attested: true } });
+}
+
 export function adminTraining(): Promise<AdminTrainingLog> {
   return request<AdminTrainingLog>("/api/admin/training");
 }

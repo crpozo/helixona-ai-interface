@@ -17,12 +17,12 @@ export function trainingComplete(r: TrainingRecord | null): boolean {
   return !!r && !!r.passedAt && !!r.acknowledgedAt && r.version === TRAINING_INFO.version;
 }
 
-export interface TrainingStatus { required: boolean; complete: boolean; version: string }
+export interface TrainingStatus { required: boolean; complete: boolean; canSkip: boolean; version: string }
 
 export async function trainingStatus(deps: Deps, userId: string): Promise<TrainingStatus> {
   const required = deps.config.TRAINING_REQUIRED === "true";
   const record = required ? await deps.repos.training.get(userId) : null;
-  return { required, complete: !required || trainingComplete(record), version: TRAINING_INFO.version };
+  return { required, complete: !required || trainingComplete(record), canSkip: deps.config.TRAINING_ALLOW_SKIP === "true", version: TRAINING_INFO.version };
 }
 
 /**
@@ -91,6 +91,37 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: Deps): void {
     const record: TrainingRecord = { ...prev, name: s.name || prev.name, email: s.email || prev.email, acknowledgedAt: now().toISOString(), source: "online" };
     await repo.put(record);
     await audit(deps, req, { action: "training_acknowledged" });
+    return { record: publicRecord(record) };
+  });
+
+  // "Skip training, I already know this": the user attests they completed the clinic's training
+  // before. It unlocks the assistant and is recorded as an attestation, visibly distinct from a
+  // completed check, so the Privacy Officer can follow up.
+  app.post("/api/training/attest", { preHandler: auth }, async (req, reply) => {
+    if (deps.config.TRAINING_ALLOW_SKIP !== "true") return apiError(reply, 403, "skip_not_allowed", "Skipping the training is not allowed");
+    const body = z.object({ attested: z.literal(true) }).safeParse(req.body);
+    if (!body.success) return apiError(reply, 400, "bad_request", "Confirm the attestation to skip the training");
+    const s = req.session!;
+    const t = now().toISOString();
+    const prev = await repo.get(s.userId);
+    const same = prev?.version === TRAINING_INFO.version ? prev : null;
+    if (same && trainingComplete(same)) return { record: publicRecord(same) };
+    const record: TrainingRecord = {
+      userId: s.userId,
+      name: s.name || prev?.name || "",
+      email: s.email || prev?.email || "",
+      version: TRAINING_INFO.version,
+      attempts: same?.attempts ?? 0,
+      lastScore: same?.lastScore ?? 0,
+      lastAttemptAt: same?.lastAttemptAt ?? t,
+      bestScore: same?.bestScore ?? 0,
+      passedAt: same?.passedAt ?? t,
+      acknowledgedAt: t,
+      source: "attested",
+      answers: same?.answers ?? [],
+    };
+    await repo.put(record);
+    await audit(deps, req, { action: "training_skipped_attested" });
     return { record: publicRecord(record) };
   });
 
