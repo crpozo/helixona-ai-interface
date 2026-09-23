@@ -27,8 +27,8 @@ export interface FeedbackSender {
 
 export function formatBugReport(r: BugReport): { subject: string; body: string } {
   const who = r.reporterName ? `${r.reporterName} (${r.reporterEmail})` : r.reporterEmail;
-  // SNS subjects are limited to 100 ASCII characters.
-  const subject = `[Helixona Assistant] Bug report from ${r.reporterName || r.reporterEmail}`.replace(/[^\x20-\x7e]/g, "?").slice(0, 100);
+  // SNS subjects: ASCII, no control characters, fewer than 100 characters.
+  const subject = `[Helixona Assistant] Bug report from ${r.reporterName || r.reporterEmail}`.replace(/[^\x20-\x7e]/g, "?").slice(0, 99);
   const body = [
     "A user of the Helixona Assistant reported a problem.",
     "",
@@ -51,10 +51,10 @@ export function formatBugReport(r: BugReport): { subject: string; body: string }
  * sender can also report that state and ask SNS to send the link again.
  */
 export class SnsFeedbackSender implements FeedbackSender {
-  private readonly client: SNSClient;
+  private readonly client: Pick<SNSClient, "send">;
   private readonly email: string | null;
-  constructor(region: string, private readonly topicArn: string, email: string | null | undefined) {
-    this.client = new SNSClient({ region });
+  constructor(region: string, private readonly topicArn: string, email: string | null | undefined, client?: Pick<SNSClient, "send">) {
+    this.client = client ?? new SNSClient({ region });
     this.email = email?.trim() || null;
   }
   async send(report: BugReport): Promise<void> {
@@ -64,17 +64,20 @@ export class SnsFeedbackSender implements FeedbackSender {
   async status(): Promise<FeedbackStatus> {
     if (!this.email) return { email: null, subscription: "none" };
     const wanted = this.email.toLowerCase();
+    // Subscribing an address again (a resend from the Administration page, or by hand) leaves a
+    // second, pending row next to the confirmed one; the confirmed one is what delivers.
+    let found: SubscriptionState = "none";
     let token: string | undefined;
     do {
       const r = await this.client.send(new ListSubscriptionsByTopicCommand({ TopicArn: this.topicArn, NextToken: token }));
       for (const s of r.Subscriptions ?? []) {
-        if (s.Protocol === "email" && (s.Endpoint ?? "").toLowerCase() === wanted) {
-          return { email: this.email, subscription: s.SubscriptionArn === "PendingConfirmation" ? "pending" : "confirmed" };
-        }
+        if (s.Protocol !== "email" || (s.Endpoint ?? "").toLowerCase() !== wanted) continue;
+        if (s.SubscriptionArn !== "PendingConfirmation") return { email: this.email, subscription: "confirmed" };
+        found = "pending";
       }
       token = r.NextToken;
     } while (token);
-    return { email: this.email, subscription: "none" };
+    return { email: this.email, subscription: found };
   }
   async resendConfirmation(): Promise<void> {
     if (!this.email) throw new Error("No feedback email is configured");
