@@ -450,6 +450,28 @@ describe("Invitations", () => {
     expect((await app.inject({ method: "POST", url: "/api/admin/users/unknown/invitation/resend", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(409);
     const staff = await login(app, "pepe");
     expect((await app.inject({ method: "POST", url: `/api/admin/users/${created.id}/invitation/resend`, headers: { ...H, cookie: staff.cookie } })).statusCode).toBe(403);
+    // A temporary password is returned once and never written to the audit log.
+    const tp = await app.inject({ method: "POST", url: `/api/admin/users/${created.id}/temporary-password`, headers: { ...H, cookie: admin.cookie } });
+    expect(tp.statusCode).toBe(200);
+    expect(tp.json().temporaryPassword).toBe("Temp-Password-1!");
+    expect(JSON.stringify(repos.audit.events)).not.toContain("Temp-Password-1!");
+    expect(repos.audit.events.map((e) => e.action)).toContain("admin_user_temporary_password");
+    expect((await app.inject({ method: "POST", url: "/api/admin/users/unknown/temporary-password", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "POST", url: `/api/admin/users/${created.id}/temporary-password`, headers: { ...H, cookie: staff.cookie } })).statusCode).toBe(403);
     await app.close();
+  });
+});
+
+describe("temporaryPassword", () => {
+  it("meets the pool policy: 16 characters with upper, lower, digit and symbol", async () => {
+    const { temporaryPassword } = await import("../src/auth/cognito.js");
+    for (let i = 0; i < 50; i++) {
+      const p = temporaryPassword();
+      expect(p).toHaveLength(16);
+      expect(p).toMatch(/[A-Z]/);
+      expect(p).toMatch(/[a-z]/);
+      expect(p).toMatch(/[0-9]/);
+      expect(p).toMatch(/[!@#$%&*?]/);
+    }
   });
 });

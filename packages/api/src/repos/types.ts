@@ -116,6 +116,8 @@ export interface UserDirectory {
   resetMfa(id: string): Promise<void>;
   /** Sends the invitation email again with a new temporary password (only while the user is `invited`). */
   resendInvitation(id: string): Promise<void>;
+  /** Sets a new temporary password (returned once, for the administrator to hand over) and signs the user out everywhere. */
+  setTemporaryPassword(id: string): Promise<string>;
 }
 
 /** Workforce training: one row per user, the training log the Privacy Officer keeps. */

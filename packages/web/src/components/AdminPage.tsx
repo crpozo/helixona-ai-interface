@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AdminUser, Me, Role, UsageRow } from "../lib/types";
-import { ApiError, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminResendInvitation, adminResetMfa, adminSetRole, adminUsage } from "../lib/api";
+import { ApiError, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminResendInvitation, adminResetMfa, adminSetRole, adminSetTemporaryPassword, adminUsage } from "../lib/api";
 import { modelLabel } from "../lib/models";
 import { TrainingLog } from "./TrainingSections";
 
@@ -107,6 +107,19 @@ export function AdminPage({ me, onBack }: Props) {
     try {
       await adminResendInvitation(u.id);
       window.alert(`Invitation sent again to ${u.email} from no-reply@verificationemail.com. Ask them to check the junk folder.`);
+    } catch (err) {
+      setUsersError(errMsg(err));
+    }
+  };
+
+  const temporaryPassword = async (u: AdminUser) => {
+    if (!window.confirm(`Set a new temporary password for ${u.email}? They will be signed out everywhere and must change it at their next sign-in. Hand it over in person or by phone, never by email or chat.`)) return;
+    setUsersError(null);
+    try {
+      const r = await adminSetTemporaryPassword(u.id);
+      // A prompt shows the password in a field the administrator can copy; it is not shown again.
+      window.prompt(`Temporary password for ${u.email} (copy it now; it is not shown again):`, r.temporaryPassword);
+      await loadUsers();
     } catch (err) {
       setUsersError(errMsg(err));
     }
@@ -222,6 +235,9 @@ export function AdminPage({ me, onBack }: Props) {
                         </button>
                         <button type="button" className="btn btn-small" onClick={() => void resetMfa(u)} title="Lost or replaced phone: they enroll a new authenticator at the next sign-in">
                           Reset MFA
+                        </button>
+                        <button type="button" className="btn btn-small" onClick={() => void temporaryPassword(u)} disabled={u.id === me.user.id} title="Email never arrived: a new temporary password to hand over in person or by phone">
+                          Temporary password
                         </button>
                       </div>
                     </td>

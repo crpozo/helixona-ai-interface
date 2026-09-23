@@ -60,6 +60,23 @@ export function registerAdminRoutes(app: FastifyInstance, deps: Deps): void {
     return { ok: true };
   });
 
+  // Email never arrived: a new temporary password, shown once to the administrator to hand over in
+  // person or by phone. The password itself is never logged.
+  app.post("/api/admin/users/:id/temporary-password", { preHandler: admin }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (id === req.session!.userId) return apiError(reply, 400, "bad_request", "Use “Forgot your password?” for your own account");
+    let temporaryPassword: string;
+    try {
+      temporaryPassword = await deps.directory.setTemporaryPassword(id);
+    } catch (e) {
+      deps.log.warn("admin_temporary_password_failed", { targetUserId: id, error: (e as { name?: string }).name ?? "error" });
+      return apiError(reply, 404, "not_found", "User not found");
+    }
+    const n = await deps.repos.sessions.deleteAllForUser(id);
+    await audit(deps, req, { action: "admin_user_temporary_password", meta: { targetUserId: id, sessionsRevoked: n } });
+    return { temporaryPassword };
+  });
+
   // Lost or replaced phone: forget the authenticator; the user enrolls a new one at the next sign-in.
   app.post("/api/admin/users/:id/mfa/reset", { preHandler: admin }, async (req) => {
     const { id } = req.params as { id: string };

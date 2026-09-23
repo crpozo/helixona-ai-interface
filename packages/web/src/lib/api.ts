@@ -309,6 +309,11 @@ export function adminResendInvitation(id: string): Promise<{ ok: true }> {
   return request(`/api/admin/users/${encodeURIComponent(id)}/invitation/resend`, { method: "POST" });
 }
 
+/** New temporary password, returned once for the administrator to hand over in person or by phone. */
+export function adminSetTemporaryPassword(id: string): Promise<{ temporaryPassword: string }> {
+  return request(`/api/admin/users/${encodeURIComponent(id)}/temporary-password`, { method: "POST" });
+}
+
 export async function adminUsage(day: string): Promise<UsageRow[]> {
   const r = await request<{ items: UsageRow[] }>(`/api/admin/usage?day=${encodeURIComponent(day)}`);
   return r.items;

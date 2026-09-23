@@ -505,6 +505,7 @@ export class AppStack extends cdk.Stack {
           'cognito-idp:AdminAddUserToGroup',
           'cognito-idp:AdminRemoveUserFromGroup',
           'cognito-idp:AdminSetUserMFAPreference',
+          'cognito-idp:AdminSetUserPassword',
           'cognito-idp:AdminListGroupsForUser',
           'cognito-idp:ListUsers',
           'cognito-idp:ListUsersInGroup',

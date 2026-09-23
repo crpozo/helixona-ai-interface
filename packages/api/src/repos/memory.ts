@@ -78,6 +78,12 @@ export class MemoryUserDirectory implements UserDirectory {
     const u = this.users.find((x) => x.id === id);
     if (!u || u.status !== "invited") throw new Error("not invited");
   }
+  async setTemporaryPassword(id: string) {
+    const u = this.users.find((x) => x.id === id);
+    if (!u) throw new Error("not found");
+    u.status = "invited";
+    return "Temp-Password-1!";
+  }
 }
 
 export class MemoryTrainingRepo implements TrainingRepo {

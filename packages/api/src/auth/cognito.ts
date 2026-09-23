@@ -1,6 +1,24 @@
 import { createHash, randomBytes } from "node:crypto";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
-import { AdminCreateUserCommand, AdminDisableUserCommand, AdminEnableUserCommand, AdminAddUserToGroupCommand, AdminRemoveUserFromGroupCommand, AdminSetUserMFAPreferenceCommand, CognitoIdentityProviderClient, ListUsersCommand, ListUsersInGroupCommand, AdminUserGlobalSignOutCommand } from "@aws-sdk/client-cognito-identity-provider";
+import { AdminCreateUserCommand, AdminDisableUserCommand, AdminEnableUserCommand, AdminAddUserToGroupCommand, AdminRemoveUserFromGroupCommand, AdminSetUserMFAPreferenceCommand, AdminSetUserPasswordCommand, CognitoIdentityProviderClient, ListUsersCommand, ListUsersInGroupCommand, AdminUserGlobalSignOutCommand } from "@aws-sdk/client-cognito-identity-provider";
+import { randomInt } from "node:crypto";
+
+/** 16 characters that satisfy the pool's policy (upper, lower, digit, symbol), without look-alike characters. */
+export function temporaryPassword(): string {
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lower = "abcdefghijkmnpqrstuvwxyz";
+  const digits = "23456789";
+  const symbols = "!@#$%&*?";
+  const all = upper + lower + digits + symbols;
+  const pick = (set: string) => set[randomInt(set.length)]!;
+  const chars = [pick(upper), pick(lower), pick(digits), pick(symbols)];
+  while (chars.length < 16) chars.push(pick(all));
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j]!, chars[i]!];
+  }
+  return chars.join("");
+}
 import type { Role } from "@helixona/core";
 import type { DirectoryUser, UserDirectory } from "../repos/types.js";
 
@@ -133,8 +151,31 @@ export class CognitoUserDirectory implements UserDirectory {
   // The temporary password in the invitation expires after 3 days, and "Forgot your password?" does
   // not work until the first sign-in is complete, so a new invitation is the only way back in.
   async resendInvitation(id: string): Promise<void> {
+    const { username, email } = await this.userFor(id);
+    // The pool signs users in by email (the Cognito username is generated), so the resend is
+    // addressed the same way the account was created: by email, with the username as fallback.
+    const send = (Username: string) => this.client.send(new AdminCreateUserCommand({ UserPoolId: this.userPoolId, Username, MessageAction: "RESEND", DesiredDeliveryMediums: ["EMAIL"] }));
+    if (!email) return void (await send(username));
+    await send(email).catch(async (e: { name?: string }) => {
+      if (e.name === "UserNotFoundException") return send(username);
+      throw e;
+    });
+  }
+
+  // When the invitation email never arrives: a new temporary password the administrator hands over
+  // in person or by phone. The user must change it at sign-in and the authenticator step still applies.
+  async setTemporaryPassword(id: string): Promise<string> {
     const username = await this.usernameFor(id);
-    await this.client.send(new AdminCreateUserCommand({ UserPoolId: this.userPoolId, Username: username, MessageAction: "RESEND", DesiredDeliveryMediums: ["EMAIL"] }));
+    const password = temporaryPassword();
+    await this.client.send(new AdminSetUserPasswordCommand({ UserPoolId: this.userPoolId, Username: username, Password: password, Permanent: false }));
+    await this.client.send(new AdminUserGlobalSignOutCommand({ UserPoolId: this.userPoolId, Username: username })).catch(() => {});
+    return password;
+  }
+
+  private async userFor(sub: string): Promise<{ username: string; email: string }> {
+    const r = await this.client.send(new ListUsersCommand({ UserPoolId: this.userPoolId, Filter: `sub = "${sub.replace(/"/g, "")}"`, Limit: 1 }));
+    const u = r.Users?.[0];
+    return { username: u?.Username ?? sub, email: u?.Attributes?.find((a) => a.Name === "email")?.Value ?? "" };
   }
 
   async create(input: { email: string; name: string; role: Role }): Promise<DirectoryUser> {
