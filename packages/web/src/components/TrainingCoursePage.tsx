@@ -287,7 +287,7 @@ export function TrainingCoursePage({ me, onExit }: Props) {
                         setAnswers({});
                       }}
                     >
-                      Try again
+                      Reset answers and try again
                     </button>
                   )}
                 </div>

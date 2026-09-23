@@ -151,7 +151,7 @@ export function TrainingCheck({ me }: { me: Me }) {
                 : "Your attempt is saved. Review the modules above and try again."}
             </p>
             <button type="button" className="btn" onClick={retry}>
-              {result.passed ? "Take it again" : "Try again"}
+              {result.passed ? "Take it again" : "Reset answers and try again"}
             </button>
           </div>
         ) : (

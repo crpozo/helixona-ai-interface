@@ -1,4 +1,5 @@
 import { Logo } from "./Logo";
+import { Icon } from "./Icon";
 import { useState } from "react";
 import type { Conversation, Me, Project } from "../lib/types";
 import { modelLabel } from "../lib/models";
@@ -24,9 +25,16 @@ interface Props {
   onTraining: () => void;
 }
 
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1]![0] ?? "" : "")).toUpperCase() || "?";
+}
+
 /**
- * Sidebar laid out like Claude.ai: each project is a group with its chats nested underneath, and
- * the Conversations list holds only the chats that belong to no project.
+ * Sidebar organized like Claude.ai: a short list of plain links at the top (new chat, training,
+ * documentation, administration), then projects with their chats nested underneath, then the chats
+ * that belong to no project, and the signed-in user at the bottom. Rows are text with an icon; the
+ * actions (rename, delete, new chat in a project) appear on hover.
  */
 export function Sidebar({ me, conversations, projects, selectedId, projectViewId, open, onClose, onSelect, onNew, onNewInProject, onDelete, onRename, onOpenProject, onNewProject, onLogout, onAdmin, onDocs, onTraining }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -46,6 +54,20 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
     setEditingId(null);
     if (title) await onRename(id, title);
   };
+
+  const link = (href: string, label: string, icon: "cap" | "book" | "sliders", go: () => void) => (
+    <a
+      href={href}
+      className="side-link"
+      onClick={(e) => {
+        e.preventDefault();
+        go();
+      }}
+    >
+      <Icon name={icon} />
+      <span>{label}</span>
+    </a>
+  );
 
   const conversationItem = (c: Conversation) => (
     <li key={c.id} className={c.id === selectedId ? "active" : ""}>
@@ -79,24 +101,24 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
         </form>
       ) : (
         <div className="conv-row">
-          <button type="button" className="conv-select" aria-current={c.id === selectedId ? "true" : undefined} onClick={() => onSelect(c.id)}>
+          <button type="button" className="conv-select" aria-current={c.id === selectedId ? "true" : undefined} onClick={() => onSelect(c.id)} title={`${c.title} · ${modelLabel(me.catalog.models, c.modelId)}`}>
+            <Icon name="chat" size={15} className="conv-icon" />
             <span className="conv-title">{c.title}</span>
-            <span className="conv-meta">{modelLabel(me.catalog.models, c.modelId)}</span>
           </button>
           <div className="conv-actions">
-            <button type="button" className="btn btn-icon" onClick={() => startRename(c)} aria-label={`Rename: ${c.title}`} title="Rename">
-              ✎
+            <button type="button" className="icon-btn" onClick={() => startRename(c)} aria-label={`Rename: ${c.title}`} title="Rename">
+              <Icon name="pencil" size={15} />
             </button>
             <button
               type="button"
-              className="btn btn-icon"
+              className="icon-btn"
               onClick={() => {
                 if (window.confirm("Delete this conversation? All of its messages will be removed.")) onDelete(c.id);
               }}
               aria-label={`Delete: ${c.title}`}
               title="Delete"
             >
-              🗑
+              <Icon name="trash" size={15} />
             </button>
           </div>
         </div>
@@ -108,24 +130,32 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
     <aside id="sidebar" className={`sidebar${open ? " open" : ""}`} aria-label="Conversations">
       <div className="sidebar-head">
         <Logo />
-        <button type="button" className="btn btn-icon only-mobile" onClick={onClose} aria-label="Close panel">
-          ×
+        <button type="button" className="icon-btn only-mobile" onClick={onClose} aria-label="Close panel">
+          <Icon name="close" />
         </button>
       </div>
 
-      <button type="button" className="btn btn-primary block" onClick={onNew}>
-        New conversation
-      </button>
+      <nav className="side-nav" aria-label="Main">
+        <button type="button" className="side-link side-link-new" onClick={onNew}>
+          <span className="side-link-plus">
+            <Icon name="plus" size={15} />
+          </span>
+          <span>New conversation</span>
+        </button>
+        {link("/training", "Training", "cap", onTraining)}
+        {link("/documentation", "Documentation", "book", onDocs)}
+        {isAdmin && link("/admin", "Administration", "sliders", onAdmin)}
+      </nav>
 
       <div className="sidebar-scroll">
         <nav className="project-list" aria-label="Projects">
           <div className="section-head">
             <span className="section-title">Projects</span>
-            <button type="button" className="btn btn-icon" onClick={onNewProject} aria-label="New project" title="New project">
-              +
+            <button type="button" className="icon-btn" onClick={onNewProject} aria-label="New project" title="New project">
+              <Icon name="plus" size={15} />
             </button>
           </div>
-          {projects.length === 0 && <p className="muted small">No projects yet. A project gives every conversation in it the same instructions and files.</p>}
+          {projects.length === 0 && <p className="muted small side-empty">No projects yet. A project gives every conversation in it the same instructions and files.</p>}
           <ul>
             {projects.map((p) => {
               const chats = conversations.filter((c) => c.projectId === p.id);
@@ -135,29 +165,32 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
                   <div className="project-row">
                     <button
                       type="button"
-                      className="btn btn-icon chevron"
+                      className="icon-btn chevron"
                       onClick={() => setCollapsed((prev) => ({ ...prev, [p.id]: !isCollapsed }))}
                       aria-expanded={!isCollapsed}
                       aria-label={isCollapsed ? `Show chats in ${p.name}` : `Hide chats in ${p.name}`}
                       title={isCollapsed ? "Show chats" : "Hide chats"}
                     >
-                      {isCollapsed ? "▸" : "▾"}
+                      <Icon name="chevron" size={14} className={isCollapsed ? "" : "rotated"} />
                     </button>
-                    <button type="button" className="conv-select project-select" aria-current={p.id === projectViewId ? "true" : undefined} onClick={() => onOpenProject(p.id)} title="Open project">
+                    <button
+                      type="button"
+                      className="conv-select project-select"
+                      aria-current={p.id === projectViewId ? "true" : undefined}
+                      onClick={() => onOpenProject(p.id)}
+                      title={`${p.name} · ${p.visibility === "clinic" ? "Shared with the clinic" : "Private"} · ${chats.length} ${chats.length === 1 ? "chat" : "chats"}`}
+                    >
+                      <Icon name="folder" size={15} className="conv-icon" />
                       <span className="conv-title">{p.name}</span>
-                      <span className="conv-meta">
-                        {p.visibility === "clinic" ? "Shared" : "Private"} · {chats.length} {chats.length === 1 ? "chat" : "chats"}
-                      </span>
+                      {p.visibility === "clinic" && <span className="side-tag">Shared</span>}
                     </button>
-                    <button type="button" className="btn btn-icon" onClick={() => onNewInProject(p.id)} aria-label={`New chat in ${p.name}`} title="New chat in this project">
-                      +
+                    <button type="button" className="icon-btn row-action" onClick={() => onNewInProject(p.id)} aria-label={`New chat in ${p.name}`} title="New chat in this project">
+                      <Icon name="plus" size={15} />
                     </button>
                   </div>
                   {!isCollapsed && (
                     <ul className="project-chats" aria-label={`Chats in ${p.name}`}>
-                      {chats.length === 0 && (
-                        <li className="muted small project-empty">No chats yet</li>
-                      )}
+                      {chats.length === 0 && <li className="muted small project-empty">No chats yet</li>}
                       {chats.map(conversationItem)}
                     </ul>
                   )}
@@ -169,53 +202,26 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
 
         <nav className="conv-list" aria-label="Conversation list">
           <div className="section-head">
-            <span className="section-title">Conversations</span>
+            <span className="section-title">Chats</span>
           </div>
-          {loose.length === 0 && <p className="muted small">{conversations.length === 0 ? "You don't have any conversations yet." : "All your conversations are in projects."}</p>}
+          {loose.length === 0 && <p className="muted small side-empty">{conversations.length === 0 ? "You don't have any conversations yet." : "All your conversations are in projects."}</p>}
           <ul>{loose.map(conversationItem)}</ul>
         </nav>
       </div>
 
       <div className="sidebar-foot">
-        <div className="user-line" title={me.user.email}>
-          <span className="user-name">{me.user.name}</span>
-          <span className="muted small">{isAdmin ? "Administrator" : "Staff"}</span>
+        <div className="user-row" title={me.user.email}>
+          <span className="avatar" aria-hidden="true">
+            {initials(me.user.name)}
+          </span>
+          <span className="user-line">
+            <span className="user-name">{me.user.name}</span>
+            <span className="muted small">{isAdmin ? "Administrator" : "Staff"}</span>
+          </span>
+          <button type="button" className="icon-btn" onClick={onLogout} aria-label="Sign out" title="Sign out">
+            <Icon name="logout" size={17} />
+          </button>
         </div>
-        {isAdmin && (
-          <a
-            href="/admin"
-            className="btn block"
-            onClick={(e) => {
-              e.preventDefault();
-              onAdmin();
-            }}
-          >
-            Administration
-          </a>
-        )}
-        <a
-          href="/training"
-          className="btn block"
-          onClick={(e) => {
-            e.preventDefault();
-            onTraining();
-          }}
-        >
-          Training
-        </a>
-        <a
-          href="/documentation"
-          className="btn block"
-          onClick={(e) => {
-            e.preventDefault();
-            onDocs();
-          }}
-        >
-          Documentation
-        </a>
-        <button type="button" className="btn block" onClick={onLogout}>
-          Sign out
-        </button>
       </div>
     </aside>
   );

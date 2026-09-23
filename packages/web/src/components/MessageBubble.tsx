@@ -53,14 +53,13 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
 
   return (
     <article className={`msg ${isUser ? "msg-user" : "msg-assistant"}`} aria-label={isUser ? "Your message" : "Assistant response"}>
-      <header className="msg-head">
-        <span className="msg-role">{isUser ? "You" : "Assistant"}</span>
-        {!isUser && m.model && (
+      {!isUser && m.model && (
+        <header className="msg-head">
           <span className="badge badge-model" title={m.model}>
             {modelLabel(models, m.model)}
           </span>
-        )}
-      </header>
+        </header>
+      )}
 
       {!isUser && m.thinking && (
         <details className="thinking" open={showThinking} onToggle={(e) => setShowThinking((e.target as HTMLDetailsElement).open)}>

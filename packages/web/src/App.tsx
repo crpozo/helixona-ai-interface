@@ -23,9 +23,10 @@ import { AdminPage } from "./components/AdminPage";
 import { ChatPanel } from "./components/ChatPanel";
 import { IdleWarning } from "./components/IdleWarning";
 import { LoginPage } from "./components/LoginPage";
-import { ModelSelector } from "./components/ModelSelector";
 import { ProjectPage } from "./components/ProjectPage";
 import { Sidebar } from "./components/Sidebar";
+import { StartComposer } from "./components/StartComposer";
+import { brand } from "./brand";
 import { TrainingGate } from "./components/TrainingSections";
 
 const TrainingCoursePage = lazy(() => import("./components/TrainingCoursePage").then((m) => ({ default: m.TrainingCoursePage })));
@@ -71,10 +72,7 @@ export function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectView, setProjectView] = useState<string | null>(null);
-  const [newInProject, setNewInProject] = useState<string | null>(null);
   const [selected, setSelected] = useState<Conversation | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [createBusy, setCreateBusy] = useState(false);
   const [loadingConv, setLoadingConv] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -96,7 +94,6 @@ export function App() {
       setProjects([]);
       setProjectView(null);
       setSelected(null);
-      setCreating(false);
       setListError(null);
       dispatch({ type: "reset" });
       // The documentation is public: a visitor who lands there (or whose session expires while reading) stays.
@@ -199,7 +196,6 @@ export function App() {
   const selectConversation = useCallback(
     async (id: string) => {
       abortStream();
-      setCreating(false);
       setProjectView(null);
       setSidebarOpen(false);
       const seq = ++loadSeq.current;
@@ -224,17 +220,21 @@ export function App() {
     [abortStream, conversations],
   );
 
+  // A new chat starts from the start screen (home) or from the project's own composer, like Claude.ai.
   const startNew = (projectId: string | null = null) => {
     abortStream();
-    setNewInProject(projectId);
-    setProjectView(null);
-    setCreating(true);
     setSidebarOpen(false);
+    if (projectId) {
+      openProject(projectId);
+      return;
+    }
+    setSelected(null);
+    dispatch({ type: "reset" });
+    setProjectView(null);
   };
 
   const openProject = (id: string) => {
     abortStream();
-    setCreating(false);
     setSelected(null);
     dispatch({ type: "reset" });
     setProjectView(id);
@@ -272,22 +272,6 @@ export function App() {
       setSelected(updated);
     } catch (e) {
       if (!(e instanceof ApiError && e.status === 401)) setListError("Could not change the model.");
-    }
-  };
-
-  const confirmNew = async (alias: string) => {
-    setCreateBusy(true);
-    try {
-      const conv = await createConversation(alias, newInProject);
-      ++loadSeq.current;
-      setConversations((prev) => [conv, ...prev]);
-      setSelected(conv);
-      setCreating(false);
-      dispatch({ type: "load", conversationId: conv.id, messages: [] });
-    } catch (e) {
-      if (!(e instanceof ApiError && e.status === 401)) setListError("Could not create the conversation.");
-    } finally {
-      setCreateBusy(false);
     }
   };
 
@@ -353,13 +337,12 @@ export function App() {
   };
 
   /** From the project page: create the conversation in the project and send its first message. */
-  const startInProject = async (projectId: string, text: string, alias: string) => {
+  const startInProject = async (projectId: string | null, text: string, alias: string) => {
     abortStream();
     const conv = await createConversation(alias, projectId);
     ++loadSeq.current;
     setConversations((prev) => [conv, ...prev]);
     setSelected(conv);
-    setCreating(false);
     setProjectView(null);
     dispatch({ type: "load", conversationId: conv.id, messages: [] });
     void sendTo(conv, text);
@@ -480,16 +463,6 @@ export function App() {
                 onUpdated={projectUpdated}
                 onDelete={() => void removeProject(projectView)}
               />
-            ) : creating ? (
-              <div className="panel-center">
-                <ModelSelector
-                  models={me.catalog.models}
-                  defaultAlias={me.catalog.defaultAlias}
-                  busy={createBusy}
-                  onConfirm={(alias) => void confirmNew(alias)}
-                  onCancel={() => setCreating(false)}
-                />
-              </div>
             ) : selected ? (
               <ChatPanel
                 me={me}
@@ -505,12 +478,12 @@ export function App() {
               />
             ) : (
               <div className="panel-center">
-                <div className="empty">
+                <div className="home-start">
+                  <p className="eyebrow">{brand.productName}</p>
                   <h1>Hello, {me.user.name}</h1>
-                  <p className="muted">Select a conversation or start a new one.</p>
-                  <button type="button" className="btn btn-primary" onClick={() => startNew(null)}>
-                    New conversation
-                  </button>
+                  <p className="muted home-lead">What are you working on today?</p>
+                  <StartComposer models={me.catalog.models} defaultAlias={me.catalog.defaultAlias} placeholder="Write a message…" onStart={(text, alias) => startInProject(null, text, alias)} />
+                  <p className="muted small home-hint">Patient information stays in this assistant; review every answer before you use it.</p>
                 </div>
               </div>
             )}

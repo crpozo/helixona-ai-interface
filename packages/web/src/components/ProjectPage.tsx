@@ -4,6 +4,7 @@ import { ApiError, createProjectKnowledge, deleteProjectKnowledge, registerProje
 import { attachmentType, formatSize } from "../lib/files";
 import { modelLabel } from "../lib/models";
 import { useFileDrop } from "../lib/useFileDrop";
+import { StartComposer } from "./StartComposer";
 
 interface Props {
   project: Project;
@@ -43,88 +44,6 @@ export function relativeTime(iso: string, now = Date.now()): string {
   return dayFmt.format(new Date(iso));
 }
 
-/** The box at the top of the project, like Claude.ai: the first message starts a conversation here. */
-function ProjectComposer({ models, defaultAlias, onStart }: { models: CatalogModel[]; defaultAlias: string; onStart: (text: string, alias: string) => Promise<void> }) {
-  const available = models.filter((m) => m.available);
-  const [text, setText] = useState("");
-  const [alias, setAlias] = useState(() => (available.some((m) => m.alias === defaultAlias) ? defaultAlias : (available[0]?.alias ?? defaultAlias)));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const trimmed = text.trim();
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
-  }, [text]);
-
-  const submit = async () => {
-    if (!trimmed || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await onStart(trimmed, alias);
-      setText("");
-    } catch (err) {
-      setError(errMsg(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <form
-      className="project-composer"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit();
-      }}
-    >
-      <label htmlFor="project-message" className="visually-hidden">
-        Message
-      </label>
-      <textarea
-        id="project-message"
-        ref={ref}
-        rows={2}
-        placeholder="How can I help you today?"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            void submit();
-          }
-        }}
-        disabled={busy}
-      />
-      {error && (
-        <p className="notice notice-error" role="alert">
-          {error}
-        </p>
-      )}
-      <div className="composer-bar">
-        <div className="row gap">
-          <label htmlFor="project-model" className="visually-hidden">
-            Model
-          </label>
-          <select id="project-model" className="model-switch" value={alias} onChange={(e) => setAlias(e.target.value)} disabled={busy} title="Model for the new conversation">
-            {available.map((m) => (
-              <option key={m.alias} value={m.alias}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button type="submit" className="btn btn-primary" disabled={busy || !trimmed}>
-          {busy ? "Starting…" : "Send"}
-        </button>
-      </div>
-    </form>
-  );
-}
 
 export function ProjectPage({ project, conversations, models, defaultAlias, maxMb, uploadsEnabled, onBack, onOpenConversation, onStartConversation, onUpdated, onDelete }: Props) {
   // Settings card (name, description, visibility).
@@ -265,7 +184,7 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
 
       <div className="project-grid">
         <div className="project-main">
-          <ProjectComposer models={models} defaultAlias={defaultAlias} onStart={onStartConversation} />
+          <StartComposer models={models} defaultAlias={defaultAlias} onStart={onStartConversation} />
 
           <section className="project-recents" aria-labelledby="proj-recents">
             <h2 id="proj-recents" className="section-label">

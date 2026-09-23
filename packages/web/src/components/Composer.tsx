@@ -3,6 +3,7 @@ import type { AttachmentLimits, AttachmentMeta } from "../lib/types";
 import { ApiError, createAttachment, uploadFile } from "../lib/api";
 import { attachmentType, formatSize } from "../lib/files";
 import { useFileDrop } from "../lib/useFileDrop";
+import { Icon } from "./Icon";
 
 interface Props {
   conversationId: string;
@@ -161,7 +162,8 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
         ref={ref}
         value={text}
         rows={1}
-        placeholder={attachments ? "Type your message or attach a PDF… (Enter to send, Shift+Enter for a new line)" : "Type your message… (Enter to send, Shift+Enter for a new line)"}
+        placeholder={attachments ? "Write a message, or drop a PDF here…" : "Write a message…"}
+        title="Enter to send, Shift+Enter for a new line"
         disabled={disabled}
         aria-invalid={over || undefined}
         aria-describedby="composer-counter"
@@ -180,28 +182,36 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
         }}
       />
       <div className="composer-bar">
-        <div className="row gap wrap">
-          {leading}
+        <div className="composer-left">
           {attachments && (
             <>
               <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv,application/pdf,text/plain,text/markdown,text/csv" multiple hidden onChange={(e) => addFiles(e.target.files)} />
-              <button type="button" className="btn btn-small" onClick={() => fileRef.current?.click()} disabled={!canAttach} title={`PDF up to ${attachments.maxMb} MB, ${attachments.maxPerMessage} files per message`}>
-                Attach file
+              <button
+                type="button"
+                className="icon-btn composer-attach"
+                onClick={() => fileRef.current?.click()}
+                disabled={!canAttach}
+                aria-label="Attach file"
+                title={`Attach a file: PDF, TXT, MD or CSV up to ${attachments.maxMb} MB, ${attachments.maxPerMessage} files per message`}
+              >
+                <Icon name="plus" />
               </button>
             </>
           )}
-          <span id="composer-counter" className={`counter${over ? " over" : ""}`} aria-live="polite">
+          {leading}
+        </div>
+        <div className="composer-right">
+          {/* The counter stays out of the way until the message gets long. */}
+          <span id="composer-counter" className={`counter${over ? " over" : ""}${text.length > maxChars * 0.8 ? "" : " counter-quiet"}`} aria-live="polite">
             {text.length.toLocaleString("en-US")} / {maxChars.toLocaleString("en-US")}
           </span>
-        </div>
-        <div className="row gap">
           {streaming && (
-            <button type="button" className="btn btn-danger" onClick={onStop}>
-              Stop
+            <button type="button" className="icon-btn composer-stop" onClick={onStop} aria-label="Stop" title="Stop generating">
+              <Icon name="stop" />
             </button>
           )}
-          <button type="submit" className="btn btn-primary" disabled={!canSend}>
-            {uploading ? "Uploading…" : "Send"}
+          <button type="submit" className="composer-send" disabled={!canSend} aria-label={uploading ? "Uploading…" : "Send"} title="Send (Enter)">
+            <Icon name="arrow-up" />
           </button>
         </div>
       </div>
