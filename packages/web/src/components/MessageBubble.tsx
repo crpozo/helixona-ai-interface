@@ -164,7 +164,7 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
             {copied ? "Copied" : "Copy"}
           </button>
           <button type="button" className="btn btn-small btn-quiet" onClick={() => void download()} disabled={exporting} aria-label="Download the response as a Word document" title="Download as a Word document">
-            {exporting ? "Preparing…" : "Word"}
+            {exporting ? "Preparing…" : "Download Word"}
           </button>
           {exportError && (
             <span className="notice notice-error" role="alert">
