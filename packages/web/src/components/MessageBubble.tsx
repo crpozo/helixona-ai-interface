@@ -52,7 +52,10 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
   const [exportError, setExportError] = useState<string | null>(null);
   const isUser = m.role === "user";
   // Copy with formatting (Word, eClinicalWorks, email keep headings, bold, lists and tables) or download as Word.
-  const canExport = !isUser && !!m.text && (m.status === "done" || m.status === "incomplete");
+  const finished = m.status === "done" || m.status === "incomplete";
+  // A response delivered as a document has its own card with Copy and the downloads.
+  const hasDocument = /^```document(?:-\w+)?\s*$/m.test(m.text);
+  const canExport = !isUser && !!m.text && finished && !hasDocument;
   const copy = async () => {
     setExportError(null);
     const ok = await copyFormatted(markdownToClipboardHtml(m.text), markdownToPlain(m.text));
@@ -133,7 +136,7 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
             <span className="dot" aria-hidden="true" /> Thinking…
           </p>
         ) : m.text ? (
-          <Markdown text={m.text} />
+          <Markdown text={m.text} documentReady={finished} fallbackTitle={exportTitle} />
         ) : null}
       </div>
 

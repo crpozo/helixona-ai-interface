@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { Packer } from "docx";
-import { docxFileName, markdownToClipboardHtml, markdownToDocx, markdownToHtml, markdownToPlain } from "./markdownExport";
+import { docxFileName, documentFormatOf, documentTitle, markdownToClipboardHtml, markdownToCsv, markdownToDocx, markdownToHtml, markdownToPlain, markdownToPrintHtml, safeFileName } from "./markdownExport";
 
 const sample = `# Lab summary
 
@@ -15,6 +15,8 @@ const sample = `# Lab summary
 - Mild leukocytosis
 - Iron studies
   - Ferritin pending
+## Plan
+
 1. Repeat CBC in 2 weeks
 2. Call if fever
 
@@ -69,6 +71,37 @@ describe("markdown export", () => {
     expect(xml.includes("Free text block")).toBe(true);
     const rels = await zip.file("word/_rels/document.xml.rels")!.async("string");
     expect(rels).toContain("https://example.test/labs");
+    // The letterhead line and the page number.
+    const header = await zip.file("word/header1.xml")!.async("string");
+    expect(header).toContain("HELIXONA");
+    const footer = await zip.file("word/footer1.xml")!.async("string");
+    expect(footer).toContain("PAGE");
+    // Section headings carry the gold rule; tables a tinted header row.
+    expect(xml).toContain("<w:pBdr>");
+    expect(xml).toContain('w:fill="F3EFE6"');
+    const styles = await zip.file("word/styles.xml")!.async("string");
+    expect(styles).toContain("Georgia");
+  });
+
+  it("opens a document fence as content, finds its title, turns its tables into CSV and knows the formats", () => {
+    const fenced = "Intro\n\n```document-pdf\n# Referral letter\n\nBody **bold**\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n```\n\nNote.";
+    const html = markdownToHtml(fenced);
+    expect(html).toContain("<h1>Referral letter</h1>");
+    expect(html).toContain("<strong>bold</strong>");
+    expect(html).not.toContain("<pre>");
+    expect(markdownToPlain(fenced)).toContain("Referral letter\n\nBody bold");
+    expect(markdownToPrintHtml(fenced)).toMatch(/^<div class="print-doc-brand">HELIXONA<\/div><p>Intro<\/p>/);
+    expect(documentTitle(fenced, "x")).toBe("Referral letter");
+    expect(documentTitle("no heading here", "Conversation Sep 23")).toBe("Conversation Sep 23");
+    expect(markdownToCsv(fenced)).toBe("\uFEFFA,B\n1,2");
+    expect(markdownToCsv("plain")).toBeNull();
+    expect(markdownToCsv('| Name | Note |\n| --- | --- |\n| Ana, MD | She said "ok" |')).toBe('\uFEFFName,Note\n"Ana, MD","She said ""ok"""');
+    expect(documentFormatOf("language-document")).toBe("word");
+    expect(documentFormatOf("language-document-pdf")).toBe("pdf");
+    expect(documentFormatOf("language-document-csv")).toBe("csv");
+    expect(documentFormatOf("language-json")).toBeNull();
+    expect(documentFormatOf(undefined)).toBeNull();
+    expect(safeFileName("Labs: 09/24")).toBe("Labs 09 24");
   });
 
   it("names the file after the conversation, safely", () => {

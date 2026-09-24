@@ -12,6 +12,8 @@ import type { LlmProvider, StreamHandle, StreamParams } from "./provider.js";
  *   /throttle-mid   → InternalServerError después de emitir texto.
  *   /hang           → nunca emite el primer evento (para probar el timeout).
  *   /long           → stop_reason max_tokens.
+ *   /doc, /doc-pdf, /doc-csv, /doc-txt → the reply is a document (a ```document fence), like a real
+ *                     request for a Word file, a PDF or a spreadsheet would get.
  */
 export interface FakeProviderOptions { refusalFallbacks?: Record<string, string[]>; delayMs?: number; sleep?: (ms: number) => Promise<void> }
 
@@ -114,6 +116,14 @@ export class FakeProvider implements LlmProvider {
 
   private replyFor(userText: string, model: string): string {
     const clean = userText.replace(/^\/\S+\s*/, "");
+    const asked = userText.match(/^\/doc(?:-(pdf|csv|txt))?\b/);
+    const natural = /^(?:dame|give me|generate|make|create|hazme|genera)\b.*\b(?:word|pdf|excel|csv|document|documento)\b/i.test(userText);
+    if (asked || natural) {
+      const kind = asked ? (asked[1] ?? "word") : /\bpdf\b/i.test(userText) ? "pdf" : /\b(?:excel|csv)\b/i.test(userText) ? "csv" : "word";
+      const lang = kind === "word" ? "document" : `document-${kind}`;
+      const title = (clean || "Summary").slice(0, 60);
+      return `Here is the document.\n\n\`\`\`${lang}\n# ${title}\n\nPrepared by the Helixona Assistant for review.\n\n## Findings\n\n- First finding\n- Second finding\n\n| Item | Value |\n| --- | --- |\n| Sample | 12.3 |\n\`\`\`\n\nReview the names and dates before sending.`;
+    }
     return `**Simulated reply** (${model}).\n\nReceived: "${clean.slice(0, 120)}".\n\n- This is a fake provider for development.\n- There is no connection to Bedrock.\n\nSee the [documentation](https://example.com/doc) for more details.`;
   }
 }

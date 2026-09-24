@@ -277,6 +277,14 @@ those conversations.
 
 ## Copying and exporting responses
 
+A request for a document ("give me a Word", "make this a PDF", "put it in Excel") is answered with a
+file card: the model writes the content inside a marked block (```document, -pdf, -txt or -csv),
+and the interface shows it as a card with the title, the kind of file, Copy, a download button for
+the requested format and the other formats underneath, plus a preview for reviewing the text. Word
+files carry the clinic's letterhead style (a HELIXONA line, serif headings with a gold rule, tinted
+table headers, page numbers); PDF goes through the browser's print dialog ("Save as PDF") with the
+same style; CSV holds the document's tables for Excel; Text is plain text.
+
 Each response has "Copy" and "Word". Both are built in the browser from the response's own text:
 Copy puts a formatted flavour (HTML) and a plain flavour on the clipboard, so a paste into Word,
 eClinicalWorks or email keeps headings, bold, lists and tables; Word downloads a .docx (Calibri,

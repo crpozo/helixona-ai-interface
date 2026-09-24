@@ -2537,3 +2537,189 @@ td {
   color: var(--text);
   border-color: var(--border);
 }
+
+/* ---- Document card: a response delivered as a file ---- */
+.doc-card {
+  margin: 0.4rem 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.doc-card-main {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.8rem 0.9rem;
+}
+.doc-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 50px;
+  border: 1px solid var(--brand-line-gold);
+  border-radius: 6px;
+  color: var(--brand-primary);
+  background: var(--surface-2);
+}
+.doc-card-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.doc-title {
+  font-weight: 600;
+  font-size: 1.02rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-kind {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.doc-card-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex: none;
+}
+.doc-card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.9rem 0.45rem;
+  border-top: 1px solid var(--border);
+}
+.doc-card-foot .link {
+  font: inherit;
+  font-size: 0.85rem;
+}
+.doc-card .notice {
+  margin: 0 0.9rem 0.6rem;
+}
+.doc-preview {
+  border-top: 1px solid var(--border);
+  padding: 0.7rem 0.9rem;
+  max-height: 420px;
+  overflow: auto;
+}
+@media (max-width: 720px) {
+  .doc-card-main {
+    flex-wrap: wrap;
+  }
+  .doc-card-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* ---- Printing a document (the browser's Save as PDF): the letterhead style on paper ---- */
+.print-doc {
+  display: none;
+}
+@media print {
+  body.printing-doc > *:not(.print-doc) {
+    display: none !important;
+  }
+  body.printing-doc {
+    background: #fff;
+    color: #1a1a1a;
+  }
+  .print-doc {
+    display: block;
+    font-family: Calibri, Carlito, Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.4;
+    color: #1a1a1a;
+  }
+  .print-doc-brand {
+    font-family: Georgia, serif;
+    font-size: 10pt;
+    letter-spacing: 0.25em;
+    color: #8c6d2e;
+    border-bottom: 1px solid #8c6d2e;
+    padding-bottom: 6pt;
+    margin-bottom: 18pt;
+  }
+  .print-doc h1 {
+    font-family: Georgia, serif;
+    font-size: 24pt;
+    font-weight: normal;
+    color: #1f2a44;
+    margin: 0 0 6pt;
+  }
+  .print-doc h1 + p {
+    font-size: 12pt;
+    color: #555;
+  }
+  .print-doc h2 {
+    font-family: Georgia, serif;
+    font-size: 14pt;
+    font-weight: normal;
+    color: #1f2a44;
+    border-bottom: 1px solid #c9b27a;
+    padding-bottom: 3pt;
+    margin: 18pt 0 8pt;
+  }
+  .print-doc h3 {
+    font-family: Georgia, serif;
+    font-size: 12pt;
+    color: #1f2a44;
+    margin: 14pt 0 6pt;
+  }
+  .print-doc p {
+    margin: 0 0 8pt;
+  }
+  .print-doc table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8pt 0 12pt;
+    font-size: 10.5pt;
+  }
+  .print-doc th,
+  .print-doc td {
+    border: 1px solid #d9d9d9;
+    padding: 5pt 7pt;
+    text-align: left;
+    vertical-align: top;
+  }
+  .print-doc th {
+    background: #f3efe6;
+    color: #1f2a44;
+    font-weight: 600;
+  }
+  .print-doc tr {
+    page-break-inside: avoid;
+  }
+  .print-doc ul,
+  .print-doc ol {
+    margin: 0 0 8pt 1.2em;
+    padding: 0;
+  }
+  .print-doc blockquote {
+    border-left: 3px solid #c9b27a;
+    margin: 8pt 0;
+    padding: 2pt 10pt;
+    color: #444;
+  }
+  .print-doc pre {
+    background: #f5f5f5;
+    padding: 8pt;
+    border-radius: 4px;
+    font-size: 9.5pt;
+    white-space: pre-wrap;
+  }
+  .print-doc a {
+    color: #1f2a44;
+    text-decoration: none;
+  }
+  @page {
+    size: Letter;
+    margin: 1in;
+  }
+}

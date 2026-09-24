@@ -86,6 +86,54 @@ test.describe("Conversations", () => {
     errs.expectNone();
   });
 
+  test("a request for a document is answered with a file card: Word by default, the other formats a click away", async ({ page }) => {
+    const errs = watchErrors(page);
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByPlaceholder("Write a message…").fill("/doc Intake summary");
+    await page.getByRole("button", { name: "Send" }).click();
+    const card = page.locator(".doc-card").first();
+    await expect(card).toBeVisible();
+    await expect(page.locator(".composer-stop")).toHaveCount(0);
+    await expect(card.locator(".doc-title")).toHaveText("Intake summary");
+    await expect(card.locator(".doc-kind")).toHaveText("Document · DOCX");
+    // The remarks around the document stay as text; the response has no second row of buttons.
+    await expect(page.locator(".msg-assistant").first()).toContainText("Review the names and dates before sending.");
+    await expect(page.locator(".msg-assistant .msg-actions")).toHaveCount(0);
+    const [docx] = await Promise.all([page.waitForEvent("download"), card.getByRole("button", { name: "Download Intake summary as Word" }).click()]);
+    expect(docx.suggestedFilename()).toBe("Intake summary.docx");
+    expect(fs.readFileSync((await docx.path())!).subarray(0, 2).toString()).toBe("PK");
+    const [txt] = await Promise.all([page.waitForEvent("download"), card.getByRole("button", { name: "Download Intake summary as Text" }).click()]);
+    expect(txt.suggestedFilename()).toBe("Intake summary.txt");
+    expect(fs.readFileSync((await txt.path())!, "utf8")).toContain("• First finding");
+    const [csv] = await Promise.all([page.waitForEvent("download"), card.getByRole("button", { name: "Download Intake summary as CSV" }).click()]);
+    expect(csv.suggestedFilename()).toBe("Intake summary.csv");
+    expect(fs.readFileSync((await csv.path())!, "utf8")).toContain("Item,Value\nSample,12.3");
+    await card.getByRole("button", { name: "Show preview" }).click();
+    await expect(card.locator(".doc-preview h1")).toHaveText("Intake summary");
+    await expect(card.locator(".doc-preview table")).toBeVisible();
+
+    // PDF goes through the browser's print dialog, with the page named after the document.
+    await page.evaluate(() => {
+      const w = window as unknown as { __printed?: string | null };
+      w.__printed = null;
+      window.print = () => {
+        w.__printed = document.title;
+        // A real browser fires this once the print dialog closes.
+        window.dispatchEvent(new Event("afterprint"));
+      };
+    });
+    await page.locator("#composer-text").fill("/doc-pdf Referral letter");
+    await page.keyboard.press("Enter");
+    const second = page.locator(".doc-card").nth(1);
+    await expect(second.locator(".doc-kind")).toHaveText("Document · PDF");
+    await expect(page.locator(".composer-stop")).toHaveCount(0);
+    await second.getByRole("button", { name: "Download Referral letter as PDF" }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __printed?: string | null }).__printed)).toBe("Referral letter");
+    // Afterwards the page is itself again.
+    await expect.poll(() => page.evaluate(() => document.body.classList.contains("printing-doc"))).toBe(false);
+    errs.expectNone();
+  });
+
   test("Stop interrupts a streaming reply and says so", async ({ page }) => {
     await page.goto("/", { waitUntil: "load" });
     await page.getByPlaceholder("Write a message…").fill("A long answer please");
