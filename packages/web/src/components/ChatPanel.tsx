@@ -122,7 +122,7 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
           ) : state.messages.length === 0 ? (
             <p className="muted center">Type your first message to get started.</p>
           ) : (
-            state.messages.map((m) => <MessageBubble key={m.id} message={m} models={models} onRetry={onRetry} showAuthor={shared} />)
+            state.messages.map((m) => <MessageBubble key={m.id} message={m} models={models} onRetry={onRetry} showAuthor={shared} exportTitle={conversation.title} />)
           )}
           {state.transportError && !state.messages.some((m) => m.error) && (
             <p className="notice notice-error" role="alert">

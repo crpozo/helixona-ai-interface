@@ -2515,3 +2515,25 @@ td {
     font-size: 1.6rem;
   }
 }
+
+/* ---- Copy / Word on each response ---- */
+.msg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+}
+.msg-actions .notice {
+  margin: 0;
+}
+.btn-quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.btn-quiet:hover,
+.btn-quiet:focus-visible {
+  color: var(--text);
+  border-color: var(--border);
+}

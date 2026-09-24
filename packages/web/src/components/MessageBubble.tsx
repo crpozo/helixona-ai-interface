@@ -4,6 +4,7 @@ import type { CatalogModel } from "../lib/types";
 import { modelLabel } from "../lib/models";
 import { Markdown } from "./Markdown";
 import { formatSize } from "../lib/files";
+import { copyFormatted, docxFileName, downloadBlob, markdownToClipboardHtml, markdownToDocxBlob, markdownToPlain } from "../lib/markdownExport";
 
 interface Props {
   message: ChatMessage;
@@ -11,6 +12,8 @@ interface Props {
   onRetry?: (message: ChatMessage) => void;
   /** Shared project: name the person who wrote each user turn. */
   showAuthor?: boolean;
+  /** The conversation's title: the name of the Word file a response is downloaded as. */
+  exportTitle?: string;
 }
 
 function noticeText(n: Notice, models: CatalogModel[]): string {
@@ -42,9 +45,35 @@ function errorText(code: string, fallback: string): string {
 }
 
 // Memoized: while one message streams, the others must not re-render on every token.
-export const MessageBubble = memo(function MessageBubble({ message: m, models, onRetry, showAuthor = false }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message: m, models, onRetry, showAuthor = false, exportTitle = "" }: Props) {
   const [showThinking, setShowThinking] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const isUser = m.role === "user";
+  // Copy with formatting (Word, eClinicalWorks, email keep headings, bold, lists and tables) or download as Word.
+  const canExport = !isUser && !!m.text && (m.status === "done" || m.status === "incomplete");
+  const copy = async () => {
+    setExportError(null);
+    const ok = await copyFormatted(markdownToClipboardHtml(m.text), markdownToPlain(m.text));
+    if (!ok) {
+      setExportError("Could not copy. Select the text and copy it instead.");
+      return;
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+  const download = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      downloadBlob(await markdownToDocxBlob(m.text), docxFileName(exportTitle));
+    } catch {
+      setExportError("The Word file could not be created. Use Copy and paste into Word instead.");
+    } finally {
+      setExporting(false);
+    }
+  };
   const thinkingWhileWaiting = m.status === "pending";
   const canRetry =
     !!onRetry &&
@@ -127,6 +156,22 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
             </button>
           )}
         </footer>
+      )}
+
+      {canExport && (
+        <div className="msg-actions">
+          <button type="button" className="btn btn-small btn-quiet" onClick={() => void copy()} aria-label="Copy the response (formatted)" title="Copy with its formatting, for Word, eClinicalWorks or email">
+            {copied ? "Copied" : "Copy"}
+          </button>
+          <button type="button" className="btn btn-small btn-quiet" onClick={() => void download()} disabled={exporting} aria-label="Download the response as a Word document" title="Download as a Word document">
+            {exporting ? "Preparing…" : "Word"}
+          </button>
+          {exportError && (
+            <span className="notice notice-error" role="alert">
+              {exportError}
+            </span>
+          )}
+        </div>
       )}
     </article>
   );

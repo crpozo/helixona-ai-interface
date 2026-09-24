@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { expect, test } from "@playwright/test";
 import { devLogin, samplePdf, skipTraining, uniqueUser, watchErrors } from "./helpers";
 
@@ -7,7 +8,7 @@ test.describe("Conversations", () => {
     await skipTraining(context);
   });
 
-  test("a conversation from the start screen: streamed reply, more turns, model change, rename, reload, delete", async ({ page }) => {
+  test("a conversation from the start screen: streamed reply, more turns, model change, rename, reload, delete", async ({ page, context }) => {
     const errs = watchErrors(page);
     await page.goto("/", { waitUntil: "load" });
     await expect(page.locator(".home-start h1")).toContainText("Hello");
@@ -21,6 +22,23 @@ test.describe("Conversations", () => {
     // Markdown: a list and a link marked as external.
     await expect(page.locator(".msg-assistant li").first()).toBeVisible();
     await expect(page.locator(".msg-assistant").first().getByText("Open external link")).toBeVisible();
+
+    // The reply leaves the app with its formatting: on the clipboard (for Word, eClinicalWorks, email) or as a Word file.
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const reply = page.locator(".msg-assistant").first();
+    await reply.getByRole("button", { name: "Copy the response (formatted)" }).click();
+    await expect(reply.getByRole("button", { name: "Copy the response (formatted)" })).toHaveText("Copied");
+    const clip = await page.evaluate(async () => {
+      const [item] = await navigator.clipboard.read();
+      const read = async (type: string) => (item!.types.includes(type) ? await (await item!.getType(type)).text() : "");
+      return { html: await read("text/html"), text: await read("text/plain") };
+    });
+    expect(clip.html).toContain("<li>");
+    expect(clip.text).toContain("Simulated reply");
+    expect(clip.text).not.toContain("**");
+    const [download] = await Promise.all([page.waitForEvent("download"), reply.getByRole("button", { name: "Download the response as a Word document" }).click()]);
+    expect(download.suggestedFilename()).toMatch(/^Conversation .*\.docx$/);
+    expect(fs.readFileSync((await download.path())!).subarray(0, 2).toString()).toBe("PK");
 
     // Enter sends; Shift+Enter makes a new line.
     const box = page.locator("#composer-text");

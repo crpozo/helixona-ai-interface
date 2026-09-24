@@ -274,3 +274,13 @@ records `project_member_add` / `project_member_remove` with the member's id, and
 Minimum necessary: the policies document tells staff to add only the colleagues who need the work
 and to remove them afterwards; the members list on the project page is the record of who can see
 those conversations.
+
+## Copying and exporting responses
+
+Each response has "Copy" and "Word". Both are built in the browser from the response's own text:
+Copy puts a formatted flavour (HTML) and a plain flavour on the clipboard, so a paste into Word,
+eClinicalWorks or email keeps headings, bold, lists and tables; Word downloads a .docx (Calibri,
+headings, bullets, bordered tables) to the person's computer. Nothing is sent to a server or stored,
+and no audit event is written: the copy is equivalent to selecting the text on screen. A downloaded
+file may contain PHI, so the policies document asks that it be pasted into the record and then
+deleted, and never kept on the desktop, in email or in a personal drive.
