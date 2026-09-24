@@ -108,9 +108,25 @@ test.describe("Conversations", () => {
     const [csv] = await Promise.all([page.waitForEvent("download"), card.getByRole("button", { name: "Download Intake summary as CSV" }).click()]);
     expect(csv.suggestedFilename()).toBe("Intake summary.csv");
     expect(fs.readFileSync((await csv.path())!, "utf8")).toContain("Item,Value\nSample,12.3");
-    await card.getByRole("button", { name: "Show preview" }).click();
-    await expect(card.locator(".doc-preview h1")).toHaveText("Intake summary");
-    await expect(card.locator(".doc-preview table")).toBeVisible();
+    // Clicking the card opens the preview beside the chat: white pages with the letterhead and a page counter.
+    await card.getByRole("button", { name: "Open Intake summary" }).click();
+    const viewer = page.locator(".doc-viewer");
+    await expect(viewer).toBeVisible();
+    await expect(viewer.locator(".doc-viewer-title")).toContainText("Intake summary");
+    await expect(viewer.locator(".doc-viewer-title")).toContainText("DOCX");
+    const sheet = viewer.locator(".doc-page").first();
+    await expect(sheet.locator(".print-doc-brand")).toHaveText("HELIXONA");
+    await expect(sheet.locator("h1")).toHaveText("Intake summary");
+    await expect(sheet.locator("table")).toBeVisible();
+    await expect(viewer.locator(".doc-page-pill")).toHaveText("Page 1 / 1");
+    await viewer.getByRole("button", { name: "Expand the preview" }).click();
+    await expect(page.locator(".split.viewer-wide")).toHaveCount(1);
+    await viewer.getByRole("button", { name: "Shrink the preview" }).click();
+    await expect(page.locator(".split.viewer-wide")).toHaveCount(0);
+    const [fromViewer] = await Promise.all([page.waitForEvent("download"), viewer.getByRole("button", { name: "Download Intake summary" }).click()]);
+    expect(fromViewer.suggestedFilename()).toBe("Intake summary.docx");
+    await page.keyboard.press("Escape");
+    await expect(viewer).toHaveCount(0);
 
     // PDF goes through the browser's print dialog, with the page named after the document.
     await page.evaluate(() => {

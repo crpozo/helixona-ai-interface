@@ -280,7 +280,8 @@ those conversations.
 A request for a document ("give me a Word", "make this a PDF", "put it in Excel") is answered with a
 file card: the model writes the content inside a marked block (```document, -pdf, -txt or -csv),
 and the interface shows it as a card with the title, the kind of file, Copy, a download button for
-the requested format and the other formats underneath, plus a preview for reviewing the text. Word
+the requested format and the other formats underneath. Clicking the card opens a preview beside the
+chat that renders the document as Letter pages in the same style (expand, download, close). Word
 files carry the clinic's letterhead style (a HELIXONA line, serif headings with a gold rule, tinted
 table headers, page numbers); PDF goes through the browser's print dialog ("Save as PDF") with the
 same style; CSV holds the document's tables for Excel; Text is plain text.

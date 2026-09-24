@@ -29,6 +29,8 @@ import { IdleWarning } from "./components/IdleWarning";
 import { LoginPage } from "./components/LoginPage";
 import { ProjectPage } from "./components/ProjectPage";
 import { Sidebar } from "./components/Sidebar";
+import { DocumentViewer } from "./components/DocumentViewer";
+import { DocumentViewerContext, type OpenDocument } from "./lib/documentViewer";
 import { StartComposer } from "./components/StartComposer";
 import { brand } from "./brand";
 import { TrainingGate } from "./components/TrainingSections";
@@ -81,6 +83,9 @@ export function App() {
   const [loadingConv, setLoadingConv] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
+  // A document opened from a card: shown beside the chat (or over it, on a phone).
+  const [viewerDoc, setViewerDoc] = useState<OpenDocument | null>(null);
+  const [viewerWide, setViewerWide] = useState(false);
   const [chat, dispatch] = useReducer(chatReducer, initialChatState);
   const abortRef = useRef<AbortController | null>(null);
   const loadSeq = useRef(0);
@@ -252,6 +257,20 @@ export function App() {
     document.getElementById("sidebar")?.querySelector<HTMLElement>("button, a")?.focus();
     return () => window.removeEventListener("keydown", onKey);
   }, [sidebarOpen]);
+
+  // The document preview closes with Escape, and whenever the conversation changes.
+  useEffect(() => {
+    if (!viewerDoc) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setViewerDoc(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [viewerDoc]);
+  const selectedIdForViewer = selected?.id ?? null;
+  useEffect(() => {
+    setViewerDoc(null);
+  }, [selectedIdForViewer, projectView]);
 
   // A new chat starts from the start screen (home) or from the project's own composer, like Claude.ai.
   const startNew = (projectId: string | null = null) => {
@@ -545,19 +564,24 @@ export function App() {
                 meId={me.user.id}
               />
             ) : selected ? (
-              <ChatPanel
-                me={me}
-                conversation={selected}
-                projectName={selected.projectId ? projects.find((p) => p.id === selected.projectId)?.name ?? null : null}
-                state={chat}
-                loading={loadingConv}
-                onSend={(t, a) => void send(t, a)}
-                onStop={stop}
-                onRetry={retry}
-                onChangeModel={(alias) => void changeModel(alias)}
-                onOpenProject={selected.projectId ? () => openProject(selected.projectId!) : undefined}
-                shared={selectedShared}
-              />
+              <DocumentViewerContext.Provider value={setViewerDoc}>
+                <div className={`split${viewerDoc ? " with-viewer" : ""}${viewerDoc && viewerWide ? " viewer-wide" : ""}`}>
+                  <ChatPanel
+                    me={me}
+                    conversation={selected}
+                    projectName={selected.projectId ? projects.find((p) => p.id === selected.projectId)?.name ?? null : null}
+                    state={chat}
+                    loading={loadingConv}
+                    onSend={(t, a) => void send(t, a)}
+                    onStop={stop}
+                    onRetry={retry}
+                    onChangeModel={(alias) => void changeModel(alias)}
+                    onOpenProject={selected.projectId ? () => openProject(selected.projectId!) : undefined}
+                    shared={selectedShared}
+                  />
+                  {viewerDoc && <DocumentViewer doc={viewerDoc} expanded={viewerWide} onToggleExpand={() => setViewerWide((v) => !v)} onClose={() => setViewerDoc(null)} />}
+                </div>
+              </DocumentViewerContext.Provider>
             ) : (
               <div className="panel-center">
                 <div className="home-start">

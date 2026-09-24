@@ -1,8 +1,11 @@
 /** Small line icons (stroke = currentColor) so the sidebar and composer read like Claude.ai's, without emoji. */
-export type IconName = "bug" | "plus" | "chat" | "folder" | "book" | "cap" | "sliders" | "pencil" | "trash" | "chevron" | "logout" | "arrow-up" | "stop" | "close" | "menu";
+export type IconName = "bug" | "plus" | "chat" | "folder" | "book" | "cap" | "sliders" | "pencil" | "trash" | "chevron" | "logout" | "arrow-up" | "stop" | "close" | "menu" | "download" | "expand" | "collapse";
 
 const PATHS: Record<IconName, JSX.Element> = {
   bug: <path d="M9 8V6a3 3 0 0 1 6 0v2M8 8h8a4 4 0 0 1 4 4v3a8 8 0 0 1-16 0v-3a4 4 0 0 1 4-4zM12 8v11M4 13H2M22 13h-2M5 19l-2 2M19 19l2 2M6 9 4 7M18 9l2-2" />,
+  download: <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />,
+  expand: <path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7" />,
+  collapse: <path d="M20 10h-6V4M14 10l7-7M4 14h6v6M10 14l-7 7" />,
   plus: <path d="M12 5v14M5 12h14" />,
   chat: <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-5 4v-4h-.5A2.5 2.5 0 0 1 2 13.5v-8A2.5 2.5 0 0 1 4.5 3" />,
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,

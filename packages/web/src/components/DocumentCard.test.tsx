@@ -7,6 +7,7 @@ vi.mock("../lib/markdownExport", async (importOriginal) => {
 });
 
 import { copyFormatted, downloadBlob, printMarkdownDocument } from "../lib/markdownExport";
+import { DocumentViewerContext } from "../lib/documentViewer";
 import { Markdown } from "./Markdown";
 
 const reply = "Here it is.\n\n```document\n# Intake summary\n\nLead line.\n\n## Findings\n\n- One\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n```\n\nReview before sending.";
@@ -14,11 +15,11 @@ const reply = "Here it is.\n\n```document\n# Intake summary\n\nLead line.\n\n## 
 afterEach(cleanup);
 
 describe("DocumentCard", () => {
-  it("shows a document fence as a card: title, kind, Copy, the download and the other formats, a preview", async () => {
+  it("shows a document fence as a card: title, kind, Copy, the download and the other formats", async () => {
     render(<Markdown text={reply} documentReady fallbackTitle="Conversation Sep 24" />);
     expect(screen.getByRole("group", { name: "Document: Intake summary" })).toBeTruthy();
     expect(screen.getByText("Document · DOCX")).toBeTruthy();
-    // The remarks around the block stay as text.
+    // The remarks around the block stay as text; the document itself is not rendered inline.
     expect(screen.getByText("Here it is.")).toBeTruthy();
     expect(screen.getByText("Review before sending.")).toBeTruthy();
     expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
@@ -33,16 +34,33 @@ describe("DocumentCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy Intake summary" }));
     await waitFor(() => expect(copyFormatted).toHaveBeenCalled());
     expect((copyFormatted as unknown as { mock: { calls: string[][] } }).mock.calls[0]![0]).toContain("<h1>Intake summary</h1>");
-    fireEvent.click(screen.getByRole("button", { name: "Show preview" }));
-    expect(screen.getByRole("heading", { level: 1, name: "Intake summary" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Hide preview" })).toBeTruthy();
+    // Without a viewer around (other pages, tests) the card is not clickable.
+    expect(screen.queryByRole("button", { name: "Open Intake summary" })).toBeNull();
+  });
+
+  it("clicking the card opens the document in the viewer beside the chat", () => {
+    const open = vi.fn();
+    render(
+      <DocumentViewerContext.Provider value={open}>
+        <Markdown text={reply} documentReady fallbackTitle="Conversation Sep 24" />
+      </DocumentViewerContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open Intake summary" }));
+    expect(open).toHaveBeenCalledWith({ markdown: expect.stringContaining("# Intake summary"), format: "word", title: "Intake summary" });
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(open).toHaveBeenCalledTimes(2);
   });
 
   it("while the message is still streaming the card says so and waits", () => {
-    render(<Markdown text={"```document\n# Draft\n\nText"} documentReady={false} />);
+    render(
+      <DocumentViewerContext.Provider value={vi.fn()}>
+        <Markdown text={"```document\n# Draft\n\nText"} documentReady={false} />
+      </DocumentViewerContext.Provider>,
+    );
     expect(screen.getByText("Writing the document…")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Download Draft as Word" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Copy Draft" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Open Draft" })).toBeNull();
   });
 
   it("the requested format leads; a spreadsheet needs a table; a document without a title takes the conversation's", () => {

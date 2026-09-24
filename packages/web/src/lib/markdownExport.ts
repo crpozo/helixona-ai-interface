@@ -467,7 +467,7 @@ export function markdownToPrintHtml(text: string): string {
  */
 export function printMarkdownDocument(text: string, title: string): void {
   const host = document.createElement("div");
-  host.className = "print-doc";
+  host.className = "print-doc doc-paper";
   host.innerHTML = markdownToPrintHtml(text);
   const previousTitle = document.title;
   let finished = false;

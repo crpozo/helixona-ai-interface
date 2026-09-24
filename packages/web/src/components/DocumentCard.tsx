@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import {
   DOC_FORMAT_LABEL,
   copyFormatted,
@@ -12,14 +12,14 @@ import {
   safeFileName,
   type DocFormat,
 } from "../lib/markdownExport";
-import { Markdown } from "./Markdown";
+import { DocumentViewerContext } from "../lib/documentViewer";
 
 interface Props {
   /** The document's content (Markdown), as the model wrote it inside the fence. */
   markdown: string;
   /** The format the model chose from the request; the others are one click away. */
   format: DocFormat;
-  /** The message has finished streaming: the document may be downloaded. */
+  /** The message has finished streaming: the document may be opened and downloaded. */
   ready: boolean;
   /** Name for a document without a title of its own (the conversation's title). */
   fallbackTitle: string;
@@ -30,14 +30,14 @@ const FORMATS: DocFormat[] = ["word", "pdf", "txt", "csv"];
 
 /**
  * A response delivered as a file, like a document card in Claude.ai: the title, what kind of file it
- * is, Copy and a download button for the requested format, the other formats underneath, and a
- * preview of the content for reviewing before it is used. Everything is built in the browser.
+ * is, Copy and a download button for the requested format, the other formats underneath. Clicking
+ * the card opens the document in the viewer beside the chat. Everything is built in the browser.
  */
 export function DocumentCard({ markdown, format, ready, fallbackTitle }: Props) {
+  const openViewer = useContext(DocumentViewerContext);
   const [busy, setBusy] = useState<DocFormat | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState(false);
   const title = documentTitle(markdown, fallbackTitle);
   const base = safeFileName(title);
   const hasTable = markdownToCsv(markdown) !== null;
@@ -68,28 +68,40 @@ export function DocumentCard({ markdown, format, ready, fallbackTitle }: Props) 
     setError(null);
     const ok = await copyFormatted(markdownToClipboardHtml(markdown), markdownToPlain(markdown));
     if (!ok) {
-      setError("Could not copy. Open the preview, select the text and copy it instead.");
+      setError("Could not copy. Open the document, select the text and copy it instead.");
       return;
     }
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);
   };
 
+  const face = (
+    <>
+      <span className="doc-icon" aria-hidden="true">
+        <svg width="22" height="26" viewBox="0 0 22 26" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 1.5h10l6 6v17H3z" />
+          <path d="M13 1.5v6h6M6.5 12h9M6.5 16h9M6.5 20h6" />
+        </svg>
+      </span>
+      <span className="doc-card-text">
+        <span className="doc-title" title={title}>
+          {title}
+        </span>
+        <span className="doc-kind">{ready ? DOC_FORMAT_LABEL[primary] : "Writing the document…"}</span>
+      </span>
+    </>
+  );
+
   return (
     <div className="doc-card" role="group" aria-label={`Document: ${title}`}>
       <div className="doc-card-main">
-        <span className="doc-icon" aria-hidden="true">
-          <svg width="22" height="26" viewBox="0 0 22 26" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 1.5h10l6 6v17H3z" />
-            <path d="M13 1.5v6h6M6.5 12h9M6.5 16h9M6.5 20h6" />
-          </svg>
-        </span>
-        <div className="doc-card-text">
-          <span className="doc-title" title={title}>
-            {title}
-          </span>
-          <span className="doc-kind">{ready ? DOC_FORMAT_LABEL[primary] : "Writing the document…"}</span>
-        </div>
+        {openViewer && ready ? (
+          <button type="button" className="doc-card-open" onClick={() => openViewer({ markdown, format: primary, title })} aria-label={`Open ${title}`} title="Open the preview">
+            {face}
+          </button>
+        ) : (
+          <div className="doc-card-open static">{face}</div>
+        )}
         <div className="doc-card-actions">
           <button type="button" className="btn btn-small" disabled={!ready} onClick={() => void copy()} aria-label={`Copy ${title}`} title="Copy with its formatting, for Word, eClinicalWorks or email">
             {copied ? "Copied" : "Copy"}
@@ -111,19 +123,16 @@ export function DocumentCard({ markdown, format, ready, fallbackTitle }: Props) 
             </span>
           ))}
         </span>
-        <button type="button" className="link small" onClick={() => setPreview((v) => !v)} aria-expanded={preview}>
-          {preview ? "Hide preview" : "Show preview"}
-        </button>
+        {openViewer && ready && (
+          <button type="button" className="link small" onClick={() => openViewer({ markdown, format: primary, title })}>
+            Open
+          </button>
+        )}
       </div>
       {error && (
         <p className="notice notice-error" role="alert">
           {error}
         </p>
-      )}
-      {preview && (
-        <div className="doc-preview">
-          <Markdown text={markdown} nested />
-        </div>
       )}
     </div>
   );
