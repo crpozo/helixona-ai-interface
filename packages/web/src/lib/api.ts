@@ -252,6 +252,7 @@ const KNOWN_EVENTS = new Set<ChatSseEvent["type"]>([
   "refused",
   "error",
   "done",
+  "files",
 ]);
 
 /**

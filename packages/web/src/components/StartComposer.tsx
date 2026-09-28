@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CatalogModel } from "../lib/types";
 import { ApiError } from "../lib/api";
-import { attachmentType, formatSize } from "../lib/files";
+import { attachmentType, formatSize, readsPageByPage } from "../lib/files";
 import { Icon } from "./Icon";
 
 export interface StartAttachmentLimits {
@@ -138,6 +138,9 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
         <p className="notice notice-error" role="alert">
           {error}
         </p>
+      )}
+      {readsPageByPage(files.map((f) => ({ contentType: attachmentType(f) ?? "", size: f.size }))) && (
+        <p className="muted small composer-note">Large files are read page by page before the answer; hundreds of pages can take a few minutes.</p>
       )}
       <div className="composer-bar">
         <div className="composer-left">

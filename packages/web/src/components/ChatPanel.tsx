@@ -37,6 +37,8 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
   const count = state.messages.length;
   const lastText = last?.text.length ?? 0;
   const lastRole = last?.role ?? null;
+  // The progress of large files being read grows the pending answer before any text arrives.
+  const lastFiles = last?.files ?? null;
 
   const scrollToBottom = useCallback(() => {
     const el = listRef.current;
@@ -64,10 +66,10 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
   useEffect(() => {
     if (lastRole === "user") follow();
   }, [count, lastRole, follow]);
-  // Streaming text: follow only while the reader stays at the bottom.
+  // Streaming text (or file progress): follow only while the reader stays at the bottom.
   useEffect(() => {
     if (followRef.current) scrollToBottom();
-  }, [count, lastText, state.streaming, scrollToBottom]);
+  }, [count, lastText, lastFiles, state.streaming, scrollToBottom]);
 
   const activeModel = conversation.pinnedModel ?? conversation.modelId;
 

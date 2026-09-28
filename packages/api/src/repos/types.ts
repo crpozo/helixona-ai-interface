@@ -85,6 +85,8 @@ export interface ConversationRepo {
   /** Claims the conversation for one turn until `until`; false while another turn's claim has not passed `now`. */
   lock(userId: string, id: string, until: string, now: string): Promise<boolean>;
   unlock(userId: string, id: string): Promise<void>;
+  /** Extends the claim of the running turn (reading large files can outlast it). */
+  renew(userId: string, id: string, until: string): Promise<void>;
 }
 
 export interface MessageRepo {

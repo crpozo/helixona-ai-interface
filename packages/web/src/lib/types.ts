@@ -135,6 +135,8 @@ export interface AttachmentLimits {
   enabled: boolean;
   maxMb: number;
   maxPerMessage: number;
+  /** Project files go whole with every message, so they have a smaller cap than chat attachments. */
+  knowledgeMaxMb?: number;
   accept: string[];
 }
 
@@ -303,6 +305,20 @@ export interface SseDone {
   fallbackReason: FallbackReason | null;
 }
 
+/** One file the server is checking or reading page by page before it answers. */
+export interface SseFileProgress {
+  id: string;
+  name: string;
+  pages: number | null;
+  pagesDone: number;
+  state: "checking" | "queued" | "reading" | "done" | "failed";
+  note?: string;
+}
+export interface SseFiles {
+  phase: "checking" | "reading" | "read";
+  files: SseFileProgress[];
+}
+
 export type ChatSseEvent =
   | { type: "message_start"; data: SseMessageStart }
   | { type: "text_delta"; data: SseTextDelta }
@@ -311,6 +327,7 @@ export type ChatSseEvent =
   | { type: "model_switched"; data: SseModelSwitched }
   | { type: "refused"; data: SseRefused }
   | { type: "error"; data: SseError }
+  | { type: "files"; data: SseFiles }
   | { type: "done"; data: SseDone };
 
 // ---- Business associate agreements ----

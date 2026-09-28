@@ -53,8 +53,16 @@ const Env = z.object({
   FEEDBACK_TOPIC_ARN: z.string().optional(),
   /** The inbox subscribed to that topic, so the Administration page can show whether it is confirmed. */
   FEEDBACK_EMAIL: z.string().optional(),
-  MAX_ATTACHMENT_MB: z.coerce.number().positive().default(20),
-  MAX_ATTACHMENTS_PER_MESSAGE: z.coerce.number().int().positive().default(5),
+  /** Per attached file. A PDF too large to send whole is read page by page (READER_*). */
+  MAX_ATTACHMENT_MB: z.coerce.number().positive().default(100),
+  MAX_ATTACHMENTS_PER_MESSAGE: z.coerce.number().int().positive().default(20),
+  /** Catalog alias of the model that transcribes large PDFs, a few pages per request. */
+  READER_MODEL_ALIAS: z.string().default("sonnet"),
+  READER_EFFORT: EffortSchema.default("low"),
+  /** Parts read at the same time, across the server (each holds a few MB in memory). */
+  READER_CONCURRENCY: z.coerce.number().int().positive().default(6),
+  /** Large files open at the same time, across the server (each can hold 100+ MB in memory). */
+  READER_FILE_CONCURRENCY: z.coerce.number().int().positive().default(2),
 });
 
 export type Config = z.infer<typeof Env>;

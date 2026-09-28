@@ -55,7 +55,8 @@ documents only. No real patient information.**
 
    Nothing in the application needs to change: every API feature the assistant uses (Messages API,
    streaming, adaptive thinking, effort, prompt caching, PDFs sent inline) is on Anthropic's list of
-   HIPAA-eligible features. Claude Fable 5.1 requires 30-day retention, which HIPAA readiness
+   HIPAA-eligible features. Long PDFs are read with the same Messages API, a few pages per request;
+   the Files API is not used. Claude Fable 5.1 requires 30-day retention, which HIPAA readiness
    allows; zero data retention is not needed and not required.
 
 3. **Vendor BAA.** If the IT vendor keeps administrator access to the AWS account, the Claude
@@ -158,8 +159,9 @@ HIPAA is mostly about how the organization operates. The clinic needs, at minimu
 - **In transit:** browser → CloudFront (TLS) → load balancer → API container; API → Anthropic API
   (TLS). Uploaded files go browser → S3 directly with a presigned HTTPS URL.
 - **At rest (clinic's AWS account, `us-east-1`):** DynamoDB `messages` and `conversations`
-  tables, the S3 attachments bucket (conversation attachments and project knowledge files), all
-  encrypted with the clinic's KMS key and deleted after the retention period.
+  tables, the S3 attachments bucket (conversation attachments, the text transcriptions of long PDFs
+  next to them, and project knowledge files), all encrypted with the clinic's KMS key and deleted
+  after the retention period.
 - **At Anthropic:** prompts and responses are processed under the BAA and Anthropic's HIPAA
   readiness safeguards (30-day retention for Claude Fable 5.1). Anthropic does not train on this
   data.
@@ -293,3 +295,32 @@ headings, bullets, bordered tables) to the person's computer. Nothing is sent to
 and no audit event is written: the copy is equivalent to selecting the text on screen. A downloaded
 file may contain PHI, so the policies document asks that it be pasted into the record and then
 deleted, and never kept on the desktop, in email or in a personal drive.
+
+## Large and many attachments
+
+Chart prep often means ten or more files per patient, some of them hundreds of pages. A message can
+carry up to 20 files, each up to 100 MB and 1,000 pages (PDF, TXT, MD or CSV; text files up to 5 MB).
+Project knowledge files keep their own limits (20 MB and 600 pages per file, 18 MB per project),
+because they are sent whole with every message in the project.
+
+- **Sent whole** when they fit one request: up to 15 MB and 100 pages per file, 19 MB and 150 pages
+  per message together with the project's files. The model sees the pages as they are.
+- **Read page by page** otherwise. The server splits the PDF into parts of about 8 pages and asks
+  Claude Sonnet 5 to transcribe each part (every value, date, unit, reference range and flag, marked
+  with its page number), then gives the answering model the transcription instead of the file. The
+  chat shows a line per file with its progress while this happens, and a one-line summary above the
+  answer. Values in a transcription are copied from page images: the answering model is told to
+  cite the file and page of each value it uses, and the interface asks staff to check them against
+  the original pages before relying on them.
+
+Where the transcriptions live: in the attachments bucket, next to the file they come from
+(`conversations/<conversation>/<attachment>/reading-v1/`), encrypted with the same KMS key, deleted
+by the same 30-day retention rule and with the conversation. A later message in the same
+conversation reuses them instead of reading the file again; a message that was stopped keeps the
+parts already read. The requests go to the Anthropic API under the same BAA as every other message.
+The Files API is not used, so no file is stored at Anthropic beyond the retention of each request.
+
+The audit log records `attachments_read` with the number of files, pages and parts, the model and
+the cost, never file names or content. The cost of reading counts toward the person's daily quota
+(roughly $1 to $2 per 100 scanned pages with Claude Sonnet 5). The API task has 1 vCPU and 4 GB of
+memory so that large files can be opened in memory; nothing is written to the container's disk.

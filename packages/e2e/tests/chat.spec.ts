@@ -220,4 +220,50 @@ test.describe("Conversations", () => {
     await expect(page.locator(".composer-pending .attach-chip")).toHaveCount(0);
     errs.expectNone();
   });
+
+  test("chart prep: 20 files in one message, and a long PDF is read page by page before the answer", async ({ page }) => {
+    const errs = watchErrors(page);
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByPlaceholder("Write a message…").fill("Start");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.locator(".msg-assistant")).toHaveCount(1);
+    await expect(page.locator(".composer-stop")).toHaveCount(0);
+
+    // A 101-page history of labs is too long to send whole; the six short panels and the notes are sent as they are.
+    const pdfs = [{ name: "Labs 2019-2025.pdf", mimeType: "application/pdf", buffer: await samplePdf("Historical labs", 101) }];
+    for (let i = 1; i <= 6; i++) pdfs.push({ name: `Lab panel ${i}.pdf`, mimeType: "application/pdf", buffer: await samplePdf(`Lab panel ${i}`, 2) });
+    const input = page.locator(".composer input[type=file]");
+    await input.setInputFiles(pdfs);
+    await expect(page.locator(".composer-pending .attach-chip")).toHaveCount(7);
+    const notes = Array.from({ length: 14 }, (_, i) => ({ name: `Note ${i + 1}.txt`, mimeType: "text/plain", buffer: Buffer.from(`Visit note ${i + 1}: follow-up in 3 months.`) }));
+    await input.setInputFiles(notes);
+    await expect(page.locator(".composer-pending .attach-chip")).toHaveCount(20);
+    await expect(page.locator(".composer .notice")).toHaveText("Up to 20 files per message: 1 file was not added.");
+    await expect(page.locator(".composer-pending .attach-progress")).toHaveCount(0);
+    await expect(page.locator(".composer-pending .attach-chip.error")).toHaveCount(0);
+
+    await page.locator("#composer-text").fill("Summarize the historical labs");
+    await page.keyboard.press("Enter");
+    const answer = page.locator(".msg-assistant").nth(1);
+    await expect(answer.locator(".files-read")).toHaveText("Read 1 large file page by page · 101 pages", { timeout: 30_000 });
+    await expect(answer).toContainText("Simulated reply");
+    await expect(page.locator(".composer-stop")).toHaveCount(0);
+    // Twenty chips would fill a phone screen: the message shows four and a button for the rest.
+    const sent = page.locator(".msg-user").nth(1);
+    await expect(sent.locator(".attach-chip")).toHaveCount(4);
+    await sent.getByRole("button", { name: "+16 more files" }).click();
+    await expect(sent.locator(".attach-chip")).toHaveCount(20);
+    await expect(sent.getByRole("button", { name: "Show fewer" })).toHaveAttribute("aria-expanded", "true");
+
+    // The files stay with the message; the next question reuses the reading instead of reading again.
+    await page.locator("#composer-text").fill("Which values were out of range?");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".msg-assistant")).toHaveCount(3);
+    await expect(page.locator(".msg-assistant").nth(2)).toContainText("Which values were out of range?");
+    await expect(page.locator(".msg-assistant").nth(2).locator(".files-read, .files-progress")).toHaveCount(0);
+    await page.reload({ waitUntil: "load" });
+    await expect(page.locator(".msg-user").nth(1).getByRole("button", { name: "+16 more files" })).toBeVisible();
+    await expect(page.locator(".msg-user").nth(1).locator(".attach-chip").first()).toContainText("Labs 2019-2025.pdf");
+    errs.expectNone();
+  });
 });

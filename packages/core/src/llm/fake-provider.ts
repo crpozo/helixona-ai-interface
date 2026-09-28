@@ -14,6 +14,8 @@ import type { LlmProvider, StreamHandle, StreamParams } from "./provider.js";
  *   /long           → stop_reason max_tokens.
  *   /doc, /doc-pdf, /doc-csv, /doc-txt → the reply is a document (a ```document fence), like a real
  *                     request for a Word file, a PDF or a spreadsheet would get.
+ * A request that starts with "Transcribe page(s) A–B" is the server reading a large file in parts: the
+ * reply is a short, deterministic transcription of those pages.
  */
 export interface FakeProviderOptions { refusalFallbacks?: Record<string, string[]>; delayMs?: number; sleep?: (ms: number) => Promise<void> }
 
@@ -67,7 +69,8 @@ export class FakeProvider implements LlmProvider {
           return;
         }
         const reply = self.replyFor(userText, model);
-        const parts = reply.match(/.{1,12}/gs) ?? [];
+        // A transcription streams a page at a time, so reading a long file in tests takes seconds, not minutes.
+        const parts = /^Transcribe pages? \d/.test(userText) ? reply.split(/(?=\(p\. \d+\))/) : (reply.match(/.{1,12}/gs) ?? []);
         let idx = content.length;
         let text = "";
         yield { type: "content_block_start", index: idx, content_block: { type: "text", text: "", citations: null } } as BetaRawMessageStreamEvent;
@@ -115,6 +118,15 @@ export class FakeProvider implements LlmProvider {
   }
 
   private replyFor(userText: string, model: string): string {
+    const reading = userText.match(/^Transcribe pages? (\d+)(?:–(\d+))?/);
+    if (reading) {
+      const from = Number(reading[1]);
+      const to = Number(reading[2] ?? reading[1]);
+      const pages = Array.from({ length: to - from + 1 }, (_, i) => from + i);
+      return pages
+        .map((p) => `(p. ${p})\n\n| Date | Test | Result | Units | Reference range | Flag | Page |\n| --- | --- | --- | --- | --- | --- | --- |\n| 01/15/2026 | Hemoglobin | 13.${p % 10} | g/dL | 12.0-16.0 |  | ${p} |`)
+        .join("\n\n");
+    }
     const clean = userText.replace(/^\/\S+\s*/, "");
     const asked = userText.match(/^\/doc(?:-(pdf|csv|txt))?\b/);
     const natural = /^(?:dame|give me|generate|make|create|hazme|genera)\b.*\b(?:word|pdf|excel|csv|document|documento)\b/i.test(userText);

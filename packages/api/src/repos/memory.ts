@@ -25,6 +25,7 @@ export class MemoryConversationRepo implements ConversationRepo {
     c.busyUntil = until; return true;
   }
   async unlock(userId: string, id: string) { const c = this.data.get(this.key(userId, id)); if (c) c.busyUntil = null; }
+  async renew(userId: string, id: string, until: string) { const c = this.data.get(this.key(userId, id)); if (c?.busyUntil) c.busyUntil = until; }
 }
 
 export class MemoryProjectRepo implements ProjectRepo {

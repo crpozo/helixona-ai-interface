@@ -71,7 +71,7 @@ const children = [
   h3("Review every output"),
   p("Check names, dates, amounts, claim numbers and reasons against the source document before you use or send anything. If the assistant says it is unsure, treat that as a flag to verify."),
   h3("Files"),
-  p("You can attach PDF, TXT, MD and CSV files. Attach only what the task needs. Files are stored with the conversation and deleted with it."),
+  p("You can attach PDF, TXT, MD and CSV files: up to 20 per message and 100 MB each. Attach only what the task needs. Files are stored with the conversation and deleted with it. Long PDFs are read page by page before the answer; the values in that reading are copied from the page images, so check the ones you use against the original pages."),
   h3("Projects"),
   p("A project gives every conversation in it the same instructions and reference files. A private project is yours; a project shared with the clinic is visible to every staff member. Do not put patient information in a shared project's name, description, instructions or files unless everyone needs it."),
   h3("Delete when done"),

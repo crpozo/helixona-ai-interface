@@ -5,6 +5,7 @@ import type { Deps } from "../deps.js";
 import { apiError, audit, requireAuth } from "../app.js";
 import { MemoryAttachmentStore } from "../attachments/store.js";
 import { ALLOWED_TYPES, attachmentKey, maxBytesFor, safeName } from "../attachments/policy.js";
+import { locateConversation } from "./conversations.js";
 
 /**
  * Uploads: the client asks for a presigned URL, PUTs the file straight to storage, then references the
@@ -18,8 +19,9 @@ export function registerAttachmentRoutes(app: FastifyInstance, deps: Deps): void
       .object({ name: z.string().trim().min(1).max(200), size: z.number().int().positive(), contentType: z.string().min(1).max(100) })
       .safeParse(req.body);
     if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
-    const conv = await deps.repos.conversations.get(req.session!.userId, id);
-    if (!conv) return apiError(reply, 404, "not_found", "Conversation not found");
+    // The conversation may be the user's own or one of a shared project they take part in.
+    const located = await locateConversation(deps, req.session!, id);
+    if (!located) return apiError(reply, 404, "not_found", "Conversation not found");
     const { contentType, size } = body.data;
     if (!ALLOWED_TYPES[contentType]) return apiError(reply, 400, "unsupported_type", "Only PDF, plain text, Markdown and CSV files are supported");
     const maxBytes = maxBytesFor(contentType, deps.config.MAX_ATTACHMENT_MB);
@@ -41,7 +43,7 @@ export function registerAttachmentRoutes(app: FastifyInstance, deps: Deps): void
       const key = ((req.params as Record<string, string>)["*"] ?? "").split("/").map(decodeURIComponent).join("/");
       const contentType = String(req.headers["content-type"] ?? "application/octet-stream").split(";")[0]!.trim();
       const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.from(typeof req.body === "string" ? req.body : "");
-      store.put(key, bytes, contentType);
+      await store.put(key, bytes, contentType);
       return reply.code(200).send({ ok: true, size: bytes.length });
     });
   }

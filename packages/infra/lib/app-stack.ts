@@ -111,8 +111,9 @@ export class AppStack extends cdk.Stack {
 
     const taskDef = new ecs.FargateTaskDefinition(this, 'TaskDef', {
       family: resourceName(stage, 'api'),
-      cpu: 512,
-      memoryLimitMiB: 1024,
+      // Large attachments (up to 100 MB, read page by page) are opened in memory: 1 vCPU / 4 GB.
+      cpu: 1024,
+      memoryLimitMiB: 4096,
       taskRole: this.taskRole,
       executionRole,
       runtimePlatform: { cpuArchitecture: ecs.CpuArchitecture.X86_64, operatingSystemFamily: ecs.OperatingSystemFamily.LINUX },
@@ -200,8 +201,16 @@ export class AppStack extends cdk.Stack {
         CONTEXT_LIMIT_TOKENS: '900000',
         // Large PDFs take longer before the first token arrives.
         FIRST_EVENT_TIMEOUT_MS: '180000',
-        MAX_ATTACHMENT_MB: '20',
-        MAX_ATTACHMENTS_PER_MESSAGE: '5',
+        // PDFs that do not fit one request whole are transcribed a few pages at a time by Sonnet 5
+        // (READER_*), so a message can carry many large files.
+        MAX_ATTACHMENT_MB: '100',
+        MAX_ATTACHMENTS_PER_MESSAGE: '20',
+        READER_MODEL_ALIAS: 'sonnet',
+        READER_EFFORT: 'low',
+        READER_CONCURRENCY: '6',
+        READER_FILE_CONCURRENCY: '2',
+        // Leaves room outside the JavaScript heap for file buffers.
+        NODE_OPTIONS: '--max-old-space-size=2560',
         DAILY_QUOTA_USD: '10',
         RETENTION_DAYS: String(cfg.retentionDays),
         LLM_TIMEOUT_MS: '600000',

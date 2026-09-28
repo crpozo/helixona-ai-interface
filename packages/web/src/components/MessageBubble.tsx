@@ -3,6 +3,7 @@ import type { ChatMessage, Notice } from "../lib/chatReducer";
 import type { CatalogModel } from "../lib/types";
 import { modelLabel } from "../lib/models";
 import { Markdown } from "./Markdown";
+import { FilesProgress } from "./FilesProgress";
 import { formatSize } from "../lib/files";
 import { copyFormatted, docxFileName, downloadBlob, markdownToClipboardHtml, markdownToDocxBlob, markdownToPlain } from "../lib/markdownExport";
 
@@ -44,13 +45,20 @@ function errorText(code: string, fallback: string): string {
   }
 }
 
+/** A message with many files (chart prep brings ten or more) shows the first few and a button for the rest. */
+const FILES_COLLAPSE_OVER = 6;
+const FILES_SHOWN_COLLAPSED = 4;
+
 // Memoized: while one message streams, the others must not re-render on every token.
 export const MessageBubble = memo(function MessageBubble({ message: m, models, onRetry, showAuthor = false, exportTitle = "" }: Props) {
   const [showThinking, setShowThinking] = useState(false);
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [allFiles, setAllFiles] = useState(false);
   const isUser = m.role === "user";
+  const collapsibleFiles = m.attachments.length > FILES_COLLAPSE_OVER;
+  const shownFiles = collapsibleFiles && !allFiles ? m.attachments.slice(0, FILES_SHOWN_COLLAPSED) : m.attachments;
   // Copy with formatting (Word, eClinicalWorks, email keep headings, bold, lists and tables) or download as Word.
   const finished = m.status === "done" || m.status === "incomplete";
   // A response delivered as a document has its own card with Copy and the downloads.
@@ -77,7 +85,9 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
       setExporting(false);
     }
   };
-  const thinkingWhileWaiting = m.status === "pending";
+  // While large files are checked or read, their progress takes the place of "Thinking…".
+  const readingFiles = !!m.files && m.files.phase !== "read";
+  const thinkingWhileWaiting = m.status === "pending" && !readingFiles;
   const canRetry =
     !!onRetry &&
     m.retryText !== null &&
@@ -101,6 +111,8 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
         </header>
       )}
 
+      {!isUser && m.files && <FilesProgress files={m.files} active={m.status === "pending" || m.status === "streaming"} />}
+
       {!isUser && m.thinking && (
         <details className="thinking" open={showThinking} onToggle={(e) => setShowThinking((e.target as HTMLDetailsElement).open)}>
           <summary>Reasoning</summary>
@@ -109,8 +121,8 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
       )}
 
       {m.attachments.length > 0 && (
-        <ul className="attach-list" aria-label="Attached files">
-          {m.attachments.map((a) => (
+        <ul className="attach-list" aria-label={`Attached files (${m.attachments.length})`}>
+          {shownFiles.map((a) => (
             <li key={a.id} className="attach-chip" title={a.name}>
               <span className="attach-icon" aria-hidden="true">📄</span>
               <span className="attach-name">{a.name}</span>
@@ -120,6 +132,13 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
               </span>
             </li>
           ))}
+          {collapsibleFiles && (
+            <li>
+              <button type="button" className="attach-more" aria-expanded={allFiles} onClick={() => setAllFiles((v) => !v)}>
+                {allFiles ? "Show fewer" : `+${m.attachments.length - FILES_SHOWN_COLLAPSED} more files`}
+              </button>
+            </li>
+          )}
         </ul>
       )}
 

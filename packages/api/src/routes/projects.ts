@@ -4,8 +4,8 @@ import { estimateAttachmentTokens, ulid, type Project, type ProjectMember, type 
 import type { Deps } from "../deps.js";
 import type { Session } from "../repos/types.js";
 import { apiError, audit, requireAuth } from "../app.js";
-import { ALLOWED_TYPES, MAX_PROJECT_FILES, MAX_PROJECT_KNOWLEDGE_TOKENS, maxBytesFor, projectKnowledgeKey, safeName } from "../attachments/policy.js";
-import { AttachmentProblem, verifyUpload } from "../attachments/documents.js";
+import { ALLOWED_TYPES, MAX_KNOWLEDGE_FILE_MB, MAX_KNOWLEDGE_PDF_PAGES, MAX_PROJECT_FILES, MAX_PROJECT_KNOWLEDGE_BYTES, MAX_PROJECT_KNOWLEDGE_TOKENS, maxBytesFor, projectKnowledgeKey, safeName } from "../attachments/policy.js";
+import { AttachmentProblem, inspectUpload } from "../attachments/documents.js";
 
 /**
  * Projects work like Claude.ai projects: instructions plus knowledge files that every conversation
@@ -89,6 +89,10 @@ async function rehomeConversations(deps: Deps, p: Project, to: ProjectVisibility
 
 export function registerProjectRoutes(app: FastifyInstance, deps: Deps): void {
   const now = deps.now ?? (() => new Date());
+  // Project files go whole into every request of every conversation in the project, so they keep the
+  // request-sized caps even when chat attachments may be larger (those are read page by page).
+  const knowledgeMaxMb = Math.min(deps.config.MAX_ATTACHMENT_MB, MAX_KNOWLEDGE_FILE_MB);
+  const knowledgeBytesMessage = `A project's files can add up to ${Math.round(MAX_PROJECT_KNOWLEDGE_BYTES / 1048576)} MB (they go with every message). Remove a file or attach large documents to a conversation instead.`;
 
   const load = async (req: FastifyRequest, reply: FastifyReply, level: "read" | "edit" | "manage"): Promise<Project | null> => {
     const { id } = req.params as { id: string };
@@ -206,8 +210,9 @@ export function registerProjectRoutes(app: FastifyInstance, deps: Deps): void {
     if (p.knowledge.length >= MAX_PROJECT_FILES) return apiError(reply, 400, "too_many_files", `A project can hold up to ${MAX_PROJECT_FILES} files`);
     const { contentType, size } = body.data;
     if (!ALLOWED_TYPES[contentType]) return apiError(reply, 400, "unsupported_type", "Only PDF, plain text, Markdown and CSV files are supported");
-    const maxBytes = maxBytesFor(contentType, deps.config.MAX_ATTACHMENT_MB);
-    if (size > maxBytes) return apiError(reply, 400, "file_too_large", `Files of this type are limited to ${Math.round(maxBytes / 1048576)} MB`);
+    const maxBytes = maxBytesFor(contentType, knowledgeMaxMb);
+    if (size > maxBytes) return apiError(reply, 400, "file_too_large", `Project files of this type are limited to ${Math.round(maxBytes / 1048576)} MB`);
+    if (p.knowledge.reduce((n, k) => n + k.size, 0) + size > MAX_PROJECT_KNOWLEDGE_BYTES) return apiError(reply, 400, "knowledge_too_large", knowledgeBytesMessage);
     const attachmentId = ulid();
     const name = safeName(body.data.name);
     const upload = await deps.attachments.presignUpload(projectKnowledgeKey(p.id, attachmentId, name), contentType, 900);
@@ -224,13 +229,17 @@ export function registerProjectRoutes(app: FastifyInstance, deps: Deps): void {
     if (p.knowledge.some((k) => k.id === attachmentId)) return view(p, req);
     let verified;
     try {
-      verified = await verifyUpload(deps.attachments, projectKnowledgeKey(p.id, attachmentId, body.data.name), attachmentId, body.data.name, deps.config.MAX_ATTACHMENT_MB);
+      verified = { meta: await inspectUpload(deps.attachments, projectKnowledgeKey(p.id, attachmentId, body.data.name), attachmentId, body.data.name, knowledgeMaxMb, MAX_KNOWLEDGE_PDF_PAGES) };
     } catch (e) {
       if (e instanceof AttachmentProblem) return apiError(reply, 400, e.code, e.message);
       throw e;
     }
     const knowledge = [...p.knowledge, verified.meta];
     const tokens = knowledge.reduce((n, k) => n + estimateAttachmentTokens(k), 0);
+    if (knowledge.reduce((n, k) => n + k.size, 0) > MAX_PROJECT_KNOWLEDGE_BYTES) {
+      await deps.attachments.deletePrefix(`projects/${p.id}/${attachmentId}/`).catch(() => undefined);
+      return apiError(reply, 400, "knowledge_too_large", knowledgeBytesMessage);
+    }
     if (tokens > MAX_PROJECT_KNOWLEDGE_TOKENS) {
       await deps.attachments.deletePrefix(`projects/${p.id}/${attachmentId}/`).catch(() => undefined);
       return apiError(reply, 400, "knowledge_too_large", "The project's files would exceed what fits in one conversation. Remove a file or split the document.");

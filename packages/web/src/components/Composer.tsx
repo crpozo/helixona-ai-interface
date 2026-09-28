@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AttachmentLimits, AttachmentMeta } from "../lib/types";
 import { ApiError, createAttachment, uploadFile } from "../lib/api";
-import { attachmentType, formatSize } from "../lib/files";
+import { attachmentType, formatSize, readsPageByPage } from "../lib/files";
 import { useFileDrop } from "../lib/useFileDrop";
 import { Icon } from "./Icon";
 
@@ -163,6 +163,9 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
         <p className="notice" role="status">
           {limitNote}
         </p>
+      )}
+      {readsPageByPage(pending.filter((p) => p.status !== "error")) && (
+        <p className="muted small composer-note">Large files are read page by page before the answer; hundreds of pages can take a few minutes.</p>
       )}
       <label htmlFor="composer-text" className="visually-hidden">
         Message

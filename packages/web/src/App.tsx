@@ -552,7 +552,7 @@ export function App() {
                 project={projects.find((p) => p.id === projectView)!}
                 conversations={conversations.filter((c) => c.projectId === projectView)}
                 models={me.catalog.models}
-                maxMb={me.limits.attachments?.maxMb ?? 20}
+                maxMb={me.limits.attachments?.knowledgeMaxMb ?? 20}
                 uploadsEnabled={me.limits.attachments?.enabled ?? false}
                 attachments={me.limits.attachments?.enabled ? me.limits.attachments : null}
                 onBack={() => setProjectView(null)}

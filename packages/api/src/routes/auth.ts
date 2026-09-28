@@ -6,7 +6,7 @@ import type { IdentityResult, OidcPending } from "../auth/cognito.js";
 import { AttemptLimiter, PasswordAuthError, type PasswordAuthResult } from "../auth/password.js";
 import { SESSION_COOKIE } from "../auth/session.js";
 import { apiError, audit, requireAuth } from "../app.js";
-import { ALLOWED_TYPES } from "../attachments/policy.js";
+import { ALLOWED_TYPES, MAX_KNOWLEDGE_FILE_MB } from "../attachments/policy.js";
 import { trainingStatus } from "./training.js";
 import { MemoryUserDirectory } from "../repos/memory.js";
 
@@ -163,7 +163,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
       limits: {
         maxMessageChars: config.MAX_MESSAGE_CHARS,
         contextLimitTokens: config.CONTEXT_LIMIT_TOKENS,
-        attachments: { enabled: deps.attachments !== null, maxMb: config.MAX_ATTACHMENT_MB, maxPerMessage: config.MAX_ATTACHMENTS_PER_MESSAGE, accept: Object.keys(ALLOWED_TYPES) },
+        attachments: { enabled: deps.attachments !== null, maxMb: config.MAX_ATTACHMENT_MB, maxPerMessage: config.MAX_ATTACHMENTS_PER_MESSAGE, knowledgeMaxMb: Math.min(config.MAX_ATTACHMENT_MB, MAX_KNOWLEDGE_FILE_MB), accept: Object.keys(ALLOWED_TYPES) },
       },
     };
   });

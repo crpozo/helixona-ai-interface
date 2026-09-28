@@ -19,6 +19,10 @@ export interface AttachmentStore {
   presignUpload(key: string, contentType: string, expiresSeconds?: number): Promise<PresignedUpload>;
   head(key: string): Promise<{ size: number; contentType: string | null; lastModified: string | null } | null>;
   get(key: string): Promise<Buffer>;
+  /** The first bytes of an object (to recognise a PDF without downloading it). */
+  getRange(key: string, start: number, end: number): Promise<Buffer>;
+  /** Writes an object from the server (transcriptions of large files); the bucket's KMS encryption applies. */
+  put(key: string, body: Buffer, contentType: string): Promise<void>;
   /** Deletes one object (a delete marker on the versioned bucket). */
   delete(key: string): Promise<void>;
   /** Deletes every object under the prefix; returns how many were deleted. */
@@ -56,7 +60,19 @@ export class S3AttachmentStore implements AttachmentStore {
   async get(key: string): Promise<Buffer> {
     const r = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
     if (!r.Body) throw new Error("empty object body");
+    const bytes = await r.Body.transformToByteArray();
+    // A view, not a copy: files can be 100 MB.
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  }
+
+  async getRange(key: string, start: number, end: number): Promise<Buffer> {
+    const r = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key, Range: `bytes=${start}-${end}` }));
+    if (!r.Body) return Buffer.alloc(0);
     return Buffer.from(await r.Body.transformToByteArray());
+  }
+
+  async put(key: string, body: Buffer, contentType: string): Promise<void> {
+    await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }));
   }
 
   async delete(key: string): Promise<void> {
@@ -94,8 +110,14 @@ export class MemoryAttachmentStore implements AttachmentStore {
     };
   }
 
-  put(key: string, body: Buffer, contentType: string): void {
+  async put(key: string, body: Buffer, contentType: string): Promise<void> {
     this.objects.set(key, { body, contentType, lastModified: new Date().toISOString() });
+  }
+
+  async getRange(key: string, start: number, end: number): Promise<Buffer> {
+    const o = this.objects.get(key);
+    if (!o) throw new Error(`attachment not found: ${key}`);
+    return o.body.subarray(start, end + 1);
   }
 
   async head(key: string): Promise<{ size: number; contentType: string | null; lastModified: string | null } | null> {

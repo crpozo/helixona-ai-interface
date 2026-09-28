@@ -147,8 +147,9 @@ describe('AppStack', () => {
       NetworkConfiguration: { AwsvpcConfiguration: Match.objectLike({ AssignPublicIp: 'DISABLED' }) },
     });
     appT.hasResourceProperties('AWS::ECS::TaskDefinition', {
-      Cpu: '512',
-      Memory: '1024',
+      // Large attachments (up to 100 MB each, read page by page) are opened in memory.
+      Cpu: '1024',
+      Memory: '4096',
       RequiresCompatibilities: ['FARGATE'],
       ContainerDefinitions: [
         Match.objectLike({
@@ -157,6 +158,9 @@ describe('AppStack', () => {
             { Name: 'AUTH_MODE', Value: 'cognito' },
             { Name: 'STORE_MODE', Value: 'dynamo' },
             { Name: 'LLM_MODE', Value: 'anthropic' },
+            { Name: 'MAX_ATTACHMENT_MB', Value: '100' },
+            { Name: 'MAX_ATTACHMENTS_PER_MESSAGE', Value: '20' },
+            { Name: 'READER_MODEL_ALIAS', Value: 'sonnet' },
           ]),
           Secrets: Match.arrayWith([Match.objectLike({ Name: 'SESSION_SECRET' }), Match.objectLike({ Name: 'COGNITO_CLIENT_SECRET' }), Match.objectLike({ Name: 'ANTHROPIC_API_KEY' })]),
         }),

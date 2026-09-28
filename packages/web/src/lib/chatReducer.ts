@@ -1,4 +1,4 @@
-import type { AttachmentMeta, ChatSseEvent, ContentBlock, FallbackReason, Message, SseError } from "./types";
+import type { AttachmentMeta, ChatSseEvent, ContentBlock, FallbackReason, Message, SseError, SseFiles } from "./types";
 
 export type MessageStatus =
   | "pending" // enviado, esperando message_start / primer texto
@@ -33,6 +33,8 @@ export interface ChatMessage {
   retryAttachments: AttachmentMeta[];
   /** Who wrote a user turn; named in shared projects, where several people write in one conversation. */
   authorName: string | null;
+  /** Large files the server checked or read page by page before this answer (this session only). */
+  files: SseFiles | null;
 }
 
 export interface ChatState {
@@ -102,6 +104,7 @@ export function fromServerMessage(m: Message): ChatMessage {
     attachments: m.attachments ?? [],
     retryAttachments: [],
     authorName: m.authorName ?? null,
+    files: null,
   };
 }
 
@@ -136,6 +139,9 @@ function applySse(state: ChatState, event: ChatSseEvent): ChatState {
       }));
     case "thinking_delta":
       return updateActive(state, (m) => ({ ...m, thinking: m.thinking + event.data.text }));
+    case "files":
+      // A snapshot: the list replaces the previous one; an empty list clears it.
+      return updateActive(state, (m) => ({ ...m, files: event.data.files.length > 0 ? event.data : null }));
     case "fallback":
       // El texto ya emitido se conserva; el nuevo modelo continúa.
       return updateActive(state, (m) => ({
@@ -220,6 +226,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         attachments: action.attachments ?? [],
         retryAttachments: [],
         authorName: action.authorName ?? null,
+        files: null,
       };
       const assistant: ChatMessage = {
         id: action.assistantId,
@@ -236,6 +243,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         attachments: [],
         retryAttachments: action.attachments ?? [],
         authorName: null,
+        files: null,
       };
       return {
         ...state,

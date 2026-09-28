@@ -47,6 +47,9 @@ export class DynamoConversationRepo implements ConversationRepo {
       throw e;
     }
   }
+  async renew(userId: string, id: string, until: string) {
+    await this.doc.send(new UpdateCommand({ TableName: this.table, Key: { userId, conversationId: id }, UpdateExpression: "SET busyUntil = :until", ConditionExpression: "attribute_exists(busyUntil)", ExpressionAttributeValues: { ":until": until } })).catch(() => undefined);
+  }
   async unlock(userId: string, id: string) {
     await this.doc.send(new UpdateCommand({ TableName: this.table, Key: { userId, conversationId: id }, UpdateExpression: "REMOVE busyUntil", ConditionExpression: "attribute_exists(conversationId)" })).catch(() => undefined);
   }

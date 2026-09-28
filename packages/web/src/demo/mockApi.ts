@@ -77,7 +77,7 @@ function me(): Me {
     user: { id: "u-ana", email: "ana@helixona.com", name: "Ana Perez", roles: ["staff", "admin"] },
     session: { expiresAt: new Date(Date.now() + 12 * 3600_000).toISOString(), idleTimeoutSeconds: 900 },
     catalog: { defaultAlias: "opus", effort: "medium", models: MODELS },
-    limits: { maxMessageChars: 20000, contextLimitTokens: 150000, attachments: { enabled: true, maxMb: 20, maxPerMessage: 5, accept: ["application/pdf", "text/plain", "text/markdown", "text/csv"] } },
+    limits: { maxMessageChars: 20000, contextLimitTokens: 150000, attachments: { enabled: true, maxMb: 100, maxPerMessage: 20, knowledgeMaxMb: 20, accept: ["application/pdf", "text/plain", "text/markdown", "text/csv"] } },
   };
 }
 
