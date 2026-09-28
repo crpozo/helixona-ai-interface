@@ -122,6 +122,7 @@ export function resourceName(stage: string, suffix: string): string {
 
 /** Modelos del catálogo (§6 del contrato). Deben coincidir con `MODEL_CATALOG_JSON`. */
 export const CATALOG_MODEL_IDS = [
+  'anthropic.claude-sonnet-5-5',
   'anthropic.claude-sonnet-5',
   'anthropic.claude-opus-5-5',
   'anthropic.claude-opus-5',

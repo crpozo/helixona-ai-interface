@@ -58,11 +58,20 @@ export const CatalogSchema = z.object({
 });
 export type Catalog = z.infer<typeof CatalogSchema>;
 
+/**
+ * Model policy: each alias always points to the newest model of its line (Sonnet, Opus, Fable), and a
+ * conversation follows its alias (see currentModelId), so a new release is one line here. The previous
+ * generation stays only as a fallback, for a classifier false positive or while a new model is not
+ * yet enabled for the organization.
+ */
 export const DEFAULT_CATALOG: Catalog = CatalogSchema.parse({
   defaultAlias: "opus",
   effort: "medium",
   models: [
-    { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet 5", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, priceInPerM: 2, priceOutPerM: 10, priceCacheReadPerM: 0.2, priceCacheWritePerM: 2.5, refusalFallbacks: [], availabilityFallbacks: [] },
+    // Claude Sonnet 5.5: same price as Sonnet 5; its classifiers decline in more categories (bio and
+    // general_harms among them), so a medical false positive falls back to Sonnet 5, which also covers
+    // availability until the organization has access to the new model.
+    { alias: "sonnet", modelId: "anthropic.claude-sonnet-5-5", label: "Sonnet 5.5", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, priceInPerM: 2, priceOutPerM: 10, priceCacheReadPerM: 0.2, priceCacheWritePerM: 2.5, refusalFallbacks: ["anthropic.claude-sonnet-5"], availabilityFallbacks: ["anthropic.claude-sonnet-5"] },
     // Claude Opus 5.5: thinking is always on (effort is the control) and the safety classifiers are
     // broader than Opus 5's (bio joins cyber), so a medical false positive falls back to Opus 5. Opus 5
     // also covers availability until every organization has access to the new model.
@@ -70,13 +79,14 @@ export const DEFAULT_CATALOG: Catalog = CatalogSchema.parse({
     { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable 5.1", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, priceInPerM: 10, priceOutPerM: 50, priceCacheReadPerM: 0.25, priceCacheWritePerM: 12.5, refusalFallbacks: ["anthropic.claude-opus-5-5"], availabilityFallbacks: ["anthropic.claude-opus-5-5"] },
   ],
   fallbackModels: [
+    { modelId: "anthropic.claude-sonnet-5", label: "Sonnet 5", priceInPerM: 2, priceOutPerM: 10, priceCacheReadPerM: 0.2, priceCacheWritePerM: 2.5 },
     { modelId: "anthropic.claude-opus-5", label: "Opus 5", priceInPerM: 5, priceOutPerM: 25, priceCacheReadPerM: 0.5, priceCacheWritePerM: 6.25 },
   ],
 });
 
 /**
  * Maps a model id as reported by a provider back to the catalog id. The catalog uses Bedrock-style
- * ids (`anthropic.claude-sonnet-5`); the Anthropic API reports `claude-sonnet-5` and Bedrock may
+ * ids (`anthropic.claude-sonnet-5-5`); the Anthropic API reports `claude-sonnet-5-5` and Bedrock may
  * report a region-prefixed inference profile (`us.anthropic.…`). Unknown ids are returned as-is.
  */
 export function canonicalModelId(catalog: Catalog, id: string): string {
@@ -97,6 +107,14 @@ export function parseCatalog(json: string | undefined | null): Catalog {
 
 export function modelByAlias(catalog: Catalog, alias: string): CatalogModel | undefined {
   return catalog.models.find((m) => m.alias === alias);
+}
+
+/**
+ * The model a conversation uses now: the one its alias points to today, so a conversation started on
+ * an earlier model moves to the newest one. The stored id is kept only if the alias left the catalog.
+ */
+export function currentModelId(catalog: Catalog, alias: string, stored: string): string {
+  return modelByAlias(catalog, alias)?.modelId ?? stored;
 }
 
 export function pricesFor(catalog: Catalog, modelId: string): (FallbackModel & { alias?: string }) | undefined {

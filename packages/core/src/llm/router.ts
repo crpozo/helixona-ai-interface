@@ -130,7 +130,10 @@ export class ModelRouter {
         for await (const ev of stream) {
           if (timer) { clearTimeout(timer); timer = null; }
           if (ev.type === "message_start") {
-            // The API reports its own id (`claude-sonnet-5`); compare on catalog ids or every turn looks like a fallback.
+            // Thinking blocks the API dropped because the history before them changed (counts only).
+            const dropped = ((ev.message as { input_transformations?: Array<{ type?: string; reason?: string }> }).input_transformations ?? []).filter((t) => t.type === "thinking_dropped" && t.reason === "prefix_binding_mismatch").length;
+            if (dropped > 0) log.warn("thinking_blocks_dropped", { model: currentModel, count: dropped, reason: "prefix_binding_mismatch" });
+            // The API reports its own id (`claude-sonnet-5-5`); compare on catalog ids or every turn looks like a fallback.
             const reported = ev.message.model ? canonicalModelId(this.opts.catalog, ev.message.model) : null;
             if (reported && reported !== currentModel && !refusalFallback) {
               // El middleware ya cambió de modelo antes de cualquier salida.

@@ -197,11 +197,11 @@ export class AppStack extends cdk.Stack {
         EFFORT: 'medium',
         MAX_TOKENS: '64000',
         THINKING_DISPLAY: 'omitted',
-        // Claude Sonnet 5 / Opus 5 / Fable 5.1 have a 1M-token context; leave headroom for output and thinking.
+        // Claude Sonnet 5.5 / Opus 5.5 / Fable 5.1 have a 1M-token context; leave headroom for output and thinking.
         CONTEXT_LIMIT_TOKENS: '900000',
         // Large PDFs take longer before the first token arrives.
         FIRST_EVENT_TIMEOUT_MS: '180000',
-        // PDFs that do not fit one request whole are transcribed a few pages at a time by Sonnet 5
+        // PDFs that do not fit one request whole are transcribed a few pages at a time by Sonnet 5.5
         // (READER_*), so a message can carry many large files.
         MAX_ATTACHMENT_MB: '100',
         MAX_ATTACHMENTS_PER_MESSAGE: '20',

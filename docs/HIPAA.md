@@ -306,7 +306,7 @@ because they are sent whole with every message in the project.
 - **Sent whole** when they fit one request: up to 15 MB and 100 pages per file, 19 MB and 150 pages
   per message together with the project's files. The model sees the pages as they are.
 - **Read page by page** otherwise. The server splits the PDF into parts of about 8 pages and asks
-  Claude Sonnet 5 to transcribe each part (every value, date, unit, reference range and flag, marked
+  Claude Sonnet 5.5 to transcribe each part (every value, date, unit, reference range and flag, marked
   with its page number), then gives the answering model the transcription instead of the file. The
   chat shows a line per file with its progress while this happens, and a one-line summary above the
   answer. Values in a transcription are copied from page images: the answering model is told to
@@ -322,5 +322,20 @@ The Files API is not used, so no file is stored at Anthropic beyond the retentio
 
 The audit log records `attachments_read` with the number of files, pages and parts, the model and
 the cost, never file names or content. The cost of reading counts toward the person's daily quota
-(roughly $1 to $2 per 100 scanned pages with Claude Sonnet 5). The API task has 1 vCPU and 4 GB of
+(roughly $1 to $2 per 100 scanned pages with Claude Sonnet 5.5). The API task has 1 vCPU and 4 GB of
 memory so that large files can be opened in memory; nothing is written to the container's disk.
+
+## Models
+
+Each choice in the model picker always points to the newest model of its line: Claude Sonnet 5.5,
+Claude Opus 5.5 and Claude Fable 5.1. When Anthropic releases a newer one, the catalog changes in one
+place and existing conversations move to it on their next message. The previous generation (Claude
+Sonnet 5, Claude Opus 5) is used only as a fallback: when the newest model's safety classifier
+declines a clinical question by mistake, or while a new model is not yet enabled for the clinic's
+organization. Every model runs through the same Anthropic API key, BAA and HIPAA readiness; the
+answer shows which model wrote it.
+
+Earlier reasoning ("thinking") is sent back with the conversation, as the API requires. When the
+conversation before it has changed (a new system prompt after a release, edited project
+instructions or files), the request asks the API to drop that stale reasoning instead of failing,
+and the server logs how many blocks were dropped, never their content.

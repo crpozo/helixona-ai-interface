@@ -233,11 +233,11 @@ Requisito: el empleado elige entre Sonnet, Opus y Fable, siempre en su última v
 
 | Alias en la UI | ID en Bedrock hoy | Precio 1P entrada/salida por millón (Bedrock a verificar) | Costo relativo | Uso sugerido |
 |---|---|---|---|---|
-| Sonnet | `anthropic.claude-sonnet-5` | $2 / $10 | 1x | Traducción, cartas, resúmenes cortos, tareas rápidas |
+| Sonnet | `anthropic.claude-sonnet-5-5` | $2 / $10 | 1x | Traducción, cartas, resúmenes cortos, tareas rápidas (respaldo: `anthropic.claude-sonnet-5`) |
 | Opus | `anthropic.claude-opus-5-5` | $4 / $20 | 2x | Default recomendado para el trabajo diario (respaldo: `anthropic.claude-opus-5`) |
 | Fable | `anthropic.claude-fable-5-1` | $10 / $50 | 5x | Tareas difíciles, documentos largos, razonamiento profundo |
 
-**"Siempre la última versión"**: Bedrock no tiene Models API para descubrir versiones, así que no puede ser automático. Los IDs sin sufijo de fecha (`claude-opus-5`, `claude-sonnet-5`, `claude-fable-5-1`) son estables; cuando Anthropic publica una versión nueva, actualizar el catálogo es cambiar un parámetro tras un checklist corto: habilitar el modelo en la cuenta, smoke test sin PHI (streaming, effort, refusal forzado, fallback), revisar precio y cuotas, autorización del oficial de privacidad (para Fable, la incógnita de retención), aviso a los usuarios. Las conversaciones abiertas siguen con la versión con la que empezaron; las nuevas usan la versión nueva.
+**"Siempre la última versión"**: Bedrock no tiene Models API para descubrir versiones, así que no puede ser automático. Los IDs sin sufijo de fecha (`claude-opus-5`, `claude-sonnet-5`, `claude-fable-5-1`) son estables; cuando Anthropic publica una versión nueva, actualizar el catálogo es cambiar un parámetro tras un checklist corto: habilitar el modelo en la cuenta, smoke test sin PHI (streaming, effort, refusal forzado, fallback), revisar precio y cuotas, autorización del oficial de privacidad (para Fable, la incógnita de retención), aviso a los usuarios. Update (September 28, 2026): every alias always points to the newest model of its line, and open conversations follow their alias to the new version on their next message (`currentModelId`); the previous generation stays only as a fallback.
 
 Reglas de diseño:
 
@@ -246,7 +246,7 @@ Reglas de diseño:
 - **Cadena de respaldo por modelo elegido**, configurable en el catálogo. Nunca se cae a un modelo más caro que el elegido sin autorización de la clínica:
   - Fable → Opus 5: rechazo por clasificador vía middleware con crédito de fallback; indisponibilidad vía router (sección 7).
   - Opus → Opus 4.8 (`anthropic.claude-opus-4-8`): es el destino que Anthropic recomienda para los rechazos "cyber" de Opus 5; disponibilidad vía router. A verificar en Bedrock y a autorizar por la clínica; si no, Opus sin respaldo automático y error claro con "Reintentar".
-  - Sonnet → sin respaldo automático por rechazo (no hay clasificadores documentados para Sonnet 5; verificar en el spike). Por indisponibilidad: reintento y error claro, u Opus 5 solo si la clínica acepta el costo.
+  - Sonnet 5.5 → Sonnet 5 (same price): for classifier refusals (Sonnet 5.5 declines in five categories, bio and general_harms among them) and for availability.
   - El cliente con su middleware se construye **por modelo elegido** (mapa alias → cliente), nunca uno global: con el middleware configurado a nivel de cliente, una conversación fijada en el modelo de respaldo intentaría caer al mismo modelo.
 - **Diferencias de API entre los tres** (mismo cuerpo de request, con excepciones que el router aplica por modelo): los tres aceptan `output_config.effort` en Bedrock y ninguno acepta `thinking` con `budget_tokens`/`disabled` ni `temperature`/`top_p`/`top_k` ni prefill. Sonnet 5 **no soporta mensajes de sistema a mitad de conversación** (las instrucciones operativas van en el `system` versionado por conversación). El tokenizador de Sonnet 5 usa ~30 % más tokens: re-baselinear cuotas y el límite de contexto con `count_tokens`. Mínimo cacheable por modelo: 512 tokens en Fable 5.1 y Opus 5; Sonnet 5 a verificar.
 - **UI y contabilidad**: insignia del modelo que respondió (incluido si fue un respaldo); auditoría y costo por modelo, por usuario y por plantilla a partir de `usage` y `usage.iterations`; cuotas por usuario expresadas en dinero, no en tokens, para que elegir Fable consuma cuota proporcionalmente. Latencia esperada distinta por modelo: Sonnet responde rápido, Fable puede tardar minutos; el indicador "Pensando…" y los heartbeats aplican a los tres.

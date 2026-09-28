@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { estimateAttachmentTokens, estimateTokens, modelByAlias, ulid, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type TurnEvent, type UsageSummary } from "@helixona/core";
+import { currentModelId, estimateAttachmentTokens, estimateTokens, modelByAlias, ulid, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type TurnEvent, type UsageSummary } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import { attachmentKey, INLINE, MAX_PDF_PAGES, READ } from "../attachments/policy.js";
 import { AttachmentProblem, checkUpload, documentBlock, inspectPdf, loadDocumentBlocks, readingBlock, type PdfInfo } from "../attachments/documents.js";
@@ -95,6 +95,12 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     const located = await locateConversation(deps, req.session!, id);
     if (!located) return apiError(reply, 404, "not_found", "Conversation not found");
     const { conv, key, project } = located;
+    // A conversation follows its alias: one started on an earlier model moves to the newest one.
+    const latestModel = currentModelId(deps.catalog, conv.modelAlias, conv.modelId);
+    if (latestModel !== conv.modelId) {
+      await deps.repos.conversations.update(key, id, { modelId: latestModel });
+      conv.modelId = latestModel;
+    }
 
     // Quick checks of the new files before the reply stream starts, so problems the user can fix are
     // plain HTTP errors. Pages are counted inside the stream: the files may be large.

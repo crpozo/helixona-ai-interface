@@ -132,7 +132,7 @@ Códigos de `error`: `quota_exceeded`, `context_limit`, `model_unavailable`, `ba
   "defaultAlias": "opus",
   "effort": "medium",
   "models": [
-    { "alias": "sonnet", "modelId": "anthropic.claude-sonnet-5", "label": "Sonnet", "description": "Rápido y económico: traducciones, cartas, resúmenes cortos", "costFactor": 1, "priceInPerM": 2, "priceOutPerM": 10, "priceCacheReadPerM": 0.2, "priceCacheWritePerM": 2.5, "refusalFallbacks": [], "availabilityFallbacks": [], "roles": ["staff", "admin"] },
+    { "alias": "sonnet", "modelId": "anthropic.claude-sonnet-5-5", "label": "Sonnet 5.5", "description": "Fast and economical: translations, letters, short summaries", "costFactor": 1, "priceInPerM": 2, "priceOutPerM": 10, "priceCacheReadPerM": 0.2, "priceCacheWritePerM": 2.5, "refusalFallbacks": ["anthropic.claude-sonnet-5"], "availabilityFallbacks": ["anthropic.claude-sonnet-5"], "roles": ["staff", "admin"] },
     { "alias": "opus", "modelId": "anthropic.claude-opus-5", "label": "Opus", "description": "Equilibrio recomendado para el trabajo diario", "costFactor": 2.5, "priceInPerM": 5, "priceOutPerM": 25, "priceCacheReadPerM": 0.5, "priceCacheWritePerM": 6.25, "refusalFallbacks": ["anthropic.claude-opus-4-8"], "availabilityFallbacks": [], "roles": ["staff", "admin"] },
     { "alias": "fable", "modelId": "anthropic.claude-fable-5-1", "label": "Fable", "description": "Máxima capacidad para tareas difíciles y documentos largos (más lento y costoso)", "costFactor": 5, "priceInPerM": 10, "priceOutPerM": 50, "priceCacheReadPerM": 0.25, "priceCacheWritePerM": 12.5, "refusalFallbacks": ["anthropic.claude-opus-5"], "availabilityFallbacks": ["anthropic.claude-opus-5"], "roles": ["staff", "admin"] }
   ],

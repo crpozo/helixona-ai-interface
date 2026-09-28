@@ -120,6 +120,21 @@ describe("API", () => {
     expect(JSON.stringify(audit)).not.toContain("redacta una carta");
   });
 
+  it("a conversation started on an earlier model moves to the newest model of its alias", async () => {
+    const { cookie } = await login(app, "olga");
+    const me = (await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json();
+    const conv = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "sonnet" } })).json();
+    expect(conv.modelId).toBe("anthropic.claude-sonnet-5-5");
+    // As stored before Sonnet 5.5: the page already shows the newest model for it.
+    await repos.conversations.update(me.user.id, conv.id, { modelId: "anthropic.claude-sonnet-5" });
+    expect((await app.inject({ method: "GET", url: `/api/conversations/${conv.id}`, headers: { cookie } })).json().conversation.modelId).toBe("anthropic.claude-sonnet-5-5");
+    const turn = await app.inject({ method: "POST", url: `/api/conversations/${conv.id}/messages`, headers: { ...H, cookie }, payload: { text: "Short letter" } });
+    const events = parseSse(turn.body);
+    expect(events[0]).toMatchObject({ event: "message_start", data: { model: "anthropic.claude-sonnet-5-5" } });
+    expect(events.at(-1)).toMatchObject({ event: "done", data: { model: "anthropic.claude-sonnet-5-5", fallbackReason: null } });
+    expect((await repos.conversations.get(me.user.id, conv.id))!.modelId).toBe("anthropic.claude-sonnet-5-5");
+  });
+
   it("rechazo del clasificador: Fable → Opus 5 y la conversación queda fijada", async () => {
     const { cookie } = await login(app, "carla");
     const conv = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "fable" } })).json();

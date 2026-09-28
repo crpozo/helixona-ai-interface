@@ -1,15 +1,16 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { modelByAlias, modelsForRole, ulid, type Conversation, type Project } from "@helixona/core";
+import { currentModelId, modelByAlias, modelsForRole, ulid, type Catalog, type Conversation, type Project } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import type { ConversationPatch, Session } from "../repos/types.js";
 import { apiError, audit, requireAuth } from "../app.js";
 import { canReadProject, projectPartition, sharedProjectsFor } from "./projects.js";
 import { requireTraining } from "./training.js";
 
-export function publicConversation(c: Conversation) {
+/** What the browser sees of a conversation; its model is the one its alias points to today. */
+export function publicConversation(c: Conversation, catalog: Catalog) {
   const { userId: _u, systemPromptVersion: _v, lastInputTokens: _t, pinnedUntil: _p, busyUntil: _b, ...rest } = c;
-  return rest;
+  return { ...rest, modelId: currentModelId(catalog, c.modelAlias, c.modelId) };
 }
 
 /** A conversation the user may see, with the partition it is stored under and its usable project. */
@@ -55,7 +56,7 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
     const items = await deps.repos.conversations.list(s.userId);
     for (const p of await sharedProjectsFor(deps, s.userId)) items.push(...(await deps.repos.conversations.list(projectPartition(p.id))));
     items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    return { items: items.map(publicConversation) };
+    return { items: items.map((c) => publicConversation(c, deps.catalog)) };
   });
 
   app.post("/api/conversations", { preHandler: requireAuth() }, async (req, reply) => {
@@ -83,7 +84,7 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
     };
     await deps.repos.conversations.create(c, ttl);
     await audit(deps, req, { action: "conversation_create", conversationId: c.id, model: c.modelId, ...(projectId ? { meta: { projectId, shared: key !== s.userId } } : {}) });
-    return reply.code(201).send(publicConversation(c));
+    return reply.code(201).send(publicConversation(c, deps.catalog));
   });
 
   app.get("/api/conversations/:id", { preHandler: requireAuth() }, async (req, reply) => {
@@ -92,7 +93,7 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
     if (!l) return apiError(reply, 404, "not_found", "Conversation not found");
     const messages = await deps.repos.messages.list(id);
     await audit(deps, req, { action: "conversation_read", conversationId: id });
-    return { conversation: publicConversation(l.conv), messages: messages.map(({ conversationId: _c, seq: _s, ...m }) => m) };
+    return { conversation: publicConversation(l.conv, deps.catalog), messages: messages.map(({ conversationId: _c, seq: _s, ...m }) => m) };
   });
 
   app.patch("/api/conversations/:id", { preHandler: requireAuth() }, async (req, reply) => {
@@ -112,7 +113,7 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
     const c = await deps.repos.conversations.update(l.key, id, patch);
     if (!c) return apiError(reply, 404, "not_found", "Conversation not found");
     await audit(deps, req, { action: patch.modelId ? "conversation_model" : "conversation_title", conversationId: id, ...(patch.modelId ? { model: patch.modelId } : {}) });
-    return publicConversation(c);
+    return publicConversation(c, deps.catalog);
   });
 
   app.delete("/api/conversations/:id", { preHandler: requireAuth() }, async (req, reply) => {

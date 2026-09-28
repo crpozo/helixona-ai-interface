@@ -54,11 +54,17 @@ describe("ModelRouter", () => {
     expect(c.events.at(-1)).toEqual({ type: "refused", category: "bio" });
   });
 
-  it("sonnet elegido: sin respaldo, un rechazo total se reporta", async () => {
+  it("sonnet: a classifier refusal on Sonnet 5.5 falls back to Sonnet 5 and pins it; a refusal by both is reported", async () => {
     const c = collect();
     const r = await mk().runTurn({ conversation: conv({ modelAlias: "sonnet" }), history, userText: "/refuse x", systemPrompt: "s", emit: c.emit });
-    expect(r.ok).toBe(false);
-    expect(c.events.at(-1)?.type).toBe("refused");
+    expect(r.ok).toBe(true);
+    expect(r.servedModel).toBe("anthropic.claude-sonnet-5");
+    expect(r.fallbackReason).toBe("refusal");
+    expect(r.pin).toEqual({ model: "anthropic.claude-sonnet-5", reason: "refusal", until: null });
+    const d = collect();
+    const all = await mk().runTurn({ conversation: conv({ modelAlias: "sonnet" }), history, userText: "/refuse-all x", systemPrompt: "s", emit: d.emit });
+    expect(all.ok).toBe(false);
+    expect(d.events.at(-1)?.type).toBe("refused");
   });
 
   it("throttling antes de salida: cae a Opus 5 por disponibilidad con pin blando", async () => {
@@ -91,11 +97,14 @@ describe("ModelRouter", () => {
     expect(r.pin?.reason).toBe("availability");
   });
 
-  it("sonnet elegido y throttling: no hay respaldo por disponibilidad → error model_unavailable", async () => {
+  it("sonnet: Sonnet 5.5 busy before any output → Sonnet 5 answers, with a soft pin", async () => {
     const c = collect();
     const r = await mk().runTurn({ conversation: conv({ modelAlias: "sonnet" }), history, userText: "/throttle x", systemPrompt: "s", emit: c.emit });
-    expect(r.ok).toBe(false);
-    expect((c.events.at(-1) as { code: string }).code).toBe("model_unavailable");
+    expect(r.ok).toBe(true);
+    expect(r.servedModel).toBe("anthropic.claude-sonnet-5");
+    expect(r.fallbackReason).toBe("availability");
+    expect(r.pin?.reason).toBe("availability");
+    expect(c.events).toContainEqual({ type: "model_switched", from: "anthropic.claude-sonnet-5-5", to: "anthropic.claude-sonnet-5", reason: "availability" });
   });
 
   it("sin primer evento: timeout de primer evento dispara el respaldo", async () => {
@@ -160,7 +169,7 @@ describe("ModelRouter", () => {
   });
 });
 
-/** Provider that reports the Anthropic API's bare ids (`claude-sonnet-5`) instead of the catalog's `anthropic.` ids. */
+/** Provider that reports the Anthropic API's bare ids (`claude-sonnet-5-5`) instead of the catalog's `anthropic.` ids. */
 function bareIdProvider(): LlmProvider {
   return {
     stream(params): StreamHandle {
@@ -190,20 +199,20 @@ describe("ModelRouter: provider model ids", () => {
     const c = collect();
     const r = await mk({ provider: bareIdProvider() }).runTurn({ conversation: conv({ modelAlias: "sonnet" }), history, userText: "hola", systemPrompt: "s", emit: c.emit });
     expect(r.ok).toBe(true);
-    expect(r.servedModel).toBe("anthropic.claude-sonnet-5");
+    expect(r.servedModel).toBe("anthropic.claude-sonnet-5-5");
     expect(r.fallbackReason).toBeNull();
     expect(r.pin).toBeNull();
     expect(c.events.some((e) => e.type === "fallback")).toBe(false);
-    expect(c.events.at(-1)).toMatchObject({ type: "done", model: "anthropic.claude-sonnet-5", fallbackReason: null });
+    expect(c.events.at(-1)).toMatchObject({ type: "done", model: "anthropic.claude-sonnet-5-5", fallbackReason: null });
     expect(r.usage.estimatedUsd).toBeGreaterThan(0);
   });
 
   it("a stale pin holding the bare id resolves to the conversation's own model and is dropped", async () => {
     const c = collect();
-    const stale = conv({ modelAlias: "sonnet", pinnedModel: "claude-sonnet-5", pinReason: "refusal", pinnedUntil: null });
+    const stale = conv({ modelAlias: "sonnet", pinnedModel: "claude-sonnet-5-5", pinReason: "refusal", pinnedUntil: null });
     const r = await mk({ provider: bareIdProvider() }).runTurn({ conversation: stale, history, userText: "hola", systemPrompt: "s", emit: c.emit });
-    expect(c.events[0]).toEqual({ type: "message_start", model: "anthropic.claude-sonnet-5" });
-    expect(r.servedModel).toBe("anthropic.claude-sonnet-5");
+    expect(c.events[0]).toEqual({ type: "message_start", model: "anthropic.claude-sonnet-5-5" });
+    expect(r.servedModel).toBe("anthropic.claude-sonnet-5-5");
     expect(r.pin).toBeNull();
   });
 });

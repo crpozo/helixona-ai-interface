@@ -18,7 +18,7 @@ import { updateProject } from "../lib/api";
 import { ProjectPage, relativeTime } from "./ProjectPage";
 
 const models: CatalogModel[] = [
-  { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet", description: "", costFactor: 1, available: true },
+  { alias: "sonnet", modelId: "anthropic.claude-sonnet-5-5", label: "Sonnet", description: "", costFactor: 1, available: true },
   { alias: "opus", modelId: "anthropic.claude-opus-5", label: "Opus", description: "", costFactor: 2.5, available: true },
 ];
 const project: Project = {
@@ -36,7 +36,7 @@ const project: Project = {
   canEdit: true,
   canManage: true,
 };
-const conv = (id: string, title: string, updatedAt: string): Conversation => ({ id, title, modelAlias: "sonnet", modelId: "anthropic.claude-sonnet-5", pinnedModel: null, pinReason: null, createdAt: updatedAt, updatedAt, messageCount: 2, projectId: "p1" });
+const conv = (id: string, title: string, updatedAt: string): Conversation => ({ id, title, modelAlias: "sonnet", modelId: "anthropic.claude-sonnet-5-5", pinnedModel: null, pinReason: null, createdAt: updatedAt, updatedAt, messageCount: 2, projectId: "p1" });
 
 function renderPage(over: Partial<React.ComponentProps<typeof ProjectPage>> = {}) {
   const props = {

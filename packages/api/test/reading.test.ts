@@ -17,7 +17,7 @@ import type { Deps } from "../src/deps.js";
 
 const H = { "x-requested-with": "helixona", "content-type": "application/json" };
 const MiB = 1024 * 1024;
-const SONNET = "anthropic.claude-sonnet-5";
+const SONNET = "anthropic.claude-sonnet-5-5";
 
 async function samplePdf(pages: number, label = "Lab report"): Promise<Buffer> {
   const pdf = await PDFDocument.create();
@@ -283,7 +283,7 @@ describe("Large attachments in a conversation", () => {
     expect(events.findIndex((e) => e.event === "files")).toBeLessThan(events.findIndex((e) => e.event === "message_start"));
     expect(events.some((e) => e.event === "done")).toBe(true);
 
-    // 15 parts read by Sonnet 5, then one answer by the conversation's model.
+    // 15 parts read by Sonnet 5.5, then one answer by the conversation's model.
     const readerCalls = calls.filter((c) => range(c));
     expect(readerCalls).toHaveLength(15);
     expect(new Set(readerCalls.map((c) => c.model))).toEqual(new Set([SONNET]));

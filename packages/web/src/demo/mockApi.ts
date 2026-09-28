@@ -6,12 +6,12 @@ import type { AdminUser, AttachmentMeta, AuditEvent, Conversation, Me, Message, 
 import trainingQuiz from "./training-quiz.json";
 
 const MODELS = [
-  { alias: "sonnet", modelId: "anthropic.claude-sonnet-5", label: "Sonnet 5", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, available: true },
+  { alias: "sonnet", modelId: "anthropic.claude-sonnet-5-5", label: "Sonnet 5.5", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, available: true },
   { alias: "opus", modelId: "anthropic.claude-opus-5-5", label: "Opus 5.5", description: "Recommended balance for everyday work", costFactor: 2, available: true },
   { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable 5.1", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, available: true },
   { alias: "anthropic.claude-opus-5", modelId: "anthropic.claude-opus-5", label: "Opus 5", description: "Fallback only", costFactor: 0, available: false },
 ];
-const PRICES: Record<string, [number, number]> = { "anthropic.claude-sonnet-5": [2, 10], "anthropic.claude-opus-5-5": [4, 20], "anthropic.claude-fable-5-1": [10, 50], "anthropic.claude-opus-5": [5, 25] };
+const PRICES: Record<string, [number, number]> = { "anthropic.claude-sonnet-5-5": [2, 10], "anthropic.claude-sonnet-5": [2, 10], "anthropic.claude-opus-5-5": [4, 20], "anthropic.claude-fable-5-1": [10, 50], "anthropic.claude-opus-5": [5, 25] };
 const FALLBACK: Record<string, string | undefined> = { "anthropic.claude-fable-5-1": "anthropic.claude-opus-5-5", "anthropic.claude-opus-5-5": "anthropic.claude-opus-5" };
 
 const AGREEMENTS = [
@@ -54,12 +54,12 @@ function seed() {
     { id: id(), role: "assistant", content: [{ type: "text", text: "**Subject: Follow-up appointment reminder**\n\nDear patient,\n\nThis is a reminder that you have a follow-up appointment on **Tuesday at 10:00 AM** at our clinic. Please bring your **most recent lab results** so we can review them during your visit.\n\nIf you need to reschedule, please call us and we will be happy to help.\n\nSincerely,\nThe Helixona Team\n\n---\n*Check the patient's name and the date before sending.*" }], model: "anthropic.claude-opus-5-5", fallbackReason: null, stopReason: "end_turn", usage: { inputTokens: 812, outputTokens: 190, cacheReadTokens: 640, cacheWriteTokens: 0, estimatedUsd: 0.0089 }, createdAt: "2026-09-12T14:02:24Z" },
   );
   const c2: Conv = {
-    id: id(), title: "Sample · plain-language instructions", modelAlias: "sonnet", modelId: "anthropic.claude-sonnet-5", pinnedModel: null, pinReason: null,
+    id: id(), title: "Sample · plain-language instructions", modelAlias: "sonnet", modelId: "anthropic.claude-sonnet-5-5", pinnedModel: null, pinReason: null,
     createdAt: "2026-09-11T20:40:00Z", updatedAt: "2026-09-11T20:41:00Z", messageCount: 2, messages: [],
   };
   c2.messages.push(
     { id: id(), role: "user", content: [{ type: "text", text: "Rewrite these instructions in plain language for a patient: \"Take the medication with food, once daily, for 14 days. Discontinue and contact the clinic if dizziness occurs.\"" }], model: null, fallbackReason: null, stopReason: null, usage: null, createdAt: "2026-09-11T20:40:05Z" },
-    { id: id(), role: "assistant", content: [{ type: "text", text: "\"Take your medicine with food once a day for 14 days. If you feel dizzy, stop taking it and call the clinic.\"" }], model: "anthropic.claude-sonnet-5", fallbackReason: null, stopReason: "end_turn", usage: { inputTokens: 740, outputTokens: 42, cacheReadTokens: 600, cacheWriteTokens: 0, estimatedUsd: 0.0007 }, createdAt: "2026-09-11T20:40:09Z" },
+    { id: id(), role: "assistant", content: [{ type: "text", text: "\"Take your medicine with food once a day for 14 days. If you feel dizzy, stop taking it and call the clinic.\"" }], model: "anthropic.claude-sonnet-5-5", fallbackReason: null, stopReason: "end_turn", usage: { inputTokens: 740, outputTokens: 42, cacheReadTokens: 600, cacheWriteTokens: 0, estimatedUsd: 0.0007 }, createdAt: "2026-09-11T20:40:09Z" },
   );
   state.conversations.push(c1, c2);
   state.usage.push({ userId: "u-ana", day: today(), turns: 14, inputTokens: 21040, outputTokens: 5120, estimatedUsd: 0.31, byModel: { "anthropic.claude-opus-5-5": { turns: 9, estimatedUsd: 0.22 }, "anthropic.claude-sonnet-5": { turns: 5, estimatedUsd: 0.09 } } });

@@ -33,6 +33,32 @@ export function toProviderModelId(mode: SdkProviderMode, catalogModelId: string)
   return mode === "bedrock" ? catalogModelId : catalogModelId.replace(/^anthropic\./, "");
 }
 
+/** Lets the request carry `thinking.block_binding`, and adds `input_transformations` to responses. */
+export const THINKING_BINDING_BETA = "thinking-binding-controls-2026-08-01";
+
+/**
+ * The request body. Thinking blocks are passed back unchanged, but the history is not strictly
+ * append-only (a new system prompt after a release, edited project instructions or files, a file
+ * that is now read page by page instead of sent whole), and newer accounts get a 400 when a thinking
+ * block no longer matches the conversation before it. "drop_block" tells the API to drop those
+ * blocks and answer without that earlier reasoning. Every model in the catalog accepts it, so the
+ * fallback middleware can re-send the same body.
+ */
+export function buildRequestBody(mode: SdkProviderMode, params: StreamParams): MessageCreateParamsStreaming {
+  const thinking = params.thinking && params.thinking.type !== "adaptive" ? params.thinking : { ...(params.thinking ?? { type: "adaptive" as const }), block_binding: { prefix_mismatch_behavior: "drop_block" as const } };
+  return {
+    model: toProviderModelId(mode, params.model),
+    max_tokens: params.maxTokens,
+    stream: true,
+    output_config: { effort: params.effort },
+    system: params.system,
+    messages: params.messages,
+    thinking,
+    betas: [THINKING_BINDING_BETA],
+    // No temperature/top_p/top_k, no prefill, no forced tool_choice: 400 on the current models.
+  };
+}
+
 export class SdkProvider implements LlmProvider {
   private clients = new Map<string, MessagesClient>();
   private readonly log: SafeLogger;
@@ -73,16 +99,7 @@ export class SdkProvider implements LlmProvider {
 
   stream(params: StreamParams, opts: { signal: AbortSignal; conversationId: string }): StreamHandle {
     const client = this.clientFor(params.model);
-    const body: MessageCreateParamsStreaming = {
-      model: toProviderModelId(this.opts.mode, params.model),
-      max_tokens: params.maxTokens,
-      stream: true,
-      output_config: { effort: params.effort },
-      system: params.system,
-      messages: params.messages,
-      ...(params.thinking ? { thinking: params.thinking } : {}),
-      // Sin temperature/top_p/top_k, sin prefill, sin tool_choice forzado: 400 en Fable 5.1 / Opus 5.
-    };
+    const body = buildRequestBody(this.opts.mode, params);
     const fallbackState = new BetaFallbackState(); // uno por request; el pin durable vive en la conversación
     const s = client.beta.messages.stream(body, { fallbackState, signal: opts.signal });
     return {
