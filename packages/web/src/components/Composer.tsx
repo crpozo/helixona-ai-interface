@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AttachmentLimits, AttachmentMeta } from "../lib/types";
 import { ApiError, createAttachment, uploadFile } from "../lib/api";
-import { attachmentType, formatSize, readsPageByPage } from "../lib/files";
+import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, maxMbFor, readsPageByPage } from "../lib/files";
 import { useFileDrop } from "../lib/useFileDrop";
 import { Icon } from "./Icon";
 
@@ -75,10 +75,10 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
       const contentType = attachmentType(file);
       const entry: Pending = { localId, id: null, name: file.name, contentType: contentType ?? "", size: file.size, progress: 0, status: "uploading", error: null, abort };
       if (!contentType) {
-        setPending((prev) => [...prev, { ...entry, status: "error", error: "Unsupported type. Use PDF, TXT, MD or CSV." }]);
+        setPending((prev) => [...prev, { ...entry, status: "error", error: `Unsupported type. Use ${ATTACH_TYPES_TEXT}.` }]);
         continue;
       }
-      const maxMb = contentType === "application/pdf" ? attachments.maxMb : Math.min(attachments.maxMb, 5);
+      const maxMb = maxMbFor(contentType, attachments.maxMb);
       if (file.size > maxMb * 1048576) {
         setPending((prev) => [...prev, { ...entry, status: "error", error: `Too large (limit ${maxMb} MB per file).` }]);
         continue;
@@ -134,7 +134,7 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
           <div className="drop-card">
             <strong>Drop to attach</strong>
             <span>
-              PDF, TXT, MD or CSV · up to {attachments.maxMb} MB per file · {attachments.maxPerMessage} files per message
+              {ATTACH_TYPES_TEXT} · up to {attachments.maxMb} MB per file · {attachments.maxPerMessage} files per message
             </span>
           </div>
         </div>
@@ -198,14 +198,14 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
         <div className="composer-left">
           {attachments && (
             <>
-              <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv,application/pdf,text/plain,text/markdown,text/csv" multiple hidden onChange={(e) => addFiles(e.target.files)} />
+              <input ref={fileRef} type="file" accept={ATTACH_ACCEPT} multiple hidden onChange={(e) => addFiles(e.target.files)} />
               <button
                 type="button"
                 className="icon-btn composer-attach"
                 onClick={() => fileRef.current?.click()}
                 disabled={!canAttach}
                 aria-label="Attach file"
-                title={`Attach a file: PDF, TXT, MD or CSV up to ${attachments.maxMb} MB, ${attachments.maxPerMessage} files per message`}
+                title={`Attach a file: ${ATTACH_TYPES_TEXT}, up to ${attachments.maxMb} MB, ${attachments.maxPerMessage} files per message`}
               >
                 <Icon name="plus" />
               </button>

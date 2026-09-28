@@ -3,14 +3,16 @@
  * No imports on purpose (also used by /api/me), so it never creates import cycles.
  */
 
-export type AttachmentKind = "pdf" | "text";
+export type AttachmentKind = "pdf" | "text" | "sheet";
 
 /** Accepted MIME types. `maxMb: null` means the configurable MAX_ATTACHMENT_MB applies. */
 export const ALLOWED_TYPES: Record<string, { kind: AttachmentKind; maxMb: number | null }> = {
   "application/pdf": { kind: "pdf", maxMb: null },
   "text/plain": { kind: "text", maxMb: 5 },
   "text/markdown": { kind: "text", maxMb: 5 },
-  "text/csv": { kind: "text", maxMb: 5 },
+  "text/csv": { kind: "sheet", maxMb: 5 },
+  // Excel workbooks: read on the server into rows of text (sheets.ts); compressed, so 10 MB is a lot of rows.
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { kind: "sheet", maxMb: 10 },
 };
 
 const MiB = 1024 * 1024;

@@ -1,3 +1,4 @@
+import type { FileTables } from "./workbook";
 import type {
   Agreement,
   FeedbackStatus,
@@ -154,6 +155,11 @@ export function getConversation(
 
 export function updateConversation(id: string, patch: { title?: string; modelAlias?: string }): Promise<Conversation> {
   return request<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { method: "PATCH", body: patch });
+}
+
+/** The rows of a spreadsheet attached to the conversation, read from the file (for workbooks the assistant prepares). */
+export function getAttachmentTable(conversationId: string, attachmentId: string): Promise<FileTables> {
+  return request<FileTables>(`/api/conversations/${encodeURIComponent(conversationId)}/attachments/${encodeURIComponent(attachmentId)}/table`);
 }
 
 export function renameConversation(id: string, title: string): Promise<Conversation> {

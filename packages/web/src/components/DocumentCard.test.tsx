@@ -7,7 +7,8 @@ vi.mock("../lib/markdownExport", async (importOriginal) => {
 });
 
 import { copyFormatted, downloadBlob, printMarkdownDocument } from "../lib/markdownExport";
-import { DocumentViewerContext } from "../lib/documentViewer";
+import { AttachmentFilesContext, DocumentViewerContext } from "../lib/documentViewer";
+import type { FileTables } from "../lib/workbook";
 import { Markdown } from "./Markdown";
 
 const reply = "Here it is.\n\n```document\n# Intake summary\n\nLead line.\n\n## Findings\n\n- One\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n```\n\nReview before sending.";
@@ -61,6 +62,46 @@ describe("DocumentCard", () => {
     expect((screen.getByRole("button", { name: "Download Draft as Word" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Copy Draft" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "Open Draft" })).toBeNull();
+  });
+
+  it("an Excel workbook copies the attached spreadsheet's rows from the file before it can be opened or downloaded", async () => {
+    const file: FileTables = { name: "Checks.csv", sheets: [{ name: "Sheet1", truncatedRows: 0, rows: [["Patient", "Status"], ["Ana", "Cashed"], ["Luis", "Outstanding"]] }] };
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const resolve = vi.fn(async (name: string) => {
+      await gate;
+      return name === "Checks.csv" ? file : null;
+    });
+    const open = vi.fn();
+    const text = "Here is the workbook.\n\n```document-xlsx\n# Check follow-up\n\n## Original data\n\n{{file: Checks.csv}}\n\n## Cashed\n\n{{file: Checks.csv | rows: 2}}\n```";
+    render(
+      <DocumentViewerContext.Provider value={open}>
+        <AttachmentFilesContext.Provider value={resolve}>
+          <Markdown text={text} documentReady />
+        </AttachmentFilesContext.Provider>
+      </DocumentViewerContext.Provider>,
+    );
+    expect(screen.getByText("Copying the rows from the attached file…")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Download Check follow-up as Excel" }) as HTMLButtonElement).disabled).toBe(true);
+    release();
+    await waitFor(() => expect(screen.getByText("Spreadsheet · XLSX")).toBeTruthy());
+    expect(resolve).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Open Check follow-up" }));
+    expect(open).toHaveBeenCalledWith({ markdown: expect.stringContaining("| Luis | Outstanding |"), format: "xlsx", title: "Check follow-up" });
+    expect((open.mock.calls[0]![0] as { markdown: string }).markdown).not.toContain("{{file:");
+    fireEvent.click(screen.getByRole("button", { name: "Download Check follow-up as Excel" }));
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalledWith(expect.any(Blob), "Check follow-up.xlsx"));
+    expect(screen.getByRole("button", { name: "Download Check follow-up as CSV" })).toBeTruthy();
+    cleanup();
+
+    // A file that is not in the conversation: the card says so, and nothing is made up.
+    render(
+      <AttachmentFilesContext.Provider value={async () => null}>
+        <Markdown text={"```document-xlsx\n# Follow-up\n\n## All\n\n{{file: Payments.xlsx}}\n```"} documentReady />
+      </AttachmentFilesContext.Provider>,
+    );
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain('The rows of "Payments.xlsx" could not be loaded');
   });
 
   it("the requested format leads; a spreadsheet needs a table; a document without a title takes the conversation's", () => {

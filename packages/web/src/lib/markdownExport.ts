@@ -11,17 +11,19 @@ import type { Document as DocxDocument, Paragraph as DocxParagraph, Table as Doc
  * Everything is built in the browser from the reply's Markdown; nothing is sent anywhere or stored.
  *
  * A reply that *is* a document arrives inside a fenced block whose language is `document` (Word),
- * `document-pdf`, `document-txt` or `document-csv`; the interface shows such a block as a file card.
+ * `document-pdf`, `document-xlsx` (an Excel workbook, one tab per section), `document-txt` or
+ * `document-csv`; the interface shows such a block as a file card.
  */
 
-export type DocFormat = "word" | "pdf" | "txt" | "csv";
+export type DocFormat = "word" | "pdf" | "xlsx" | "txt" | "csv";
 
-export const DOC_FORMAT_LABEL: Record<DocFormat, string> = { word: "Document · DOCX", pdf: "Document · PDF", txt: "Text · TXT", csv: "Spreadsheet · CSV" };
+export const DOC_FORMAT_LABEL: Record<DocFormat, string> = { word: "Document · DOCX", pdf: "Document · PDF", xlsx: "Spreadsheet · XLSX", txt: "Text · TXT", csv: "Spreadsheet · CSV" };
 
 /** The format a document fence asks for, from the code element's class name; null for ordinary code. */
 export function documentFormatOf(className: string | undefined): DocFormat | null {
-  const m = /(?:^|\s)language-document(?:-(pdf|txt|csv|word))?(?:\s|$)/.exec(className ?? "");
+  const m = /(?:^|\s)language-document(?:-(pdf|txt|csv|word|xlsx|excel))?(?:\s|$)/.exec(className ?? "");
   if (!m) return null;
+  if (m[1] === "excel") return "xlsx";
   return (m[1] as DocFormat | undefined) ?? "word";
 }
 
@@ -29,6 +31,8 @@ export function documentFormatOf(className: string | undefined): DocFormat | nul
 export function parseMarkdown(text: string): Root {
   return unified().use(remarkParse).use(remarkGfm).parse(text) as Root;
 }
+
+export { expand as expandDocumentNodes, inlineText as inlinePlainText };
 
 /** The blocks of a tree, with any document fence opened up into the content it holds. */
 function expand(nodes: RootContent[]): RootContent[] {

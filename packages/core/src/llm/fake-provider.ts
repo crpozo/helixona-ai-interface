@@ -68,7 +68,9 @@ export class FakeProvider implements LlmProvider {
           finalResolve(final);
           return;
         }
-        const reply = self.replyFor(userText, model);
+        // The newest attached file's title, for "/sheet" (a workbook that references its rows).
+        const titles = (Array.isArray(last?.content) ? last!.content : []).flatMap((b) => ((b as { type?: string; title?: string }).type === "document" ? [(b as { title?: string }).title ?? ""] : []));
+        const reply = self.replyFor(userText, model, titles[titles.length - 1] ?? "");
         // A transcription streams a page at a time, so reading a long file in tests takes seconds, not minutes.
         const parts = /^Transcribe pages? \d/.test(userText) ? reply.split(/(?=\(p\. \d+\))/) : (reply.match(/.{1,12}/gs) ?? []);
         let idx = content.length;
@@ -117,7 +119,11 @@ export class FakeProvider implements LlmProvider {
     };
   }
 
-  private replyFor(userText: string, model: string): string {
+  private replyFor(userText: string, model: string, fileTitle = ""): string {
+    if (/^\/sheet\b/.test(userText)) {
+      const f = fileTitle || "attachment.csv";
+      return `Here is the workbook.\n\n\`\`\`document-xlsx\n# Check follow-up\n\nPrepared from ${f}.\n\n## Original data\n\n{{file: ${f}}}\n\n## Cashed by patient\n\n{{file: ${f} | rows: 2, 4}}\n\n## Never cashed\n\n{{file: ${f} | rows: 3}}\n\n## Summary\n\n| Tab | Rows |\n| --- | --- |\n| Cashed by patient | 2 |\n| Never cashed | 1 |\n\`\`\`\n\nCashed by patient: 2 rows (status "Cashed"). Never cashed: 1 row (status "Outstanding").`;
+    }
     const reading = userText.match(/^Transcribe pages? (\d+)(?:–(\d+))?/);
     if (reading) {
       const from = Number(reading[1]);
@@ -128,10 +134,10 @@ export class FakeProvider implements LlmProvider {
         .join("\n\n");
     }
     const clean = userText.replace(/^\/\S+\s*/, "");
-    const asked = userText.match(/^\/doc(?:-(pdf|csv|txt))?\b/);
+    const asked = userText.match(/^\/doc(?:-(pdf|csv|txt|xlsx))?\b/);
     const natural = /^(?:dame|give me|generate|make|create|hazme|genera)\b.*\b(?:word|pdf|excel|csv|document|documento)\b/i.test(userText);
     if (asked || natural) {
-      const kind = asked ? (asked[1] ?? "word") : /\bpdf\b/i.test(userText) ? "pdf" : /\b(?:excel|csv)\b/i.test(userText) ? "csv" : "word";
+      const kind = asked ? (asked[1] ?? "word") : /\bpdf\b/i.test(userText) ? "pdf" : /\bexcel\b/i.test(userText) ? "xlsx" : /\bcsv\b/i.test(userText) ? "csv" : "word";
       const lang = kind === "word" ? "document" : `document-${kind}`;
       const title = (clean || "Summary").slice(0, 60);
       return `Here is the document.\n\n\`\`\`${lang}\n# ${title}\n\nPrepared by the Helixona Assistant for review.\n\n## Findings\n\n- First finding\n- Second finding\n\n| Item | Value |\n| --- | --- |\n| Sample | 12.3 |\n\`\`\`\n\nReview the names and dates before sending.`;

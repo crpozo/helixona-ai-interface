@@ -2,6 +2,7 @@ import { PDFDocument } from "pdf-lib";
 import type { AttachmentMeta, BetaContentBlockParam } from "@helixona/core";
 import type { AttachmentStore } from "./store.js";
 import { ALLOWED_TYPES, MAX_PDF_PAGES, maxBytesFor, safeName } from "./policy.js";
+import { isSpreadsheet, readTables, SpreadsheetError, tablesForModel, XLSX_TYPE } from "./sheets.js";
 
 /** A problem with an uploaded file that the client can fix (maps to a 400). */
 export class AttachmentProblem extends Error {
@@ -41,6 +42,32 @@ export function documentBlock(meta: AttachmentMeta, bytes: Buffer, cache: boolea
 }
 
 /**
+ * A spreadsheet (CSV or Excel) as the model reads it: every visible sheet as CSV with its Excel row
+ * numbers, so an answer can point to rows and the browser can copy those rows from the file exactly.
+ */
+export async function spreadsheetBlock(meta: AttachmentMeta, bytes: Buffer, cache: boolean): Promise<BetaContentBlockParam> {
+  let block: Record<string, unknown>;
+  try {
+    const tables = await readTables(meta.contentType, bytes);
+    block = {
+      type: "document",
+      title: meta.name,
+      context: `Spreadsheet attached by staff, read by the assistant. The first column, Row, is the Excel row number (row 1 is usually the header); it is not part of the file. Use these numbers to point to rows.`,
+      source: { type: "text", media_type: "text/plain", data: tablesForModel(meta.name, tables) },
+    };
+  } catch (e) {
+    const why = e instanceof SpreadsheetError ? e.message : "It could not be read.";
+    block = { type: "text", text: `[Attachment "${meta.name}" could not be read as a spreadsheet: ${why}]` };
+  }
+  return (cache ? { ...block, cache_control: { type: "ephemeral", ttl: "1h" } } : block) as unknown as BetaContentBlockParam;
+}
+
+/** The block for any attached file sent whole: a PDF, a spreadsheet or a text file. */
+export async function contentBlock(meta: AttachmentMeta, bytes: Buffer, cache: boolean): Promise<BetaContentBlockParam> {
+  return isSpreadsheet(meta.contentType) ? spreadsheetBlock(meta, bytes, cache) : documentBlock(meta, bytes, cache);
+}
+
+/**
  * A PDF that was too large to send whole, as the transcription the server made of it page by page.
  * The context tells the model what it is looking at and asks it to cite pages, so staff can check a
  * value against the original.
@@ -65,11 +92,21 @@ export async function checkUpload(store: AttachmentStore, key: string, id: strin
   const name = safeName(rawName);
   const head = await store.head(key);
   if (!head) throw new AttachmentProblem("attachment_missing", `The file "${name}" was not uploaded`);
-  const contentType = head.contentType && ALLOWED_TYPES[head.contentType] ? head.contentType : name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "text/plain";
+  const lower = name.toLowerCase();
+  const contentType = head.contentType && ALLOWED_TYPES[head.contentType] ? head.contentType : lower.endsWith(".pdf") ? "application/pdf" : lower.endsWith(".xlsx") ? XLSX_TYPE : lower.endsWith(".csv") ? "text/csv" : "text/plain";
   if (head.size > maxBytesFor(contentType, maxAttachmentMb)) throw new AttachmentProblem("file_too_large", `The file "${name}" is too large`);
   if (contentType === "application/pdf") {
     const start = await store.getRange(key, 0, 1023);
     if (!start.includes("%PDF-")) throw new AttachmentProblem("not_a_pdf", `"${name}" is not a PDF file. Open it and save it as PDF, then attach it again.`);
+  }
+  if (contentType === XLSX_TYPE) {
+    // Opened now, so a file that is not a workbook (an old .xls renamed, a damaged file) is a plain error.
+    try {
+      await readTables(XLSX_TYPE, await store.get(key));
+    } catch (e) {
+      const why = e instanceof SpreadsheetError ? e.message : "Save it again as .xlsx or CSV and attach that.";
+      throw new AttachmentProblem("not_a_spreadsheet", `"${name}": ${why}`);
+    }
   }
   return { id, name, contentType, size: head.size, pages: null, key };
 }
@@ -93,7 +130,7 @@ export async function loadDocumentBlocks(store: AttachmentStore, metas: Attachme
   const blocks: BetaContentBlockParam[] = [];
   for (const [i, meta] of metas.entries()) {
     try {
-      blocks.push(documentBlock(meta, await store.get(meta.key), cacheLast && i === metas.length - 1));
+      blocks.push(await contentBlock(meta, await store.get(meta.key), cacheLast && i === metas.length - 1));
     } catch {
       blocks.push({ type: "text", text: `[Attachment "${meta.name}" is no longer available]` });
     }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AttachmentMeta, CatalogModel, Conversation, Project, ProjectVisibility } from "../lib/types";
 import { ApiError, createProjectKnowledge, deleteProjectKnowledge, registerProjectKnowledge, updateProject, uploadFile } from "../lib/api";
-import { attachmentType, formatSize } from "../lib/files";
+import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, maxMbFor } from "../lib/files";
 import { modelLabel } from "../lib/models";
 import { useFileDrop } from "../lib/useFileDrop";
 import { ProjectMembers } from "./ProjectMembers";
@@ -181,10 +181,10 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
     for (const file of Array.from(files)) {
       const contentType = attachmentType(file);
       if (!contentType) {
-        setFileError(`"${file.name}": unsupported type. Use PDF, TXT, MD or CSV.`);
+        setFileError(`"${file.name}": unsupported type. Use ${ATTACH_TYPES_TEXT}.`);
         continue;
       }
-      const cap = contentType === "application/pdf" ? maxMb : Math.min(maxMb, 5);
+      const cap = maxMbFor(contentType, maxMb);
       if (file.size > cap * 1048576) {
         setFileError(`"${file.name}" is larger than ${cap} MB.`);
         continue;
@@ -389,7 +389,7 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
               <div className="drop-overlay" aria-hidden="true">
                 <div className="drop-card">
                   <strong>Drop to add to the project</strong>
-                  <span>PDF up to {maxMb} MB, TXT, MD or CSV</span>
+                  <span>PDF up to {maxMb} MB, Excel, CSV, TXT or MD</span>
                 </div>
               </div>
             )}
@@ -397,7 +397,7 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
               <h2 id="proj-knowledge-h">Knowledge</h2>
               {canUpload && (
                 <>
-                  <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv,application/pdf,text/plain,text/markdown,text/csv" multiple hidden onChange={(e) => addFiles(e.target.files)} />
+                  <input ref={fileRef} type="file" accept={ATTACH_ACCEPT} multiple hidden onChange={(e) => addFiles(e.target.files)} />
                   <button type="button" className="btn btn-small" onClick={() => fileRef.current?.click()}>
                     Add files
                   </button>

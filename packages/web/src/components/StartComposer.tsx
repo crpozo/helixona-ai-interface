@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CatalogModel } from "../lib/types";
 import { ApiError } from "../lib/api";
-import { attachmentType, formatSize, readsPageByPage } from "../lib/files";
+import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, maxMbFor, readsPageByPage } from "../lib/files";
 import { Icon } from "./Icon";
 
 export interface StartAttachmentLimits {
@@ -56,10 +56,10 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
     for (const file of picked.slice(0, room)) {
       const type = attachmentType(file);
       if (!type) {
-        problems.push(`${file.name}: unsupported type. Use PDF, TXT, MD or CSV.`);
+        problems.push(`${file.name}: unsupported type. Use ${ATTACH_TYPES_TEXT}.`);
         continue;
       }
-      const maxMb = type === "application/pdf" ? attachments.maxMb : Math.min(attachments.maxMb, 5);
+      const maxMb = maxMbFor(type, attachments.maxMb);
       if (file.size > maxMb * 1048576) {
         problems.push(`${file.name}: too large (limit ${maxMb} MB).`);
         continue;
@@ -146,14 +146,14 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
         <div className="composer-left">
           {attachments && (
             <>
-              <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv,application/pdf,text/plain,text/markdown,text/csv" multiple hidden onChange={(e) => addFiles(e.target.files)} />
+              <input ref={fileRef} type="file" accept={ATTACH_ACCEPT} multiple hidden onChange={(e) => addFiles(e.target.files)} />
               <button
                 type="button"
                 className="icon-btn composer-attach"
                 onClick={() => fileRef.current?.click()}
                 disabled={busy || files.length >= attachments.maxPerMessage}
                 aria-label="Attach file"
-                title={`Attach a file: PDF, TXT, MD or CSV up to ${attachments.maxMb} MB, ${attachments.maxPerMessage} files per message`}
+                title={`Attach a file: ${ATTACH_TYPES_TEXT}, up to ${attachments.maxMb} MB, ${attachments.maxPerMessage} files per message`}
               >
                 <Icon name="plus" />
               </button>

@@ -299,7 +299,8 @@ deleted, and never kept on the desktop, in email or in a personal drive.
 ## Large and many attachments
 
 Chart prep often means ten or more files per patient, some of them hundreds of pages. A message can
-carry up to 20 files, each up to 100 MB and 1,000 pages (PDF, TXT, MD or CSV; text files up to 5 MB).
+carry up to 20 files, each up to 100 MB and 1,000 pages (PDF, Excel, CSV, TXT or MD; Excel files up to
+10 MB, text files up to 5 MB).
 Project knowledge files keep their own limits (20 MB and 600 pages per file, 18 MB per project),
 because they are sent whole with every message in the project.
 
@@ -324,6 +325,28 @@ The audit log records `attachments_read` with the number of files, pages and par
 the cost, never file names or content. The cost of reading counts toward the person's daily quota
 (roughly $1 to $2 per 100 scanned pages with Claude Sonnet 5.5). The API task has 1 vCPU and 4 GB of
 memory so that large files can be opened in memory; nothing is written to the container's disk.
+
+## Spreadsheets
+
+Staff can attach Excel workbooks (.xlsx) and CSV files, and ask for an Excel workbook back, for
+example "the whole spreadsheet with the original data, plus a tab of the checks the patients
+cashed and a tab of the checks never cashed".
+
+- **Reading an attachment.** The server reads the stored values of each visible sheet. It never
+  runs formulas or macros, and it caps the number of rows and the size of the file. The model sees
+  each row with its Excel row number. Hidden sheets are left out.
+- **Rows are never retyped.** For rows that come from the attachment, the model writes a reference
+  such as `{{file: Checks.xlsx | rows: 2-5, 9}}` instead of the values. The browser fills in those
+  rows from the file itself, so names, check numbers, amounts and dates are the original ones. The
+  model only decides which rows go in each tab, and the answer states the rule and the row counts
+  so staff can check them.
+- **Building the workbook.** The browser builds the .xlsx itself, with one tab per section, a
+  frozen header row, filters, amounts as numbers and identifiers such as check numbers kept as
+  text. Nothing is stored or sent anywhere. A downloaded workbook contains PHI, so the policies
+  about downloaded files apply.
+- **Access.** The browser fetches the rows from the conversation's own attachment, with the same
+  access rules as the conversation. Each fetch is audited as `attachment_opened` with the numbers
+  of sheets and rows, never the content.
 
 ## Models
 

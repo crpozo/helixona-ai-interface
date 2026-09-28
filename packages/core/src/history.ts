@@ -39,5 +39,7 @@ export function estimateTokens(text: string): number {
 /** Rough token estimate for an attachment: a PDF page costs about 2,000 tokens (text plus layout); text is ~3.5 chars/token. */
 export function estimateAttachmentTokens(a: AttachmentMeta): number {
   if (a.contentType === "application/pdf") return a.pages ? a.pages * 2000 : Math.ceil(a.size / 350);
+  // An Excel workbook is compressed: its text is roughly ten times the file size.
+  if (a.contentType.includes("spreadsheetml")) return Math.ceil((a.size * 10) / 3.5);
   return Math.ceil(a.size / 3.5);
 }

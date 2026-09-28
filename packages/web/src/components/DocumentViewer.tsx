@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { downloadBlob, markdownToCsv, markdownToDocxBlob, markdownToHtml, markdownToPlain, printMarkdownDocument, safeFileName, type DocFormat } from "../lib/markdownExport";
+import { markdownToHtml, type DocFormat } from "../lib/markdownExport";
+import { deliverDocument } from "../lib/deliver";
 import type { OpenDocument } from "../lib/documentViewer";
 import { Icon } from "./Icon";
 
@@ -10,7 +11,7 @@ export const PAGE_MARGIN = 96;
 /** The letterhead line at the top of every page. */
 const HEADER_HEIGHT = 56;
 const PAGE_GAP = 24;
-const KIND: Record<DocFormat, string> = { word: "DOCX", pdf: "PDF", txt: "TXT", csv: "CSV" };
+const KIND: Record<DocFormat, string> = { word: "DOCX", pdf: "PDF", xlsx: "XLSX", txt: "TXT", csv: "CSV" };
 
 interface Props {
   doc: OpenDocument;
@@ -96,12 +97,7 @@ export function DocumentViewer({ doc, expanded, onToggleExpand, onClose }: Props
   const download = async () => {
     setBusy(true);
     try {
-      const base = safeFileName(doc.title);
-      const csv = doc.format === "csv" ? markdownToCsv(doc.markdown) : null;
-      if (doc.format === "pdf") printMarkdownDocument(doc.markdown, doc.title);
-      else if (doc.format === "txt") downloadBlob(new Blob([markdownToPlain(doc.markdown)], { type: "text/plain;charset=utf-8" }), `${base}.txt`);
-      else if (csv !== null) downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `${base}.csv`);
-      else downloadBlob(await markdownToDocxBlob(doc.markdown), `${base}.docx`);
+      await deliverDocument(doc.markdown, doc.format, doc.title).catch(() => deliverDocument(doc.markdown, "word", doc.title));
     } finally {
       setBusy(false);
     }

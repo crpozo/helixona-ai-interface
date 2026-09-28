@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ChatState } from "../lib/chatReducer";
 import type { AttachmentMeta, Conversation, Me } from "../lib/types";
 import { modelLabel } from "../lib/models";
+import { getAttachmentTable } from "../lib/api";
+import { AttachmentFilesContext } from "../lib/documentViewer";
+import { isSpreadsheetType } from "../lib/files";
+import { fileNameMatches, type FileTables, type ResolveFile } from "../lib/workbook";
 import { Composer } from "./Composer";
 import { MessageBubble } from "./MessageBubble";
 
@@ -71,6 +75,30 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
     if (followRef.current) scrollToBottom();
   }, [count, lastText, lastFiles, state.streaming, scrollToBottom]);
 
+  // Spreadsheets attached in this conversation, for workbooks that copy their rows ({{file: …}}). The
+  // lookup keeps one identity per conversation, so memoized messages do not re-render.
+  const files = useMemo(() => state.messages.flatMap((m) => m.attachments).filter((a) => isSpreadsheetType(a.contentType)), [state.messages]);
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const tablesRef = useRef(new Map<string, Promise<FileTables | null>>());
+  useEffect(() => {
+    tablesRef.current = new Map();
+  }, [conversation.id]);
+  const resolveFile = useCallback<ResolveFile>(
+    (name) => {
+      const latest = [...filesRef.current].reverse();
+      const meta = latest.find((f) => f.name === name) ?? latest.find((f) => fileNameMatches(f.name, name));
+      if (!meta) return Promise.resolve(null);
+      let tables = tablesRef.current.get(meta.id);
+      if (!tables) {
+        tables = getAttachmentTable(conversation.id, meta.id).catch(() => null);
+        tablesRef.current.set(meta.id, tables);
+      }
+      return tables;
+    },
+    [conversation.id],
+  );
+
   const activeModel = conversation.pinnedModel ?? conversation.modelId;
 
   // Model picker at the bottom of the chat, next to the composer (same place as Claude.ai).
@@ -100,6 +128,7 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
   );
 
   return (
+    <AttachmentFilesContext.Provider value={resolveFile}>
     <section className="chat" aria-label="Conversation" ref={chatRef}>
       <header className="chat-head">
         <h1 className="chat-title" title={conversation.title}>
@@ -151,5 +180,6 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
         dropZone={chatRef}
       />
     </section>
+    </AttachmentFilesContext.Provider>
   );
 }

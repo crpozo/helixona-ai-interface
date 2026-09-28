@@ -3,7 +3,7 @@ import { z } from "zod";
 import { currentModelId, estimateAttachmentTokens, estimateTokens, modelByAlias, ulid, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type TurnEvent, type UsageSummary } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import { attachmentKey, INLINE, MAX_PDF_PAGES, READ } from "../attachments/policy.js";
-import { AttachmentProblem, checkUpload, documentBlock, inspectPdf, loadDocumentBlocks, readingBlock, type PdfInfo } from "../attachments/documents.js";
+import { AttachmentProblem, checkUpload, contentBlock, inspectPdf, loadDocumentBlocks, readingBlock, type PdfInfo } from "../attachments/documents.js";
 import { planDelivery } from "../attachments/planner.js";
 import { DocumentReader, Semaphore, type FileReading } from "../attachments/reader.js";
 import { locateConversation } from "./conversations.js";
@@ -44,7 +44,7 @@ export interface FileProgress {
 /** Tokens a document sent whole takes in the request (a PDF page is text plus its image). */
 function inlineTokens(meta: AttachmentMeta): number {
   if (meta.contentType === "application/pdf") return (meta.pages ?? Math.max(1, Math.ceil(meta.size / 100_000))) * INLINE.tokensPerPage;
-  return Math.ceil(meta.size / 3.5);
+  return estimateAttachmentTokens(meta);
 }
 
 function isAbort(e: unknown): boolean {
@@ -297,7 +297,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
             continue;
           }
           try {
-            blocks.push(documentBlock(meta, await store!.get(meta.key), cache));
+            blocks.push(await contentBlock(meta, await store!.get(meta.key), cache));
           } catch {
             blocks.push({ type: "text", text: `[Attachment "${meta.name}" is no longer available]` });
           }

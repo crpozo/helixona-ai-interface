@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import JSZip from "jszip";
 import { expect, test } from "@playwright/test";
 import { devLogin, samplePdf, skipTraining, uniqueUser, watchErrors } from "./helpers";
 
@@ -218,6 +219,54 @@ test.describe("Conversations", () => {
     await expect(page.locator(".msg-user").nth(1).locator(".attach-chip")).toContainText("EOB March.pdf");
     await expect(page.locator(".msg-assistant")).toHaveCount(2);
     await expect(page.locator(".composer-pending .attach-chip")).toHaveCount(0);
+    errs.expectNone();
+  });
+
+  test("check follow-up: an Excel workbook with the original rows and one tab per list, copied from the attached file", async ({ page }) => {
+    const errs = watchErrors(page);
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByPlaceholder("Write a message…").fill("Start");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.locator(".msg-assistant")).toHaveCount(1);
+    await expect(page.locator(".composer-stop")).toHaveCount(0);
+
+    const input = page.locator(".composer input[type=file]");
+    expect(await input.getAttribute("accept")).toContain(".xlsx");
+    const csv = 'Patient,Check #,Amount,Status\nAna Pérez,000981,"$1,234.50",Cashed\nLuis Romero,100234,$20.00,Outstanding\nMia Lee,100235,$15.00,Cashed\n';
+    await input.setInputFiles({ name: "Checks.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+    await expect(page.locator(".composer-pending .attach-progress")).toHaveCount(0);
+    await page.locator("#composer-text").fill("/sheet The whole spreadsheet, plus a tab for cashed checks and one for checks never cashed");
+    await page.keyboard.press("Enter");
+
+    const card = page.locator(".msg-assistant").nth(1).locator(".doc-card");
+    await expect(card.locator(".doc-kind")).toHaveText("Spreadsheet · XLSX");
+    await expect(card.locator(".doc-title")).toHaveText("Check follow-up");
+    const [download] = await Promise.all([page.waitForEvent("download"), card.getByRole("button", { name: "Download Check follow-up as Excel" }).click()]);
+    expect(download.suggestedFilename()).toBe("Check follow-up.xlsx");
+    const zip = await JSZip.loadAsync(fs.readFileSync((await download.path())!));
+    const book = await zip.file("xl/workbook.xml")!.async("string");
+    expect([...book.matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1])).toEqual(["Original data", "Cashed by patient", "Never cashed", "Summary"]);
+    const sheet = (n: number) => zip.file(`xl/worksheets/sheet${n}.xml`)!.async("string");
+    const all = await sheet(1);
+    // The original rows, exactly: the check number keeps its zeros, the amount is a number formatted as money.
+    expect(all).toContain("Prepared from Checks.csv.");
+    expect(all).toContain(">Ana Pérez<");
+    expect(all).toContain(">000981<");
+    expect(all).toContain("<v>1234.5</v>");
+    expect(all).toContain(">Luis Romero<");
+    const cashed = await sheet(2);
+    expect(cashed).toContain(">Ana Pérez<");
+    expect(cashed).toContain(">Mia Lee<");
+    expect(cashed).not.toContain("Luis Romero");
+    const never = await sheet(3);
+    expect(never).toContain(">Luis Romero<");
+    expect(never).not.toContain("Mia Lee");
+
+    // The preview shows the same rows.
+    await card.getByRole("button", { name: "Open Check follow-up" }).click();
+    const viewer = page.locator(".doc-viewer");
+    await expect(viewer.locator(".doc-viewer-title")).toContainText("XLSX");
+    await expect(viewer.locator(".doc-page table").first()).toContainText("Luis Romero");
     errs.expectNone();
   });
 

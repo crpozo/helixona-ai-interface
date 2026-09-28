@@ -23,7 +23,7 @@ const children = [
     ["Document", "Security Risk Analysis, 45 CFR 164.308(a)(1)(ii)(A)"],
     ["System", "Helixona Assistant: internal AI assistant for clinic staff"],
     ["Covered entity", "Helixona, Irvine, California"],
-    ["Version and date", "1.4, September 28, 2026"],
+    ["Version and date", "1.5, September 28, 2026"],
     ["Prepared by", "[Name], Security Officer"],
     ["Next review", "September 2027, or after any major change to the system"],
   ]),
@@ -40,7 +40,7 @@ const children = [
     ["API service", "Authentication, conversation storage, calls to the AI model, audit logging", "Amazon ECS Fargate containers in private subnets behind an Application Load Balancer"],
     ["Identity", "User accounts, passwords, authenticator enrollment, roles (staff, administrator)", "Amazon Cognito user pool, MFA required"],
     ["Database", "Conversations, messages, projects, sessions, audit events, usage", "Amazon DynamoDB, encrypted with the clinic's KMS key, point-in-time recovery"],
-    ["File storage", "Uploaded PDF, TXT, MD and CSV files; text transcriptions of long PDFs; project knowledge files", "Amazon S3, encrypted with the clinic's KMS key, versioned, public access blocked"],
+    ["File storage", "Uploaded PDF, Excel, CSV, TXT and MD files; text transcriptions of long PDFs; project knowledge files", "Amazon S3, encrypted with the clinic's KMS key, versioned, public access blocked"],
     ["Secrets", "API key, session secret, identity client secret", "AWS Secrets Manager, KMS-encrypted"],
     ["AI model", "Generates responses from the conversation and attached documents", "Anthropic Claude API (Sonnet 5.5, Opus 5.5, Fable 5.1; the previous Sonnet and Opus only as fallbacks) under the clinic's BAA with HIPAA readiness enabled"],
     ["Monitoring", "Application logs without content, CloudTrail, WAF logs, alarms, backups", "Amazon CloudWatch, AWS CloudTrail, AWS Backup"],
@@ -114,7 +114,7 @@ const children = [
   ], [2000, 3000, 2400, 1960]),
   spacer(),
   h1("Appendix C. Change history"),
-  table(["Version", "Date", "Change", "Author"], [["1.0", "September 16, 2026", "Initial analysis", "[Name]"], ["1.1", "September 22, 2026", "AWS Business Associate Addendum accepted; remediation item closed", "[Name]"], ["1.2", "September 22, 2026", "Opus model updated to Claude Opus 5.5 (same agreement and safeguards)", "[Name]"], ["1.3", "September 28, 2026", "Long PDFs read page by page: text transcriptions stored with the file under the same encryption and retention; up to 20 files and 100 MB per file", "[Name]"], ["1.4", "September 28, 2026", "Sonnet model updated to Claude Sonnet 5.5; existing conversations move to the newest model of their line (same agreement and safeguards)", "[Name]"]], [1200, 2200, 4200, 1760]),
+  table(["Version", "Date", "Change", "Author"], [["1.0", "September 16, 2026", "Initial analysis", "[Name]"], ["1.1", "September 22, 2026", "AWS Business Associate Addendum accepted; remediation item closed", "[Name]"], ["1.2", "September 22, 2026", "Opus model updated to Claude Opus 5.5 (same agreement and safeguards)", "[Name]"], ["1.3", "September 28, 2026", "Long PDFs read page by page: text transcriptions stored with the file under the same encryption and retention; up to 20 files and 100 MB per file", "[Name]"], ["1.4", "September 28, 2026", "Sonnet model updated to Claude Sonnet 5.5; existing conversations move to the newest model of their line (same agreement and safeguards)", "[Name]"], ["1.5", "September 28, 2026", "Excel workbooks: .xlsx attachments read on the server (values only); workbooks built in the browser from the attachment's original rows, each fetch audited without content", "[Name]"]], [1200, 2200, 4200, 1760]),
 ];
 module.exports = {
   slug: "risk-analysis",

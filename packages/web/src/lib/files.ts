@@ -1,11 +1,29 @@
 /** File helpers shared by the composer and the message bubbles. */
 
+export const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
 const EXT_TYPES: Record<string, string> = {
   pdf: "application/pdf",
+  xlsx: XLSX_TYPE,
+  csv: "text/csv",
   txt: "text/plain",
   md: "text/markdown",
-  csv: "text/csv",
 };
+
+/** What the file pickers offer. */
+export const ATTACH_ACCEPT = `.pdf,.xlsx,.csv,.txt,.md,application/pdf,${XLSX_TYPE},text/csv,text/plain,text/markdown`;
+export const ATTACH_TYPES_TEXT = "PDF, Excel, CSV, TXT or MD";
+
+/** Size cap for a type, as on the server: PDFs up to the configured limit, Excel 10 MB, text files 5 MB. */
+export function maxMbFor(contentType: string, maxMb: number): number {
+  if (contentType === "application/pdf") return maxMb;
+  return Math.min(maxMb, contentType === XLSX_TYPE ? 10 : 5);
+}
+
+/** Spreadsheets the assistant can copy rows from. */
+export function isSpreadsheetType(contentType: string): boolean {
+  return contentType === XLSX_TYPE || contentType === "text/csv";
+}
 
 /** MIME type the API accepts for this file, derived from the extension first (browsers often send blanks). */
 export function attachmentType(file: File): string | null {
