@@ -154,7 +154,7 @@ export function ImportPage({ me, onBack, onImported }: Props) {
             Download the <strong>.zip</strong> from that email. It holds <code>conversations.json</code>, <code>projects.json</code> and <code>users.json</code>.
           </li>
           <li>
-            Memory: if the zip has no memory file, open <strong>Settings → Capabilities → Memory</strong> in Claude.ai, copy the memory text, and paste it below.
+            Memory: if the zip has no memory file, open <strong>Settings → Memory</strong> in Claude.ai (the Memory entry in the left menu), copy the memory text shown there, and paste it below.
           </li>
         </ol>
         <p className="muted small">Attachments are not in the export; what Claude extracted from them (the text) is, and comes over with the message.</p>

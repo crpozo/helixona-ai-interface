@@ -377,7 +377,7 @@ in the browser, shows what it holds, and imports it in batches over TLS to the c
   nothing. Imported conversations follow the same retention as every conversation (30 days).
 - **Projects** become private projects: instructions from the Claude project's prompt, documents as
   Markdown knowledge files in the attachments bucket (encrypted with the clinic's key).
-- **Memory** (from the export, or pasted from Claude.ai → Settings → Capabilities → Memory)
+- **Memory** (from the export, or pasted from Claude.ai → Settings → Memory)
   becomes the instructions of the "Imported from Claude" project, so conversations there start
   with that context; staff can edit or delete it like any project instructions.
 
