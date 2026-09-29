@@ -430,8 +430,8 @@ export function adminSendTestBugReport(): Promise<{ ok: true }> {
 export interface ImportedProjectResult { sourceId: string; id: string; docs: number; skipped: boolean }
 export interface ImportedConversationResult { sourceId: string; id: string | null; status: "imported" | "skipped" | "empty" }
 
-export function importClaudeDestination(memory: string): Promise<{ projectId: string }> {
-  return request("/api/import/claude/destination", { method: "POST", body: { memory } });
+export function importClaudeDestination(memory: string, memoryFiles = ""): Promise<{ projectId: string }> {
+  return request("/api/import/claude/destination", { method: "POST", body: { memory, memoryFiles } });
 }
 
 export function importClaudeProjects(projects: ExportProject[]): Promise<{ projects: ImportedProjectResult[] }> {

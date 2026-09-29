@@ -100,10 +100,26 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
     return { projects: created };
   });
 
-  /** The project the chats land in when they belong to no Claude project; the memory becomes its instructions. */
-  app.post("/api/import/claude/destination", { preHandler: requireAuth() }, async (req, reply) => {
+  /** A Markdown knowledge file in a project, replacing one with the same name (a re-run of the import). */
+  async function putKnowledgeFile(p: Project, name: string, text: string): Promise<Project> {
+    if (!deps.attachments) return p;
+    const attachmentId = ulid();
+    const bytes = Buffer.from(text, "utf8");
+    const key = projectKnowledgeKey(p.id, attachmentId, name);
+    await deps.attachments.put(key, bytes, "text/markdown");
+    const stale = p.knowledge.filter((k) => k.name === name);
+    for (const k of stale) await deps.attachments.deletePrefix(`projects/${p.id}/${k.id}/`).catch(() => undefined);
+    const knowledge = [...p.knowledge.filter((k) => k.name !== name), { id: attachmentId, name, contentType: "text/markdown", size: bytes.length, pages: null, key }];
+    return (await deps.repos.projects.update(p.id, { knowledge, updatedAt: now().toISOString() })) ?? p;
+  }
+
+  /**
+   * The project the chats land in: the memory becomes its instructions, and the files of Claude's
+   * memory directory (areas, people, topics) one knowledge file.
+   */
+  app.post("/api/import/claude/destination", { preHandler: requireAuth(), bodyLimit: IMPORT_BODY_LIMIT }, async (req, reply) => {
     if (!(await requireTraining(deps, req, reply))) return;
-    const body = z.object({ memory: z.string().max(20_000).default("") }).safeParse(req.body);
+    const body = z.object({ memory: z.string().max(20_000).default(""), memoryFiles: z.string().max(MAX_DOC_CHARS).default("") }).safeParse(req.body);
     if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
     const s = req.session!;
     const t = now().toISOString();
@@ -117,7 +133,9 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
       p = { id: ulid(), ownerId: s.userId, ownerName: s.name, name: "Imported from Claude", description: "Chats brought over from the Claude.ai account, with its memory as the instructions.", instructions, visibility: "private", members: [], knowledge: [], createdAt: t, updatedAt: t };
       await deps.repos.projects.create(p);
     }
-    await audit(deps, req, { action: "import_claude_destination", meta: { projectId: p.id, memoryChars: memory.length } });
+    const files = body.data.memoryFiles.trim();
+    if (files) p = await putKnowledgeFile(p, "Claude memory files.md", `# Claude memory files\n\nThe files of Claude's memory directory, brought over from the Claude.ai account.\n\n${files}`);
+    await audit(deps, req, { action: "import_claude_destination", meta: { projectId: p.id, memoryChars: memory.length, memoryFilesChars: files.length } });
     return { projectId: p.id };
   });
 

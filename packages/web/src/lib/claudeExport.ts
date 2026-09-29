@@ -27,11 +27,19 @@ export interface ExportProject {
   instructions: string;
   docs: Array<{ name: string; text: string }>;
 }
+/** A file of Claude's memory directory (/areas, /people, /topics, /projects/<uuid>). */
+export interface MemoryFile {
+  path: string;
+  text: string;
+}
 export interface ClaudeExport {
   conversations: ExportConversation[];
   projects: ExportProject[];
-  /** The memory text found in the export, or "" (it can be pasted instead). */
+  /** The memory text found in the export (Claude's summary across conversations), or "" (it can be pasted instead). */
   memory: string;
+  /** Claude's memory for each project, by the project's Claude id. */
+  projectMemories: Record<string, string>;
+  memoryFiles: MemoryFile[];
   /** What was read, for the summary ("conversations.json, projects.json"). */
   files: string[];
   /** Files in the export that were not used (frames, metadata), so the person knows nothing was missed by accident. */
@@ -108,6 +116,42 @@ export function parseProjects(json: unknown): ExportProject[] {
   });
 }
 
+export interface ParsedMemory {
+  memory: string;
+  projectMemories: Record<string, string>;
+  memoryFiles: MemoryFile[];
+}
+
+/**
+ * The memory file of the newer export: Claude's summary across conversations, a summary per
+ * project, and the files of its memory directory. Older or unknown shapes fall back to "any text".
+ */
+export function parseMemoryFile(text: string): ParsedMemory {
+  const t = text.trim();
+  const out: ParsedMemory = { memory: "", projectMemories: {}, memoryFiles: [] };
+  if (!t) return out;
+  if (/^\{/.test(t)) {
+    try {
+      const o = obj(JSON.parse(t));
+      if (o && (o.conversations_memory !== undefined || o.project_memories !== undefined || o.memory_files !== undefined)) {
+        out.memory = str(o.conversations_memory).trim();
+        for (const [uuid, v] of Object.entries(obj(o.project_memories) ?? {})) if (str(v).trim()) out.projectMemories[uuid] = str(v).trim();
+        out.memoryFiles = arr(o.memory_files).flatMap((rf) => {
+          const f = obj(rf);
+          const path = f ? str(f.path) : "";
+          const content = f ? str(f.content) : "";
+          return path && content.trim() ? [{ path, text: content }] : [];
+        });
+        return out;
+      }
+    } catch {
+      // not that shape: fall through
+    }
+  }
+  out.memory = parseMemory(t);
+  return out;
+}
+
 /** Memory can come as plain text or as JSON of strings; anything that is text is kept, in order. */
 export function parseMemory(text: string): string {
   const t = text.trim();
@@ -171,7 +215,7 @@ export interface ReadOptions {
  */
 export async function readClaudeExport(files: File[], opts: ReadOptions = {}): Promise<ClaudeExport> {
   const prev = opts.previous ?? null;
-  const result: ClaudeExport = { conversations: [...(prev?.conversations ?? [])], projects: [...(prev?.projects ?? [])], memory: prev?.memory ?? "", files: [...(prev?.files ?? [])], ignored: [...(prev?.ignored ?? [])] };
+  const result: ClaudeExport = { conversations: [...(prev?.conversations ?? [])], projects: [...(prev?.projects ?? [])], memory: prev?.memory ?? "", projectMemories: { ...(prev?.projectMemories ?? {}) }, memoryFiles: [...(prev?.memoryFiles ?? [])], files: [...(prev?.files ?? [])], ignored: [...(prev?.ignored ?? [])] };
   const entries: Array<{ name: string; zip: string | null; text: () => Promise<string> }> = [];
   for (const f of files) {
     if (/\.zip$/i.test(f.name) || f.type === "application/zip" || f.type === "application/x-zip-compressed") {
@@ -203,8 +247,10 @@ export async function readClaudeExport(files: File[], opts: ReadOptions = {}): P
         result.files.push(label);
         added++;
       } else if (category === "memory") {
-        const m = parseMemory(await e.text());
-        if (m && !result.memory.includes(m)) result.memory = result.memory ? `${result.memory}\n\n${m}` : m;
+        const m = parseMemoryFile(await e.text());
+        if (m.memory && !result.memory.includes(m.memory)) result.memory = result.memory ? `${result.memory}\n\n${m.memory}` : m.memory;
+        Object.assign(result.projectMemories, m.projectMemories);
+        for (const f of m.memoryFiles) if (!result.memoryFiles.some((x) => x.path === f.path)) result.memoryFiles.push(f);
         result.files.push(label);
         added++;
       } else if (category === "manifest") {
@@ -238,4 +284,15 @@ export function batches<T extends { messages: Array<{ text: string; attachments:
   }
   if (current.length > 0) out.push(current);
   return out;
+}
+
+/** The Claude project a memory file belongs to (/projects/<uuid>/…), or null for the general ones. */
+export function memoryFileProject(path: string): string | null {
+  const m = /^\/?projects\/([^/]+)\//.exec(path);
+  return m ? m[1]! : null;
+}
+
+/** One Markdown document out of several memory files, each under its path. */
+export function memoryFilesDocument(files: MemoryFile[]): string {
+  return files.map((f) => `## ${f.path}\n\n${f.text.trim()}`).join("\n\n");
 }

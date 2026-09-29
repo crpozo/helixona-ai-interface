@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { Me } from "../lib/types";
 import { ApiError, importClaudeConversations, importClaudeDestination, importClaudeProjects } from "../lib/api";
-import { batches, readClaudeExport, type ClaudeExport } from "../lib/claudeExport";
+import { batches, memoryFileProject, memoryFilesDocument, readClaudeExport, type ClaudeExport, type ExportProject } from "../lib/claudeExport";
 import { useFileDrop } from "../lib/useFileDrop";
 
 interface Props {
@@ -24,6 +24,7 @@ interface Outcome {
   projectsSkipped: number;
   docs: number;
   memory: boolean;
+  memoryFiles: number;
 }
 
 const errMsg = (e: unknown) => (e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Something went wrong.");
@@ -68,14 +69,24 @@ export function ImportPage({ me, onBack, onImported }: Props) {
   const run = async () => {
     if (!data) return;
     setError(null);
-    const projects = includeProjects ? data.projects : [];
+    // Each Claude project gets its memory (the summary and its memory files) as a knowledge file.
+    const projects: ExportProject[] = includeProjects
+      ? data.projects.map((p) => {
+          const own = data.memoryFiles.filter((f) => memoryFileProject(f.path) === p.sourceId);
+          const summary = data.projectMemories[p.sourceId] ?? "";
+          if (!summary && own.length === 0) return p;
+          const text = [`# Claude memory for this project`, summary, own.length > 0 ? memoryFilesDocument(own) : ""].filter(Boolean).join("\n\n");
+          return { ...p, docs: [...p.docs.filter((d) => d.name !== "Claude memory.md"), { name: "Claude memory.md", text }] };
+        })
+      : data.projects;
+    const generalFiles = data.memoryFiles.filter((f) => memoryFileProject(f.path) === null);
     const chats = data.conversations.filter((c) => c.messages.length > 0);
     const total = projects.length + chats.length + 1;
     let done = 0;
-    const result: Outcome = { conversations: 0, skipped: 0, empty: data.conversations.length - chats.length, projects: 0, projectsSkipped: 0, docs: 0, memory: memory.trim().length > 0 };
+    const result: Outcome = { conversations: 0, skipped: 0, empty: data.conversations.length - chats.length, projects: 0, projectsSkipped: 0, docs: 0, memory: memory.trim().length > 0, memoryFiles: data.memoryFiles.length };
     setProgress({ done, total, step: "Preparing the destination project…" });
     try {
-      const { projectId: destination } = await importClaudeDestination(memory.trim());
+      const { projectId: destination } = await importClaudeDestination(memory.trim(), generalFiles.length > 0 ? memoryFilesDocument(generalFiles) : "");
       done++;
       const projectIds = new Map<string, string>();
       if (projects.length > 0) {
@@ -191,8 +202,16 @@ export function ImportPage({ me, onBack, onImported }: Props) {
               <li>
                 <strong>{n(data.projects.length)}</strong> projects with {n(data.projects.reduce((k, p) => k + p.docs.length, 0))} documents
               </li>
-              <li>Memory: {data.memory ? "found in the export" : "not in the export (paste it below if you want it)"}</li>
+              <li>
+                Memory: {data.memory ? "found in the export" : "not in the export (paste it below if you want it)"}
+                {Object.keys(data.projectMemories).length > 0 || data.memoryFiles.length > 0
+                  ? `; ${n(Object.keys(data.projectMemories).length)} project memories and ${n(data.memoryFiles.length)} memory files (areas, people, topics), which become files in the projects`
+                  : ""}
+              </li>
             </ul>
+            {data.conversations.length > 0 && data.conversations.every((c) => !c.projectSourceId) && data.projects.length > 0 && (
+              <p className="muted small">This export does not say which chats belonged to which project, so every chat lands in "Imported from Claude". The projects come over with their instructions, documents and memory, ready for new chats.</p>
+            )}
             {data.ignored.length > 0 && (
               <p className="muted small">
                 Not used: {data.ignored.slice(0, 6).join(", ")}
@@ -244,7 +263,8 @@ export function ImportPage({ me, onBack, onImported }: Props) {
               {outcome.skipped > 0 ? `, ${n(outcome.skipped)} already here (skipped)` : ""}
               {outcome.empty > 0 ? `, ${n(outcome.empty)} empty` : ""}
               {outcome.projects > 0 || outcome.projectsSkipped > 0 ? `; ${n(outcome.projects)} projects with ${n(outcome.docs)} documents${outcome.projectsSkipped > 0 ? ` (${n(outcome.projectsSkipped)} already here)` : ""}` : ""}
-              {outcome.memory ? "; memory saved as the project's instructions" : ""}.
+              {outcome.memory ? "; memory saved as the project's instructions" : ""}
+              {outcome.memoryFiles > 0 ? `; ${n(outcome.memoryFiles)} memory files saved as project files` : ""}.
             </p>
             <p className="muted small">The chats are in the sidebar; the ones from Claude projects are inside those projects.</p>
           </div>

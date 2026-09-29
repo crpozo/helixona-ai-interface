@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
-import { batches, parseConversations, parseMemory, parseProjects, readClaudeExport } from "./claudeExport";
+import { batches, memoryFileProject, memoryFilesDocument, parseConversations, parseMemory, parseMemoryFile, parseProjects, readClaudeExport } from "./claudeExport";
 
 const conversations = [
   {
@@ -39,6 +39,13 @@ describe("Reading a Claude.ai export", () => {
     expect(parseProjects(projects)).toEqual([{ sourceId: "p-1", name: "Chart prep", description: "Prep", instructions: "Be brief.", docs: [{ name: "Ranges.md", text: "# Ranges" }] }]);
     expect(parseMemory('{"memories":[{"uuid":"1","content":"Works at Helixona"},{"content":"Prefers tables"}]}')).toBe("Works at Helixona\nPrefers tables");
     expect(parseMemory("Plain memory text")).toBe("Plain memory text");
+    // The newer export's memory file: a summary, one per project, and the memory directory.
+    const structured = parseMemoryFile(JSON.stringify({ conversations_memory: "Works at Helixona.", project_memories: { "p-1": "Chart prep notes", "p-2": "  " }, memory_files: [{ path: "/areas/billing.md", content: "Billing notes", updated_at: "x" }, { path: "/projects/p-1/plan.md", content: "Plan" }, { path: "/topics/empty.md", content: " " }], account_uuid: "a" }));
+    expect(structured).toEqual({ memory: "Works at Helixona.", projectMemories: { "p-1": "Chart prep notes" }, memoryFiles: [{ path: "/areas/billing.md", text: "Billing notes" }, { path: "/projects/p-1/plan.md", text: "Plan" }] });
+    expect(parseMemoryFile("Plain").memory).toBe("Plain");
+    expect(memoryFileProject("/projects/p-1/plan.md")).toBe("p-1");
+    expect(memoryFileProject("/areas/billing.md")).toBeNull();
+    expect(memoryFilesDocument(structured.memoryFiles)).toBe("## /areas/billing.md\n\nBilling notes\n\n## /projects/p-1/plan.md\n\nPlan");
   });
 
   it("reads the zip Claude sends, or its files, and batches chats by size", async () => {

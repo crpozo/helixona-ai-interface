@@ -37,16 +37,22 @@ describe("Import from Claude", () => {
   it("brings over projects with their documents, the memory as a project's instructions, and chats with their messages, once", async () => {
     const { app, repos, store } = await makeApp();
     const cookie = await login(app);
-    const dest = await post(app, cookie, "/api/import/claude/destination", { memory: "Works at Helixona. Prefers tables." });
+    const dest = await post(app, cookie, "/api/import/claude/destination", { memory: "Works at Helixona. Prefers tables.", memoryFiles: "## /areas/billing.md\n\nBilling notes" });
     expect(dest.statusCode).toBe(200);
     const destination = dest.json().projectId as string;
     const destProject = (await repos.projects.get(destination))!;
     expect(destProject.name).toBe("Imported from Claude");
     expect(destProject.instructions).toContain("Prefers tables.");
-    // Run again: the same project, updated instructions.
-    const again = await post(app, cookie, "/api/import/claude/destination", { memory: "Works at Helixona." });
+    expect(destProject.knowledge.map((k) => k.name)).toEqual(["Claude memory files.md"]);
+    expect((await store.get(destProject.knowledge[0]!.key)).toString()).toContain("Billing notes");
+    // Run again: the same project, updated instructions, the memory file replaced rather than added.
+    const again = await post(app, cookie, "/api/import/claude/destination", { memory: "Works at Helixona.", memoryFiles: "## /areas/billing.md\n\nNewer notes" });
     expect(again.json().projectId).toBe(destination);
-    expect((await repos.projects.get(destination))!.instructions).not.toContain("Prefers tables");
+    const after = (await repos.projects.get(destination))!;
+    expect(after.instructions).not.toContain("Prefers tables");
+    expect(after.knowledge.map((k) => k.name)).toEqual(["Claude memory files.md"]);
+    expect((await store.get(after.knowledge[0]!.key)).toString()).toContain("Newer notes");
+    expect(await store.head(destProject.knowledge[0]!.key)).toBeNull();
 
     const pr = await post(app, cookie, "/api/import/claude/projects", { projects: [{ sourceId: "p-1", name: "Chart prep", description: "Prep", instructions: "Be brief.", docs: [{ name: "Ranges.md", text: "# Ranges" }, { name: "Codes", text: "A1" }] }] });
     expect(pr.statusCode).toBe(200);
