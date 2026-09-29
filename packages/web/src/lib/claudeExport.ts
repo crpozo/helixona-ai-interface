@@ -1,0 +1,178 @@
+/**
+ * Reads a Claude.ai data export (Settings → Privacy → Export data: a zip with conversations.json,
+ * projects.json and users.json, sometimes a memory file) in the browser, into what the assistant
+ * imports. Only the shapes we use are read; unknown fields are ignored, so a newer export still
+ * loads. Nothing here leaves the browser until the person starts the import.
+ */
+
+export interface ExportMessage {
+  role: "user" | "assistant";
+  text: string;
+  createdAt?: string;
+  attachments: Array<{ name: string; text?: string }>;
+}
+export interface ExportConversation {
+  sourceId: string;
+  name: string;
+  createdAt?: string;
+  updatedAt?: string;
+  /** The Claude project it belonged to, when the export says. */
+  projectSourceId: string | null;
+  messages: ExportMessage[];
+}
+export interface ExportProject {
+  sourceId: string;
+  name: string;
+  description: string;
+  instructions: string;
+  docs: Array<{ name: string; text: string }>;
+}
+export interface ClaudeExport {
+  conversations: ExportConversation[];
+  projects: ExportProject[];
+  /** The memory text found in the export, or "" (it can be pasted instead). */
+  memory: string;
+  /** What was read, for the summary ("conversations.json, projects.json"). */
+  files: string[];
+}
+
+type Json = Record<string, unknown>;
+const obj = (v: unknown): Json | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Json) : null);
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+const iso = (v: unknown): string | undefined => {
+  const s = str(v);
+  if (!s) return undefined;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+};
+
+/** The text of a message: its `text`, or the text blocks of `content` (newer exports). */
+function messageText(m: Json): string {
+  const direct = str(m.text).trim();
+  if (direct) return direct;
+  return arr(m.content)
+    .map((b) => {
+      const block = obj(b);
+      return block && (block.type === "text" || block.type === undefined) ? str(block.text) : "";
+    })
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+}
+
+export function parseConversations(json: unknown): ExportConversation[] {
+  return arr(json).flatMap((raw) => {
+    const c = obj(raw);
+    if (!c) return [];
+    const sourceId = str(c.uuid) || str(c.id);
+    if (!sourceId) return [];
+    const project = obj(c.project);
+    const messages: ExportMessage[] = arr(c.chat_messages ?? c.messages).flatMap((rm) => {
+      const m = obj(rm);
+      if (!m) return [];
+      const sender = str(m.sender) || str(m.role);
+      const role = sender === "human" || sender === "user" ? "user" : sender === "assistant" ? "assistant" : null;
+      if (!role) return [];
+      const attachments = [...arr(m.attachments), ...arr(m.files)].flatMap((ra) => {
+        const a = obj(ra);
+        const name = a ? str(a.file_name) || str(a.name) : "";
+        if (!name) return [];
+        const text = a ? str(a.extracted_content) : "";
+        return [text ? { name, text } : { name }];
+      });
+      const text = messageText(m);
+      if (!text && attachments.length === 0) return [];
+      return [{ role, text, createdAt: iso(m.created_at), attachments }];
+    });
+    return [{ sourceId, name: str(c.name).trim(), createdAt: iso(c.created_at), updatedAt: iso(c.updated_at), projectSourceId: str(c.project_uuid) || (project ? str(project.uuid) : "") || null, messages }];
+  });
+}
+
+export function parseProjects(json: unknown): ExportProject[] {
+  return arr(json).flatMap((raw) => {
+    const p = obj(raw);
+    if (!p) return [];
+    const sourceId = str(p.uuid) || str(p.id);
+    const name = str(p.name).trim();
+    if (!sourceId || !name) return [];
+    const docs = arr(p.docs).flatMap((rd) => {
+      const d = obj(rd);
+      const docName = d ? str(d.filename) || str(d.name) : "";
+      const text = d ? str(d.content) : "";
+      return docName && text.trim() ? [{ name: docName, text }] : [];
+    });
+    return [{ sourceId, name: name.slice(0, 80), description: str(p.description).trim().slice(0, 300), instructions: str(p.prompt_template).trim(), docs }];
+  });
+}
+
+/** Memory can come as plain text or as JSON of strings; anything that is text is kept, in order. */
+export function parseMemory(text: string): string {
+  const t = text.trim();
+  if (!t) return "";
+  if (!/^[[{]/.test(t)) return t;
+  try {
+    const out: string[] = [];
+    const walk = (v: unknown) => {
+      if (typeof v === "string") out.push(v.trim());
+      else if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === "object") for (const [k, val] of Object.entries(v as Json)) if (!/^(uuid|id|created_at|updated_at|account)/.test(k)) walk(val);
+    };
+    walk(JSON.parse(t));
+    return out.filter(Boolean).join("\n").trim();
+  } catch {
+    return t;
+  }
+}
+
+/** Reads the export from the files the person picked: the zip, or its JSON files, or a memory text file. */
+export async function readClaudeExport(files: File[]): Promise<ClaudeExport> {
+  const result: ClaudeExport = { conversations: [], projects: [], memory: "", files: [] };
+  const entries: Array<{ name: string; text: () => Promise<string> }> = [];
+  for (const f of files) {
+    if (/\.zip$/i.test(f.name) || f.type === "application/zip" || f.type === "application/x-zip-compressed") {
+      const { default: JSZip } = await import("jszip");
+      const zip = await JSZip.loadAsync(await f.arrayBuffer());
+      for (const [path, entry] of Object.entries(zip.files)) {
+        if (!entry.dir) entries.push({ name: path.split("/").pop() ?? path, text: () => entry.async("string") });
+      }
+    } else entries.push({ name: f.name, text: () => f.text() });
+  }
+  for (const e of entries) {
+    const lower = e.name.toLowerCase();
+    if (lower === "conversations.json") {
+      result.conversations.push(...parseConversations(JSON.parse(await e.text())));
+      result.files.push(e.name);
+    } else if (lower === "projects.json") {
+      result.projects.push(...parseProjects(JSON.parse(await e.text())));
+      result.files.push(e.name);
+    } else if (/memor/i.test(lower) && /\.(json|txt|md)$/.test(lower)) {
+      const m = parseMemory(await e.text());
+      if (m) {
+        result.memory = result.memory ? `${result.memory}\n\n${m}` : m;
+        result.files.push(e.name);
+      }
+    }
+  }
+  if (result.files.length === 0) throw new Error("No conversations.json, projects.json or memory file was found. Pick the zip you downloaded from Claude, or the files inside it.");
+  return result;
+}
+
+/** Splits conversations into requests of at most `maxChars` of text each (and at most `maxCount` chats). */
+export function batches<T extends { messages: Array<{ text: string; attachments: Array<{ text?: string }> }> }>(items: T[], maxChars = 3_000_000, maxCount = 100): T[][] {
+  const out: T[][] = [];
+  let current: T[] = [];
+  let size = 0;
+  for (const it of items) {
+    const chars = it.messages.reduce((n, m) => n + m.text.length + m.attachments.reduce((k, a) => k + (a.text?.length ?? 0), 0), 0);
+    if (current.length > 0 && (size + chars > maxChars || current.length >= maxCount)) {
+      out.push(current);
+      current = [];
+      size = 0;
+    }
+    current.push(it);
+    size += chars;
+  }
+  if (current.length > 0) out.push(current);
+  return out;
+}

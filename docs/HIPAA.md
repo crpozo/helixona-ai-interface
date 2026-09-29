@@ -362,3 +362,26 @@ Earlier reasoning ("thinking") is sent back with the conversation, as the API re
 conversation before it has changed (a new system prompt after a release, edited project
 instructions or files), the request asks the API to drop that stale reasoning instead of failing,
 and the server logs how many blocks were dropped, never their content.
+
+## Import from Claude
+
+Staff who used a personal or team Claude.ai account before the assistant can bring their chats,
+projects and memory over: Claude.ai → Settings → Privacy → Export data gives a zip
+(conversations.json, projects.json, users.json); the sidebar's **Import from Claude** page reads it
+in the browser, shows what it holds, and imports it in batches over TLS to the clinic's own API.
+
+- **Chats** become conversations with their messages, dates and titles, in the project they
+  belonged to in Claude or in a project named "Imported from Claude". The export holds the text
+  Claude extracted from attached files, not the files: that text travels with the message as a
+  text document. A chat imported before (same Claude id) is skipped, so a second import duplicates
+  nothing. Imported conversations follow the same retention as every conversation (30 days).
+- **Projects** become private projects: instructions from the Claude project's prompt, documents as
+  Markdown knowledge files in the attachments bucket (encrypted with the clinic's key).
+- **Memory** (from the export, or pasted from Claude.ai → Settings → Capabilities → Memory)
+  becomes the instructions of the "Imported from Claude" project, so conversations there start
+  with that context; staff can edit or delete it like any project instructions.
+
+The import is audited (`import_claude_destination`, `import_claude_projects`,
+`import_claude_conversations`) with counts only. The data lands in the same tables and bucket as
+everything else. Staff should delete the export zip from their computer and downloads folder
+afterwards, as the policies ask for any file with PHI.

@@ -25,6 +25,7 @@ interface Props {
   onAdmin: () => void;
   onDocs: () => void;
   onTraining: () => void;
+  onImport: () => void;
 }
 
 function initials(name: string): string {
@@ -44,7 +45,7 @@ export function projectTag(p: Project): string {
  * chats nested underneath, then the chats that belong to no project, and the signed-in user at the
  * bottom. Rows are text with an icon; the actions (rename, delete, new chat in a project) appear on hover.
  */
-export function Sidebar({ me, conversations, projects, selectedId, projectViewId, open, onClose, onSelect, onNew, onNewInProject, onDelete, onRename, onRenameProject, onOpenProject, onNewProject, onLogout, onAdmin, onDocs, onTraining }: Props) {
+export function Sidebar({ me, conversations, projects, selectedId, projectViewId, open, onClose, onSelect, onNew, onNewInProject, onDelete, onRename, onRenameProject, onOpenProject, onNewProject, onLogout, onAdmin, onDocs, onTraining, onImport }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -79,7 +80,7 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
     if (name) await onRenameProject(id, name);
   };
 
-  const link = (href: string, label: string, icon: "cap" | "book" | "sliders", go: () => void) => (
+  const link = (href: string, label: string, icon: "cap" | "book" | "sliders" | "download", go: () => void) => (
     <a
       href={href}
       className="side-link"
@@ -260,6 +261,7 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
         {link("/training", "Training", "cap", onTraining)}
         {link("/documentation", "Documentation", "book", onDocs)}
         {isAdmin && link("/admin", "Administration", "sliders", onAdmin)}
+        {link("/import", "Import from Claude", "download", onImport)}
         <BugReport />
       </nav>
 

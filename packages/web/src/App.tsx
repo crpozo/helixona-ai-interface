@@ -24,6 +24,7 @@ import { conversationIdFromPath, currentRoute, navigate, usePath, useRoute } fro
 import { attachmentType } from "./lib/files";
 import type { AttachmentMeta, Conversation, Me, Project } from "./lib/types";
 import { AdminPage } from "./components/AdminPage";
+import { ImportPage } from "./components/ImportPage";
 import { ChatPanel } from "./components/ChatPanel";
 import { IdleWarning } from "./components/IdleWarning";
 import { LoginPage } from "./components/LoginPage";
@@ -507,6 +508,15 @@ export function App() {
         </Suspense>
       ) : route === "/admin" && isAdmin ? (
         <AdminPage me={me} onBack={() => navigate("/")} />
+      ) : route === "/import" ? (
+        <ImportPage
+          me={me}
+          onBack={() => navigate("/")}
+          onImported={() => {
+            void refreshConversations();
+            void refreshProjects();
+          }}
+        />
       ) : (
         <div className="shell">
           {sidebarOpen && <div className="scrim only-mobile" onClick={() => setSidebarOpen(false)} aria-hidden="true" />}
@@ -530,6 +540,7 @@ export function App() {
             onAdmin={() => navigate("/admin")}
             onDocs={() => navigate("/documentation")}
             onTraining={() => navigate("/training")}
+            onImport={() => navigate("/import")}
           />
           <div className="main">
             <div className="topbar only-mobile">

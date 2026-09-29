@@ -25,6 +25,8 @@ export interface Conversation {
   createdByName?: string;
   /** Set while a turn is running: nobody else can send in this conversation until then. */
   busyUntil?: string | null;
+  /** Id of the chat in the system it was imported from (a Claude.ai export), so a second import skips it. */
+  importedFrom?: string;
 }
 
 /**

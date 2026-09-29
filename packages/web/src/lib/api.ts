@@ -1,3 +1,4 @@
+import type { ExportConversation, ExportProject } from "./claudeExport";
 import type { FileTables } from "./workbook";
 import type {
   Agreement,
@@ -422,4 +423,21 @@ export function adminResendFeedbackConfirmation(): Promise<{ ok: true }> {
 
 export function adminSendTestBugReport(): Promise<{ ok: true }> {
   return request("/api/admin/feedback/test", { method: "POST", body: {} });
+}
+
+// ---- Import from Claude ----
+
+export interface ImportedProjectResult { sourceId: string; id: string; docs: number; skipped: boolean }
+export interface ImportedConversationResult { sourceId: string; id: string | null; status: "imported" | "skipped" | "empty" }
+
+export function importClaudeDestination(memory: string): Promise<{ projectId: string }> {
+  return request("/api/import/claude/destination", { method: "POST", body: { memory } });
+}
+
+export function importClaudeProjects(projects: ExportProject[]): Promise<{ projects: ImportedProjectResult[] }> {
+  return request("/api/import/claude/projects", { method: "POST", body: { projects } });
+}
+
+export function importClaudeConversations(conversations: Array<Omit<ExportConversation, "projectSourceId"> & { projectId: string | null }>): Promise<{ conversations: ImportedConversationResult[] }> {
+  return request("/api/import/claude/conversations", { method: "POST", body: { conversations } });
 }

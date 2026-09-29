@@ -17,6 +17,7 @@ import { registerFeedbackRoutes } from "./routes/feedback.js";
 import { registerUserRoutes } from "./routes/users.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerAdminRoutes } from "./routes/admin.js";
+import { registerImportRoutes } from "./routes/import.js";
 import { registerTrainingRoutes } from "./routes/training.js";
 
 declare module "fastify" {
@@ -120,6 +121,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   registerAgreementRoutes(app, deps);
   registerFeedbackRoutes(app, deps);
   registerUserRoutes(app, deps);
+  registerImportRoutes(app, deps);
 
   // SPA compilada (mismo origen, sin CORS). Cualquier ruta no-API devuelve index.html.
   const dist = config.WEB_DIST ?? resolve(process.cwd(), "../web/dist");
