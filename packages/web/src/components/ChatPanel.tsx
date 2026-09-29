@@ -144,6 +144,11 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
             Shared{conversation.createdByName ? ` · started by ${conversation.createdByName}` : ""}
           </span>
         )}
+        {conversation.archived && (
+          <span className="muted small chat-shared" title="An imported backup: not deleted after the retention period. Delete it by hand when it is no longer needed.">
+            Backup · kept
+          </span>
+        )}
       </header>
 
       <div className="chat-body">

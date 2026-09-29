@@ -3050,6 +3050,33 @@ td {
   gap: 0.45rem;
   cursor: pointer;
 }
+.import-choice {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 4px;
+}
+.import-choice label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.import-choice label:has(input:checked) {
+  border-color: var(--primary);
+}
+.import-choice input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  accent-color: var(--primary);
+}
+.import-choice .muted {
+  grid-column: 2;
+}
 .check input[type="checkbox"] {
   width: 1rem;
   height: 1rem;

@@ -95,6 +95,8 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     const located = await locateConversation(deps, req.session!, id);
     if (!located) return apiError(reply, 404, "not_found", "Conversation not found");
     const { conv, key, project } = located;
+    // Messages of an archived conversation (an imported backup) do not expire either.
+    const ttl = conv.archived ? null : deps.config.RETENTION_DAYS * 86400;
     // A conversation follows its alias: one started on an earlier model moves to the newest one.
     const latestModel = currentModelId(deps.catalog, conv.modelAlias, conv.modelId);
     if (latestModel !== conv.modelId) {

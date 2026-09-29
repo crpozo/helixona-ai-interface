@@ -430,14 +430,24 @@ export function adminSendTestBugReport(): Promise<{ ok: true }> {
 export interface ImportedProjectResult { sourceId: string; id: string; docs: number; skipped: boolean }
 export interface ImportedConversationResult { sourceId: string; id: string | null; status: "imported" | "skipped" | "empty" }
 
-export function importClaudeDestination(memory: string, memoryFiles = ""): Promise<{ projectId: string }> {
-  return request("/api/import/claude/destination", { method: "POST", body: { memory, memoryFiles } });
+export interface ImportDestination {
+  /** Claude's memory, for the project's instructions. */
+  memory: string;
+  /** The files of Claude's memory directory, one Markdown document. */
+  memoryFiles?: string;
+  /** The Claude projects folded into one Markdown document (team backup). */
+  projectFiles?: string;
+  /** A project shared with the whole team ("Backup Claude") instead of a private one. */
+  team?: boolean;
+}
+export function importClaudeDestination(d: ImportDestination): Promise<{ projectId: string; name: string; members: number }> {
+  return request("/api/import/claude/destination", { method: "POST", body: { memory: d.memory, memoryFiles: d.memoryFiles ?? "", projectFiles: d.projectFiles ?? "", team: d.team ?? false } });
 }
 
 export function importClaudeProjects(projects: ExportProject[]): Promise<{ projects: ImportedProjectResult[] }> {
   return request("/api/import/claude/projects", { method: "POST", body: { projects } });
 }
 
-export function importClaudeConversations(conversations: Array<Omit<ExportConversation, "projectSourceId"> & { projectId: string | null }>): Promise<{ conversations: ImportedConversationResult[] }> {
+export function importClaudeConversations(conversations: Array<Omit<ExportConversation, "projectSourceId"> & { projectId: string | null; archive: boolean }>): Promise<{ conversations: ImportedConversationResult[] }> {
   return request("/api/import/claude/conversations", { method: "POST", body: { conversations } });
 }

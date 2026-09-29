@@ -296,3 +296,38 @@ export function memoryFileProject(path: string): string | null {
 export function memoryFilesDocument(files: MemoryFile[]): string {
   return files.map((f) => `## ${f.path}\n\n${f.text.trim()}`).join("\n\n");
 }
+
+/**
+ * The Claude projects as one Markdown document (a section per project: description, instructions,
+ * memory, documents), for a backup that lives in a single shared project. Documents that would not
+ * fit are named but left out, so the file stays under the size a project file may have.
+ */
+export function projectsDocument(projects: ExportProject[], projectMemories: Record<string, string>, memoryFiles: MemoryFile[], maxChars = 1_500_000): { text: string; docs: number; left: string[] } {
+  const parts: string[] = [];
+  const left: string[] = [];
+  let docs = 0;
+  let size = 0;
+  const add = (s: string) => {
+    parts.push(s);
+    size += s.length + 2;
+  };
+  for (const p of projects) {
+    add(`## Project: ${p.name}`);
+    if (p.description.trim()) add(p.description.trim());
+    if (p.instructions.trim()) add(`### Instructions\n\n${p.instructions.trim()}`);
+    const memory = [projectMemories[p.sourceId]?.trim() ?? "", ...memoryFiles.filter((f) => memoryFileProject(f.path) === p.sourceId).map((f) => `#### ${f.path}\n\n${f.text.trim()}`)].filter(Boolean);
+    if (memory.length > 0) add(`### Memory\n\n${memory.join("\n\n")}`);
+    for (const d of p.docs) {
+      const text = d.text.trim();
+      if (!text) continue;
+      const section = `### Document: ${d.name}\n\n${text}`;
+      if (size + section.length > maxChars) {
+        left.push(`${p.name} › ${d.name}`);
+        continue;
+      }
+      add(section);
+      docs++;
+    }
+  }
+  return { text: parts.join("\n\n"), docs, left };
+}

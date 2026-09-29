@@ -54,4 +54,44 @@ test.describe("Import from Claude", () => {
     await expect(page.locator(".import-done")).toContainText("0 chats imported, 2 already here (skipped); 0 projects with 0 documents (1 already here)");
     errs.expectNone();
   });
+
+  test("a team backup lands in a shared project the whole team sees, kept beyond the retention period", async ({ page, browser }) => {
+    const errs = watchErrors(page);
+    // A colleague with an account before the import.
+    const other = await browser.newContext();
+    await devLogin(other, uniqueUser("e2e-import-b"), "staff");
+    await skipTraining(other);
+    const zip = new JSZip();
+    zip.file("conversations.json", JSON.stringify([{ uuid: "c-2", name: "Reminder letter", created_at: "2026-04-02T09:00:00Z", chat_messages: [{ sender: "human", text: "Write a reminder letter" }, { sender: "assistant", text: "Dear patient…" }] }]));
+    zip.file("projects.json", JSON.stringify([{ uuid: "p-1", name: "Chart prep", description: "Prep", prompt_template: "Be brief.", docs: [{ filename: "Ranges.md", content: "# Ranges" }] }]));
+    const buffer = Buffer.from(await zip.generateAsync({ type: "uint8array" }));
+
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByRole("link", { name: "Import from Claude" }).click();
+    await page.locator(".import-drop input[type=file]").setInputFiles({ name: "data-2026-04-02.zip", mimeType: "application/zip", buffer });
+    await expect(page.locator(".import-summary")).toContainText("1 chats with 2 messages");
+    const keep = page.getByRole("checkbox", { name: /Keep the imported chats as a backup/ });
+    await expect(keep).not.toBeChecked();
+    await page.getByRole("radio", { name: /The whole team/ }).check();
+    await expect(keep).toBeChecked();
+    await page.locator("#import-memory").fill("Clinic in Miami.");
+    await page.getByRole("button", { name: "Import" }).click();
+    await expect(page.locator(".import-done")).toContainText("Done. 1 chats imported; 1 projects with 1 documents (in one file of the project); memory saved as the project's instructions.");
+    await expect(page.locator(".import-done")).toContainText('Everything is in the shared project "Backup Claude"');
+    await expect(page.locator(".import-done")).toContainText("kept as a backup beyond the retention period");
+
+    // The colleague sees the project and the chat, marked as kept, and can continue it.
+    const theirs = await other.newPage();
+    await theirs.goto("/", { waitUntil: "load" });
+    await expect(theirs.getByRole("navigation", { name: "Shared projects" })).toContainText("Backup Claude");
+    await theirs.getByRole("button", { name: "Reminder letter" }).first().click();
+    await expect(theirs.locator(".msg-user").first()).toContainText("Write a reminder letter");
+    await expect(theirs.locator(".msg-assistant").first()).toContainText("Dear patient…");
+    await expect(theirs.locator(".chat-head")).toContainText("Backup · kept");
+    await theirs.locator("#composer-text").fill("Shorter, please");
+    await theirs.keyboard.press("Enter");
+    await expect(theirs.locator(".msg-assistant")).toHaveCount(2);
+    await other.close();
+    errs.expectNone();
+  });
 });

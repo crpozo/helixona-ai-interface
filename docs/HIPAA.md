@@ -147,7 +147,7 @@ HIPAA is mostly about how the organization operates. The clinic needs, at minimu
 | Integrity (§164.312(c)) | DynamoDB point-in-time recovery, versioned S3 buckets, CloudTrail log-file validation |
 | Transmission security (§164.312(e)) | TLS 1.2+ at CloudFront; TLS to the load balancer once the certificate is configured; TLS to the Anthropic API; presigned uploads over HTTPS |
 | Encryption at rest | Customer-managed KMS key for DynamoDB, S3, logs and secrets |
-| Data minimization / retention | Conversations and uploaded files deleted after 30 days; no PHI in application logs; no PHI in Anthropic-side schemas |
+| Data minimization / retention | Conversations and uploaded files deleted after 30 days (exception: chats imported from Claude.ai as a backup are kept until deleted by hand, see *Import from Claude*); no PHI in application logs; no PHI in Anthropic-side schemas |
 | Perimeter | WAF managed rule sets and rate limits on CloudFront and on the Cognito endpoints; brute-force limiter on sign-in |
 | Backups | AWS Backup daily plan, 35-day retention |
 | Infrastructure assurance | cdk-nag with the AWS Solutions and HIPAA Security rule packs runs on every synth |
@@ -161,7 +161,8 @@ HIPAA is mostly about how the organization operates. The clinic needs, at minimu
 - **At rest (clinic's AWS account, `us-east-1`):** DynamoDB `messages` and `conversations`
   tables, the S3 attachments bucket (conversation attachments, the text transcriptions of long PDFs
   next to them, and project knowledge files), all encrypted with the clinic's KMS key and deleted
-  after the retention period.
+  after the retention period (chats imported from Claude.ai as a backup are kept until deleted by
+  hand).
 - **At Anthropic:** prompts and responses are processed under the BAA and Anthropic's HIPAA
   readiness safeguards (30-day retention for Claude Fable 5.1). Anthropic does not train on this
   data.
@@ -370,18 +371,39 @@ projects and memory over: Claude.ai → Settings → Privacy → Export data giv
 (conversations.json, projects.json, users.json); the sidebar's **Import from Claude** page reads it
 in the browser, shows what it holds, and imports it in batches over TLS to the clinic's own API.
 
-- **Chats** become conversations with their messages, dates and titles, in the project they
-  belonged to in Claude or in a project named "Imported from Claude". The export holds the text
-  Claude extracted from attached files, not the files: that text travels with the message as a
-  text document. A chat imported before (same Claude id) is skipped, so a second import duplicates
-  nothing. Imported conversations follow the same retention as every conversation (30 days).
-- **Projects** become private projects: instructions from the Claude project's prompt, documents as
-  Markdown knowledge files in the attachments bucket (encrypted with the clinic's key).
-- **Memory** (from the export, or pasted from Claude.ai → Settings → Memory)
-  becomes the instructions of the "Imported from Claude" project, so conversations there start
-  with that context; staff can edit or delete it like any project instructions.
+The person importing chooses who can see it:
 
-The import is audited (`import_claude_destination`, `import_claude_projects`,
-`import_claude_conversations`) with counts only. The data lands in the same tables and bucket as
-everything else. Staff should delete the export zip from their computer and downloads folder
-afterwards, as the policies ask for any file with PHI.
+- **Only me**: a private project named "Imported from Claude". Chats land there (or in the project
+  they belonged to in Claude, when the export says); each Claude project becomes a private project
+  of their own (instructions from the Claude project's prompt, documents and memory as Markdown
+  knowledge files in the attachments bucket, encrypted with the clinic's key).
+- **The whole team**: a project named "Backup Claude" with visibility `shared`, owned by the person
+  importing, with every enabled account as a member. Members see every imported chat, can continue
+  it, and can ask about anything in the project. The Claude projects are folded into one knowledge
+  file of that project ("Claude projects.md": instructions, memory and documents per project).
+  Accounts created later are not members automatically: the owner or an administrator adds them in
+  the project's settings, or runs the import again (which only adds the missing members). Only the
+  owner or an administrator can run the team import once the project exists.
+
+In both cases:
+
+- **Chats** become conversations with their messages, dates and titles. The export holds the text
+  Claude extracted from attached files, not the files: that text travels with the message as a
+  text document. A chat imported before into the same place (same Claude id) is skipped, so a
+  second import duplicates nothing.
+- **Memory** (from the export, or pasted from Claude.ai → Settings → Memory) becomes the
+  instructions of the destination project, and the files of Claude's memory directory one
+  knowledge file; staff can edit or delete them like any project instructions and files.
+- **Retention.** Imported chats follow the 30-day retention like every conversation, unless the
+  person ticks *Keep the imported chats as a backup* (on by default for the team backup). Those
+  conversations and their messages are stored without an expiry and are kept until someone deletes
+  them; the chat header shows "Backup · kept". This is the one exception to the 30-day rule: it
+  exists so the team keeps the history of the Claude.ai account, and the Security Officer should
+  review the backup project yearly with the retention settings and delete what is no longer needed.
+
+The import is audited (`import_claude_destination` with the destination, whether it is the team
+backup and the member count; `import_claude_projects`, `import_claude_conversations` with counts,
+including how many chats were kept as a backup). The data lands in the same tables and bucket as
+everything else. Staff should delete the export zips from their computer and downloads folder
+afterwards, as the policies ask for any file with PHI, and should look through the export before a
+team import: every chat in it, personal ones included, becomes visible to the whole team.

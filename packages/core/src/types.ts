@@ -27,6 +27,8 @@ export interface Conversation {
   busyUntil?: string | null;
   /** Id of the chat in the system it was imported from (a Claude.ai export), so a second import skips it. */
   importedFrom?: string;
+  /** Kept as an archive: exempt from the retention period (an imported backup); deleted only by hand. */
+  archived?: boolean;
 }
 
 /**

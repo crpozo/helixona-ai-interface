@@ -42,6 +42,8 @@ export interface Conversation {
   /** Who started it (named in shared projects, where the chats belong to the team). */
   createdBy?: string;
   createdByName?: string;
+  /** Kept as an archive (an imported backup): not deleted after the retention period. */
+  archived?: boolean;
 }
 
 /**

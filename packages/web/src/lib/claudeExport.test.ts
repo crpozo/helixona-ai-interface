@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
-import { batches, memoryFileProject, memoryFilesDocument, parseConversations, parseMemory, parseMemoryFile, parseProjects, readClaudeExport } from "./claudeExport";
+import { batches, memoryFileProject, memoryFilesDocument, parseConversations, parseMemory, parseMemoryFile, parseProjects, projectsDocument, readClaudeExport } from "./claudeExport";
 
 const conversations = [
   {
@@ -46,6 +46,17 @@ describe("Reading a Claude.ai export", () => {
     expect(memoryFileProject("/projects/p-1/plan.md")).toBe("p-1");
     expect(memoryFileProject("/areas/billing.md")).toBeNull();
     expect(memoryFilesDocument(structured.memoryFiles)).toBe("## /areas/billing.md\n\nBilling notes\n\n## /projects/p-1/plan.md\n\nPlan");
+  });
+
+  it("folds the Claude projects into one document for the team backup, naming what does not fit", () => {
+    const list = [
+      { sourceId: "p-1", name: "Chart prep", description: "Prep", instructions: "Be brief.", docs: [{ name: "Ranges.md", text: "# Ranges" }, { name: "Big", text: "x".repeat(200) }, { name: "Blank", text: "  " }] },
+      { sourceId: "p-2", name: "Letters", description: "", instructions: "", docs: [] },
+    ];
+    const out = projectsDocument(list, { "p-1": "Prefers tables" }, [{ path: "/projects/p-1/plan.md", text: "Plan" }, { path: "/areas/billing.md", text: "Billing" }], 200);
+    expect(out.docs).toBe(1);
+    expect(out.left).toEqual(["Chart prep › Big"]);
+    expect(out.text).toBe("## Project: Chart prep\n\nPrep\n\n### Instructions\n\nBe brief.\n\n### Memory\n\nPrefers tables\n\n#### /projects/p-1/plan.md\n\nPlan\n\n### Document: Ranges.md\n\n# Ranges\n\n## Project: Letters");
   });
 
   it("reads the zip Claude sends, or its files, and batches chats by size", async () => {

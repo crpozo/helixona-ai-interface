@@ -10,8 +10,8 @@ const pad = (n: number) => String(n).padStart(6, "0");
 
 export class DynamoConversationRepo implements ConversationRepo {
   constructor(private readonly doc: DynamoDBDocumentClient, private readonly table: string) {}
-  async create(c: Conversation, ttlSeconds: number) {
-    await this.doc.send(new PutCommand({ TableName: this.table, Item: { ...c, conversationId: c.id, expiresAt: epoch(new Date()) + ttlSeconds }, ConditionExpression: "attribute_not_exists(conversationId)" }));
+  async create(c: Conversation, ttlSeconds: number | null) {
+    await this.doc.send(new PutCommand({ TableName: this.table, Item: { ...c, conversationId: c.id, ...(ttlSeconds === null ? {} : { expiresAt: epoch(new Date()) + ttlSeconds }) }, ConditionExpression: "attribute_not_exists(conversationId)" }));
   }
   async get(userId: string, id: string) {
     const r = await this.doc.send(new GetCommand({ TableName: this.table, Key: { userId, conversationId: id } }));
@@ -99,8 +99,8 @@ function projectFromItem(i: Record<string, unknown>): Project {
 
 export class DynamoMessageRepo implements MessageRepo {
   constructor(private readonly doc: DynamoDBDocumentClient, private readonly table: string) {}
-  async append(m: StoredMessage, ttlSeconds: number) {
-    await this.doc.send(new PutCommand({ TableName: this.table, Item: { ...m, seq: pad(m.seq), seqNumber: m.seq, expiresAt: epoch(new Date()) + ttlSeconds } }));
+  async append(m: StoredMessage, ttlSeconds: number | null) {
+    await this.doc.send(new PutCommand({ TableName: this.table, Item: { ...m, seq: pad(m.seq), seqNumber: m.seq, ...(ttlSeconds === null ? {} : { expiresAt: epoch(new Date()) + ttlSeconds }) } }));
   }
   async list(conversationId: string) {
     const out: StoredMessage[] = [];

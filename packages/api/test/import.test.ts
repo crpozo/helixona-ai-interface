@@ -17,15 +17,16 @@ async function makeApp() {
   const repos = memoryRepos();
   const provider = new FakeProvider({ delayMs: 0 });
   const store = new MemoryAttachmentStore();
+  const directory = new MemoryUserDirectory();
   const deps: Deps = {
     config, log: noopLogger, catalog: DEFAULT_CATALOG, repos,
     sessions: new SessionService({ repo: repos.sessions, secret: config.SESSION_SECRET!, idleSeconds: config.SESSION_IDLE_SECONDS, absoluteSeconds: config.SESSION_ABSOLUTE_SECONDS }),
-    identity: new DevIdentityProvider(), directory: new MemoryUserDirectory(), provider,
+    identity: new DevIdentityProvider(), directory, provider,
     router: new ModelRouter({ catalog: DEFAULT_CATALOG, provider, breaker: new CircuitBreaker(), firstEventTimeoutMs: 2000 }),
     systemPrompt: { text: "test system prompt", version: "v1" },
     attachments: store, passwordAuth: null, feedback: new MemoryFeedbackSender(),
   };
-  return { app: await buildApp(deps), repos, store };
+  return { app: await buildApp(deps), repos, store, directory };
 }
 async function login(app: FastifyInstance, username = "ana"): Promise<string> {
   const r = await app.inject({ method: "POST", url: "/api/auth/dev-login", headers: H, payload: { username, role: "staff" } });
@@ -99,7 +100,7 @@ describe("Import from Claude", () => {
 
     const audit = repos.audit.events.filter((e) => e.action.startsWith("import_claude"));
     expect(audit.map((e) => e.action)).toEqual(["import_claude_destination", "import_claude_destination", "import_claude_projects", "import_claude_projects", "import_claude_conversations", "import_claude_conversations"]);
-    expect(audit[4]!.meta).toEqual({ imported: 2, skipped: 0, empty: 1, messages: 3 });
+    expect(audit[4]!.meta).toEqual({ imported: 2, skipped: 0, empty: 1, messages: 3, archived: 0 });
     expect(JSON.stringify(audit)).not.toContain("Hemoglobin");
     // Another person's project cannot be a destination.
     const other = await login(app, "bruno");
@@ -107,5 +108,54 @@ describe("Import from Claude", () => {
     const mine = (await app.inject({ method: "GET", url: "/api/conversations", headers: { cookie: other } })).json().items;
     expect(foreign.json().conversations[0].status).toBe("imported");
     expect(mine[0].projectId).toBeNull();
+  });
+
+  it("a team backup: one shared project everyone is a member of, the Claude projects folded into a file, chats kept beyond the retention period and imported once per place", async () => {
+    const { app, repos, store, directory } = await makeApp();
+    const ana = await login(app, "ana");
+    const bruno = await login(app, "bruno");
+    directory.users.push({ id: "dev-carla", email: "carla@dev.local", name: "carla", role: "staff", enabled: false, createdAt: "2026-01-01T00:00:00.000Z", status: "active" });
+    const dest = await post(app, ana, "/api/import/claude/destination", { memory: "Clinic in Miami.", memoryFiles: "## /areas/billing.md\n\nBilling notes", projectFiles: "## Project: Chart prep\n\n### Instructions\n\nBe brief.", team: true });
+    expect(dest.statusCode).toBe(200);
+    expect(dest.json()).toMatchObject({ name: "Backup Claude", members: 1 });
+    const project = (await repos.projects.get(dest.json().projectId as string))!;
+    expect(project.visibility).toBe("shared");
+    expect(project.ownerId).toBe("dev-ana");
+    // Every enabled account except the owner; the disabled one is left out.
+    expect(project.members.map((m) => [m.id, m.name])).toEqual([["dev-bruno", "bruno"]]);
+    expect(project.instructions).toContain("What Claude remembered about the team");
+    expect(project.knowledge.map((k) => k.name)).toEqual(["Claude memory files.md", "Claude projects.md"]);
+    expect((await store.get(project.knowledge[1]!.key)).toString()).toContain("### Instructions\n\nBe brief.");
+
+    const chats = [
+      { sourceId: "c-1", name: "Lab summary", createdAt: "2026-03-01T10:00:00.000Z", projectId: project.id, archive: true, messages: [{ role: "user", text: "Summarize these labs", attachments: [] }, { role: "assistant", text: "Hemoglobin is normal.", attachments: [] }] },
+    ];
+    const cr = await post(app, ana, "/api/import/claude/conversations", { conversations: chats });
+    expect(cr.statusCode).toBe(200);
+    const [imported] = cr.json().conversations as Array<{ id: string; status: string }>;
+    expect(imported!.status).toBe("imported");
+    // The colleague sees the chat, marked as kept, and can continue it.
+    const theirs = (await app.inject({ method: "GET", url: "/api/conversations", headers: { cookie: bruno } })).json().items as Array<{ id: string; title: string; projectId: string | null; archived?: boolean; createdByName?: string }>;
+    expect(theirs.map((c) => [c.title, c.projectId, c.archived, c.createdByName])).toEqual([["Lab summary", project.id, true, "ana"]]);
+    const turn = await post(app, bruno, `/api/conversations/${imported!.id}/messages`, { text: "And the iron?" });
+    expect(turn.statusCode).toBe(200);
+    expect(turn.body).toContain("event: done");
+    expect((await repos.messages.list(imported!.id)).length).toBe(4);
+    // Run again: skipped in the team backup; the same chat into a private place of one's own is a different copy.
+    expect((await post(app, ana, "/api/import/claude/conversations", { conversations: chats })).json().conversations[0].status).toBe("skipped");
+    expect((await post(app, ana, "/api/import/claude/conversations", { conversations: [{ ...chats[0], projectId: null, archive: false }] })).json().conversations[0].status).toBe("imported");
+    // Someone who gets an account later is added by running the import again; the project stays the same.
+    await login(app, "dora");
+    const again = await post(app, ana, "/api/import/claude/destination", { memory: "", team: true });
+    expect(again.json()).toMatchObject({ projectId: project.id, members: 2 });
+    expect((await repos.projects.get(project.id))!.members.map((m) => m.id)).toEqual(["dev-bruno", "dev-dora"]);
+    // A member cannot take the team backup over; an administrator can run it.
+    expect((await post(app, bruno, "/api/import/claude/destination", { memory: "", team: true })).statusCode).toBe(403);
+    const adminLogin = await app.inject({ method: "POST", url: "/api/auth/dev-login", headers: H, payload: { username: "eva", role: "admin" } });
+    const eva = `hx_session=${adminLogin.cookies.find((c) => c.name === "hx_session")!.value}`;
+    expect((await post(app, eva, "/api/import/claude/destination", { memory: "", team: true })).json()).toMatchObject({ projectId: project.id, members: 3 });
+    const audit = repos.audit.events.filter((e) => e.action === "import_claude_conversations");
+    expect(audit[0]!.meta).toEqual({ imported: 1, skipped: 0, empty: 0, messages: 2, archived: 1 });
+    expect(JSON.stringify(repos.audit.events)).not.toContain("Hemoglobin");
   });
 });

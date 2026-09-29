@@ -75,7 +75,8 @@ export interface ProjectRepo {
 }
 
 export interface ConversationRepo {
-  create(c: Conversation, ttlSeconds: number): Promise<void>;
+  /** `ttlSeconds` null: no expiry (an archived conversation). */
+  create(c: Conversation, ttlSeconds: number | null): Promise<void>;
   get(userId: string, id: string): Promise<Conversation | null>;
   list(userId: string): Promise<Conversation[]>;
   update(userId: string, id: string, patch: ConversationPatch): Promise<Conversation | null>;
@@ -90,7 +91,7 @@ export interface ConversationRepo {
 }
 
 export interface MessageRepo {
-  append(m: StoredMessage, ttlSeconds: number): Promise<void>;
+  append(m: StoredMessage, ttlSeconds: number | null): Promise<void>;
   list(conversationId: string): Promise<StoredMessage[]>;
   deleteAll(conversationId: string): Promise<void>;
 }

@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { estimateTokens, modelByAlias, modelsForRole, ulid, type AttachmentMeta, type BetaContentBlockParam, type Conversation, type Project, type StoredMessage } from "@helixona/core";
+import { estimateTokens, modelByAlias, modelsForRole, ulid, type AttachmentMeta, type BetaContentBlockParam, type Conversation, type Project, type ProjectMember, type StoredMessage } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import { apiError, audit, requireAuth } from "../app.js";
-import { canReadProject, projectPartition } from "./projects.js";
+import { canReadProject, MAX_MEMBERS, projectPartition } from "./projects.js";
 import { requireTraining } from "./training.js";
 import { projectKnowledgeKey, safeName } from "../attachments/policy.js";
 
@@ -32,6 +32,8 @@ const Message = z.object({
 });
 const ImportedConversation = z.object({
   sourceId: z.string().min(1).max(100),
+  /** Kept beyond the retention period (a backup); deleted only by hand. */
+  archive: z.boolean().default(false),
   name: z.string().max(200).default(""),
   createdAt: z.string().datetime({ offset: true }).optional(),
   updatedAt: z.string().datetime({ offset: true }).optional(),
@@ -114,29 +116,51 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
   }
 
   /**
-   * The project the chats land in: the memory becomes its instructions, and the files of Claude's
-   * memory directory (areas, people, topics) one knowledge file.
+   * The project the chats land in: the memory becomes its instructions, the files of Claude's
+   * memory directory one knowledge file, and (when the Claude projects are folded in) their
+   * instructions, memory and documents another. Private ("Imported from Claude"), or shared with the
+   * whole team ("Backup Claude": every enabled account is a member, so everyone sees the chats and
+   * can ask about them).
    */
   app.post("/api/import/claude/destination", { preHandler: requireAuth(), bodyLimit: IMPORT_BODY_LIMIT }, async (req, reply) => {
     if (!(await requireTraining(deps, req, reply))) return;
-    const body = z.object({ memory: z.string().max(20_000).default(""), memoryFiles: z.string().max(MAX_DOC_CHARS).default("") }).safeParse(req.body);
+    const body = z
+      .object({ memory: z.string().max(20_000).default(""), memoryFiles: z.string().max(MAX_DOC_CHARS).default(""), projectFiles: z.string().max(MAX_DOC_CHARS).default(""), team: z.boolean().default(false) })
+      .safeParse(req.body);
     if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
     const s = req.session!;
     const t = now().toISOString();
     const memory = body.data.memory.trim();
-    const instructions = memory ? `# Memory imported from Claude\n\nWhat Claude remembered about this person and their work. Use it as context; the person may update it here.\n\n${memory}` : "";
-    const mine = (await deps.repos.projects.list()).filter((p) => p.ownerId === s.userId);
-    let p = mine.find((x) => x.name === "Imported from Claude");
+    const team = body.data.team;
+    const name = team ? "Backup Claude" : "Imported from Claude";
+    const who = team ? "the team" : "this person";
+    const instructions = memory ? `# Memory imported from Claude\n\nWhat Claude remembered about ${who} and their work. Use it as context; it can be updated here.\n\n${memory}` : "";
+    const all = await deps.repos.projects.list();
+    let p = all.find((x) => x.name === name && (team ? x.visibility === "shared" : x.ownerId === s.userId));
+    if (p && team && p.ownerId !== s.userId && !s.roles.includes("admin")) return apiError(reply, 403, "forbidden", `"${name}" belongs to someone else. Ask its owner or an administrator to run the import.`);
+    const members: ProjectMember[] = team ? (await deps.directory.list()).filter((u) => u.enabled && u.id !== s.userId).slice(0, MAX_MEMBERS).map((u) => ({ id: u.id, name: u.name, email: u.email, addedAt: t })) : [];
     if (p) {
-      if (instructions && p.instructions !== instructions) p = (await deps.repos.projects.update(p.id, { instructions, updatedAt: t })) ?? p;
+      const patch: { instructions?: string; members?: ProjectMember[] } = {};
+      if (instructions && p.instructions !== instructions) patch.instructions = instructions;
+      if (team) {
+        const missing = members.filter((m) => !p!.members.some((x) => x.id === m.id));
+        if (missing.length > 0) patch.members = [...p.members, ...missing].slice(0, MAX_MEMBERS);
+      }
+      if (Object.keys(patch).length > 0) p = (await deps.repos.projects.update(p.id, { ...patch, updatedAt: t })) ?? p;
     } else {
-      p = { id: ulid(), ownerId: s.userId, ownerName: s.name, name: "Imported from Claude", description: "Chats brought over from the Claude.ai account, with its memory as the instructions.", instructions, visibility: "private", members: [], knowledge: [], createdAt: t, updatedAt: t };
+      p = {
+        id: ulid(), ownerId: s.userId, ownerName: s.name, name,
+        description: team ? "Everything brought over from the Claude.ai account, shared with the whole team: chats, memory and projects. Ask it anything." : "Chats brought over from the Claude.ai account, with its memory as the instructions.",
+        instructions, visibility: team ? "shared" : "private", members, knowledge: [], createdAt: t, updatedAt: t,
+      };
       await deps.repos.projects.create(p);
     }
     const files = body.data.memoryFiles.trim();
     if (files) p = await putKnowledgeFile(p, "Claude memory files.md", `# Claude memory files\n\nThe files of Claude's memory directory, brought over from the Claude.ai account.\n\n${files}`);
-    await audit(deps, req, { action: "import_claude_destination", meta: { projectId: p.id, memoryChars: memory.length, memoryFilesChars: files.length } });
-    return { projectId: p.id };
+    const projectFiles = body.data.projectFiles.trim();
+    if (projectFiles) p = await putKnowledgeFile(p, "Claude projects.md", `# Claude projects\n\nThe projects of the Claude.ai account: their instructions, memory and documents.\n\n${projectFiles}`);
+    await audit(deps, req, { action: "import_claude_destination", meta: { projectId: p.id, team, members: p.members.length, memoryChars: memory.length, memoryFilesChars: files.length, projectFilesChars: projectFiles.length } });
+    return { projectId: p.id, name: p.name, members: p.members.length };
   });
 
   /** A batch of chats. A chat imported before (same source id) is skipped. */
@@ -147,15 +171,21 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
     const s = req.session!;
     const entry = modelByAlias(deps.catalog, deps.catalog.defaultAlias) ?? deps.catalog.models[0]!;
     const model = modelsForRole(deps.catalog, s.roles).some((m) => m.alias === entry.alias) ? entry : modelsForRole(deps.catalog, s.roles)[0] ?? entry;
-    const already = new Set((await deps.repos.conversations.list(s.userId)).map((c) => c.importedFrom).filter((x): x is string => !!x));
     const projects = new Map<string, Project | null>();
+    // What was imported before, per place the chats are stored: the person's own conversations, or a
+    // shared project's (its chats belong to the team). The same chat may exist in both.
+    const already = new Map<string, Set<string>>();
+    const importedInto = async (key: string): Promise<Set<string>> => {
+      let set = already.get(key);
+      if (!set) {
+        set = new Set((await deps.repos.conversations.list(key)).map((c) => c.importedFrom).filter((x): x is string => !!x));
+        already.set(key, set);
+      }
+      return set;
+    };
     const results: Array<{ sourceId: string; id: string | null; status: "imported" | "skipped" | "empty" }> = [];
     let messagesImported = 0;
     for (const ic of body.data.conversations) {
-      if (already.has(ic.sourceId)) {
-        results.push({ sourceId: ic.sourceId, id: null, status: "skipped" });
-        continue;
-      }
       let projectId: string | null = null;
       let key = s.userId;
       if (ic.projectId && ULID.test(ic.projectId)) {
@@ -165,6 +195,11 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
           projectId = p.id;
           if (p.visibility === "shared") key = projectPartition(p.id);
         }
+      }
+      const done = await importedInto(key);
+      if (done.has(ic.sourceId)) {
+        results.push({ sourceId: ic.sourceId, id: null, status: "skipped" });
+        continue;
       }
       const createdAt = ic.createdAt ?? now().toISOString();
       const updatedAt = ic.updatedAt ?? createdAt;
@@ -205,15 +240,16 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
         id, userId: key, title: titleFor(ic.name, createdAt), modelAlias: model.alias, modelId: model.modelId,
         pinnedModel: null, pinReason: null, pinnedUntil: null, systemPromptVersion: deps.systemPrompt.version,
         createdAt, updatedAt, messageCount: stored.length, lastInputTokens: estimateTokens("x".repeat(chars)), projectId,
-        createdBy: s.userId, createdByName: s.name, importedFrom: ic.sourceId,
+        createdBy: s.userId, createdByName: s.name, importedFrom: ic.sourceId, ...(ic.archive ? { archived: true } : {}),
       };
-      await deps.repos.conversations.create(c, ttl);
-      for (const m of stored) await deps.repos.messages.append(m, ttl);
-      already.add(ic.sourceId);
+      const life = ic.archive ? null : ttl;
+      await deps.repos.conversations.create(c, life);
+      for (const m of stored) await deps.repos.messages.append(m, life);
+      done.add(ic.sourceId);
       messagesImported += stored.length;
       results.push({ sourceId: ic.sourceId, id, status: "imported" });
     }
-    await audit(deps, req, { action: "import_claude_conversations", meta: { imported: results.filter((r) => r.status === "imported").length, skipped: results.filter((r) => r.status === "skipped").length, empty: results.filter((r) => r.status === "empty").length, messages: messagesImported } });
+    await audit(deps, req, { action: "import_claude_conversations", meta: { imported: results.filter((r) => r.status === "imported").length, skipped: results.filter((r) => r.status === "skipped").length, empty: results.filter((r) => r.status === "empty").length, messages: messagesImported, archived: body.data.conversations.filter((c) => c.archive).length } });
     return { conversations: results };
   });
 }

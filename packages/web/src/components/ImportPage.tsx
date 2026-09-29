@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { Me } from "../lib/types";
 import { ApiError, importClaudeConversations, importClaudeDestination, importClaudeProjects } from "../lib/api";
-import { batches, memoryFileProject, memoryFilesDocument, readClaudeExport, type ClaudeExport, type ExportProject } from "../lib/claudeExport";
+import { batches, memoryFileProject, memoryFilesDocument, projectsDocument, readClaudeExport, type ClaudeExport, type ExportProject } from "../lib/claudeExport";
 import { useFileDrop } from "../lib/useFileDrop";
 
 interface Props {
@@ -23,24 +23,40 @@ interface Outcome {
   projects: number;
   projectsSkipped: number;
   docs: number;
+  /** Documents of the Claude projects that did not fit in the team backup's file. */
+  docsLeft: string[];
   memory: boolean;
   memoryFiles: number;
+  team: boolean;
+  destination: string;
+  members: number;
+  archive: boolean;
 }
+
+export const TEAM_PROJECT = "Backup Claude";
+export const PRIVATE_PROJECT = "Imported from Claude";
 
 const errMsg = (e: unknown) => (e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Something went wrong.");
 const n = (v: number) => v.toLocaleString("en-US");
 
 /**
- * Import from Claude: the person downloads their data from Claude.ai, drops the zip here, sees what
- * is in it, and brings it over. Chats keep their messages and dates; Claude projects become
- * projects with their documents; the memory becomes the instructions of the project the chats
- * land in. The export is read in the browser and sent to the clinic's own server in batches.
+ * Import from Claude: the person downloads their data from Claude.ai, drops the zips here, sees what
+ * is in them, and brings it over. Chats keep their messages and dates; the memory becomes the
+ * instructions of the project the chats land in. Two destinations: a private project of their own
+ * ("Imported from Claude", with the Claude projects as separate private projects), or a project
+ * shared with the whole team ("Backup Claude", where everything, the Claude projects included, lands
+ * in one place everyone can ask about). The export is read in the browser and sent to the clinic's
+ * own server in batches.
  */
 export function ImportPage({ me, onBack, onImported }: Props) {
   const [reading, setReading] = useState(false);
   const [data, setData] = useState<ClaudeExport | null>(null);
   const [memory, setMemory] = useState("");
   const [includeProjects, setIncludeProjects] = useState(true);
+  const [team, setTeam] = useState(false);
+  // Unset: follows the destination (a team backup is kept; a private import follows the retention).
+  const [keep, setKeep] = useState<boolean | null>(null);
+  const archive = keep ?? team;
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -69,24 +85,36 @@ export function ImportPage({ me, onBack, onImported }: Props) {
   const run = async () => {
     if (!data) return;
     setError(null);
-    // Each Claude project gets its memory (the summary and its memory files) as a knowledge file.
-    const projects: ExportProject[] = includeProjects
-      ? data.projects.map((p) => {
-          const own = data.memoryFiles.filter((f) => memoryFileProject(f.path) === p.sourceId);
-          const summary = data.projectMemories[p.sourceId] ?? "";
-          if (!summary && own.length === 0) return p;
-          const text = [`# Claude memory for this project`, summary, own.length > 0 ? memoryFilesDocument(own) : ""].filter(Boolean).join("\n\n");
-          return { ...p, docs: [...p.docs.filter((d) => d.name !== "Claude memory.md"), { name: "Claude memory.md", text }] };
-        })
-      : data.projects;
+    const withProjects = includeProjects && data.projects.length > 0;
+    // Private: each Claude project becomes a project of its own, with its memory (the summary and
+    // its memory files) as a knowledge file. Team: the projects are folded into one file of the backup.
+    const projects: ExportProject[] =
+      withProjects && !team
+        ? data.projects.map((p) => {
+            const own = data.memoryFiles.filter((f) => memoryFileProject(f.path) === p.sourceId);
+            const summary = data.projectMemories[p.sourceId] ?? "";
+            if (!summary && own.length === 0) return p;
+            const text = [`# Claude memory for this project`, summary, own.length > 0 ? memoryFilesDocument(own) : ""].filter(Boolean).join("\n\n");
+            return { ...p, docs: [...p.docs.filter((d) => d.name !== "Claude memory.md"), { name: "Claude memory.md", text }] };
+          })
+        : [];
+    const folded = withProjects && team ? projectsDocument(data.projects, data.projectMemories, data.memoryFiles) : null;
     const generalFiles = data.memoryFiles.filter((f) => memoryFileProject(f.path) === null);
     const chats = data.conversations.filter((c) => c.messages.length > 0);
     const total = projects.length + chats.length + 1;
     let done = 0;
-    const result: Outcome = { conversations: 0, skipped: 0, empty: data.conversations.length - chats.length, projects: 0, projectsSkipped: 0, docs: 0, memory: memory.trim().length > 0, memoryFiles: data.memoryFiles.length };
+    const result: Outcome = {
+      conversations: 0, skipped: 0, empty: data.conversations.length - chats.length, projects: 0, projectsSkipped: 0,
+      docs: folded?.docs ?? 0, docsLeft: folded?.left ?? [], memory: memory.trim().length > 0, memoryFiles: data.memoryFiles.length,
+      team, destination: team ? TEAM_PROJECT : PRIVATE_PROJECT, members: 0, archive,
+    };
     setProgress({ done, total, step: "Preparing the destination project…" });
     try {
-      const { projectId: destination } = await importClaudeDestination(memory.trim(), generalFiles.length > 0 ? memoryFilesDocument(generalFiles) : "");
+      const dest = await importClaudeDestination({ memory: memory.trim(), memoryFiles: generalFiles.length > 0 ? memoryFilesDocument(generalFiles) : "", projectFiles: folded?.text ?? "", team });
+      const destination = dest.projectId;
+      result.destination = dest.name;
+      result.members = dest.members;
+      if (folded) result.projects = data.projects.length;
       done++;
       const projectIds = new Map<string, string>();
       if (projects.length > 0) {
@@ -112,6 +140,7 @@ export function ImportPage({ me, onBack, onImported }: Props) {
             updatedAt: c.updatedAt,
             projectId: (c.projectSourceId && projectIds.get(c.projectSourceId)) || destination,
             messages: c.messages,
+            archive,
           })),
         );
         for (const c of r.conversations) {
@@ -135,6 +164,7 @@ export function ImportPage({ me, onBack, onImported }: Props) {
   const dates = data ? data.conversations.map((c) => c.createdAt ?? "").filter(Boolean).sort() : [];
   const fmt = (s: string) => new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const messages = data ? data.conversations.reduce((k, c) => k + c.messages.length, 0) : 0;
+  const destinationName = team ? TEAM_PROJECT : PRIVATE_PROJECT;
 
   return (
     <main className="admin import-page">
@@ -205,12 +235,12 @@ export function ImportPage({ me, onBack, onImported }: Props) {
               <li>
                 Memory: {data.memory ? "found in the export" : "not in the export (paste it below if you want it)"}
                 {Object.keys(data.projectMemories).length > 0 || data.memoryFiles.length > 0
-                  ? `; ${n(Object.keys(data.projectMemories).length)} project memories and ${n(data.memoryFiles.length)} memory files (areas, people, topics), which become files in the projects`
+                  ? `; ${n(Object.keys(data.projectMemories).length)} project memories and ${n(data.memoryFiles.length)} memory files (areas, people, topics), which become project files`
                   : ""}
               </li>
             </ul>
             {data.conversations.length > 0 && data.conversations.every((c) => !c.projectSourceId) && data.projects.length > 0 && (
-              <p className="muted small">This export does not say which chats belonged to which project, so every chat lands in "Imported from Claude". The projects come over with their instructions, documents and memory, ready for new chats.</p>
+              <p className="muted small">This export does not say which chats belonged to which project, so every chat lands in "{destinationName}".</p>
             )}
             {data.ignored.length > 0 && (
               <p className="muted small">
@@ -220,7 +250,7 @@ export function ImportPage({ me, onBack, onImported }: Props) {
             )}
             {data.projects.length > 0 && (
               <label className="check">
-                <input type="checkbox" checked={includeProjects} onChange={(e) => setIncludeProjects(e.target.checked)} /> Import the projects too (instructions and documents)
+                <input type="checkbox" checked={includeProjects} onChange={(e) => setIncludeProjects(e.target.checked)} /> Import the projects too (instructions, documents and memory)
               </label>
             )}
           </div>
@@ -228,9 +258,34 @@ export function ImportPage({ me, onBack, onImported }: Props) {
       </section>
 
       <section className="card">
-        <h2>3. Memory</h2>
+        <h2>3. Who can see it</h2>
+        <div className="import-choice" role="radiogroup" aria-label="Destination">
+          <label>
+            <input type="radio" name="import-destination" checked={!team} onChange={() => setTeam(false)} disabled={!!progress} />
+            <span>
+              <strong>Only me</strong>: a private project named "{PRIVATE_PROJECT}"
+            </span>
+            <span className="muted small">The chats are yours alone. Claude projects become private projects of your own, ready for new chats.</span>
+          </label>
+          <label>
+            <input type="radio" name="import-destination" checked={team} onChange={() => setTeam(true)} disabled={!!progress} />
+            <span>
+              <strong>The whole team</strong>: a shared project named "{TEAM_PROJECT}"
+            </span>
+            <span className="muted small">
+              Everyone with an account becomes a member and sees every imported chat, the memory and the Claude projects (folded into one file of the project), and can continue a chat or ask about anything in them. People who get an account later must be added as members by the project's owner or an administrator. Check the export first: personal chats come over too.
+            </span>
+          </label>
+        </div>
+        <label className="check">
+          <input type="checkbox" checked={archive} onChange={(e) => setKeep(e.target.checked)} disabled={!!progress} /> Keep the imported chats as a backup: not deleted after the clinic's retention period (delete them by hand when no longer needed)
+        </label>
+      </section>
+
+      <section className="card">
+        <h2>4. Memory</h2>
         <p className="muted small">
-          Becomes the instructions of a project named <strong>Imported from Claude</strong>, where the chats that belonged to no project land. Every conversation in that project starts with this context; you can edit it there later.
+          Becomes the instructions of the "{destinationName}" project, so every conversation there starts with this context; it can be edited there later.
         </p>
         <label htmlFor="import-memory" className="visually-hidden">
           Memory text
@@ -239,9 +294,13 @@ export function ImportPage({ me, onBack, onImported }: Props) {
       </section>
 
       <section className="card">
-        <h2>4. Import</h2>
+        <h2>5. Import</h2>
         <p className="muted small">
-          Chats keep their messages and dates and can be continued here. Like every conversation in the assistant, imported chats are kept for the clinic's retention period and then deleted; projects and their documents stay until you delete them.
+          Chats keep their messages and dates and can be continued here.{" "}
+          {archive
+            ? "They are kept as a backup beyond the clinic's retention period, until someone deletes them."
+            : "Like every conversation in the assistant, they are kept for the clinic's retention period and then deleted."}{" "}
+          Projects and their files stay until you delete them.
         </p>
         {progress && (
           <div className="import-progress" role="status" aria-live="polite">
@@ -262,11 +321,22 @@ export function ImportPage({ me, onBack, onImported }: Props) {
               <strong>Done.</strong> {n(outcome.conversations)} chats imported
               {outcome.skipped > 0 ? `, ${n(outcome.skipped)} already here (skipped)` : ""}
               {outcome.empty > 0 ? `, ${n(outcome.empty)} empty` : ""}
-              {outcome.projects > 0 || outcome.projectsSkipped > 0 ? `; ${n(outcome.projects)} projects with ${n(outcome.docs)} documents${outcome.projectsSkipped > 0 ? ` (${n(outcome.projectsSkipped)} already here)` : ""}` : ""}
+              {outcome.projects > 0 || outcome.projectsSkipped > 0 ? `; ${n(outcome.projects)} projects with ${n(outcome.docs)} documents${outcome.projectsSkipped > 0 ? ` (${n(outcome.projectsSkipped)} already here)` : ""}${outcome.team ? " (in one file of the project)" : ""}` : ""}
               {outcome.memory ? "; memory saved as the project's instructions" : ""}
               {outcome.memoryFiles > 0 ? `; ${n(outcome.memoryFiles)} memory files saved as project files` : ""}.
             </p>
-            <p className="muted small">The chats are in the sidebar; the ones from Claude projects are inside those projects.</p>
+            <p className="muted small">
+              {outcome.team
+                ? `Everything is in the shared project "${outcome.destination}", visible to ${n(outcome.members)} other ${outcome.members === 1 ? "person" : "people"}.`
+                : `The chats are in the sidebar; the ones from Claude projects are inside those projects.`}
+              {outcome.archive ? " The chats are kept as a backup beyond the retention period." : ""}
+            </p>
+            {outcome.docsLeft.length > 0 && (
+              <p className="muted small">
+                Too large for the project's file, left out: {outcome.docsLeft.slice(0, 5).join(", ")}
+                {outcome.docsLeft.length > 5 ? ` and ${n(outcome.docsLeft.length - 5)} more` : ""}. Upload them to the project as files if they are needed.
+              </p>
+            )}
           </div>
         )}
         <div className="row gap">
