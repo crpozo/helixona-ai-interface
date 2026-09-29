@@ -49,13 +49,31 @@ describe("Reading a Claude.ai export", () => {
     zip.file("memory.txt", "Likes short answers");
     const file = new File([await zip.generateAsync({ type: "blob" })], "data-2026-03-01.zip", { type: "application/zip" });
     const out = await readClaudeExport([file]);
-    expect(out.files).toEqual(["conversations.json", "projects.json", "memory.txt"]);
+    expect(out.files).toEqual(["data-2026-03-01.zip › conversations.json", "data-2026-03-01.zip › projects.json", "data-2026-03-01.zip › memory.txt"]);
+    expect(out.ignored).toEqual(["data-2026-03-01.zip › users.json"]);
     expect(out.conversations).toHaveLength(2);
     expect(out.projects).toHaveLength(1);
     expect(out.memory).toBe("Likes short answers");
     const json = new File([JSON.stringify(conversations)], "conversations.json", { type: "application/json" });
     expect((await readClaudeExport([json])).conversations).toHaveLength(2);
-    await expect(readClaudeExport([new File(["hi"], "notes.txt")])).rejects.toThrow(/No conversations\.json/);
+    await expect(readClaudeExport([new File(["hi"], "notes.txt")])).rejects.toThrow(/No conversations/);
+    await expect(readClaudeExport([new File([JSON.stringify({ data_files: [{ export_url: "https://claude.ai/export/x" }] })], "manifest-abc.json")])).rejects.toThrow(/manifest/);
+
+    // The newer export: one zip per part, files added in two picks, nothing repeated.
+    const convZip = new JSZip();
+    convZip.file("conversations/c-1.json", JSON.stringify(conversations[0]));
+    convZip.file("conversations/c-2.json", JSON.stringify({ conversations: [conversations[1], conversations[0]] }));
+    const memZip = new JSZip();
+    memZip.file("memories/memories-000.json", JSON.stringify([{ uuid: "m1", content: "Works at Helixona" }, { uuid: "m2", content: "Prefers tables" }]));
+    const framesZip = new JSZip();
+    framesZip.file("frames/frame-1.json", "{}");
+    const first = await readClaudeExport([new File([await convZip.generateAsync({ type: "blob" })], "conversations-000.zip"), new File([await framesZip.generateAsync({ type: "blob" })], "frames-000.zip")]);
+    expect(first.conversations.map((c) => c.sourceId)).toEqual(["c-1", "c-2"]);
+    expect(first.ignored).toEqual(["frames-000.zip › frame-1.json"]);
+    const second = await readClaudeExport([new File([await memZip.generateAsync({ type: "blob" })], "memories-000.zip"), new File([await convZip.generateAsync({ type: "blob" })], "conversations-000.zip")], { previous: first });
+    expect(second.conversations).toHaveLength(2);
+    expect(second.memory).toBe("Works at Helixona\nPrefers tables");
+    expect(second.files).toHaveLength(5);
 
     const big = { messages: [{ text: "x".repeat(2_000_000), attachments: [] }] };
     const small = { messages: [{ text: "hi", attachments: [{ text: "y".repeat(10) }] }] };

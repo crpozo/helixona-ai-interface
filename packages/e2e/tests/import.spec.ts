@@ -31,6 +31,7 @@ test.describe("Import from Claude", () => {
     await expect(summary).toContainText("2 chats with 4 messages, from Mar 1, 2026 to Apr 2, 2026");
     await expect(summary).toContainText("1 projects with 1 documents");
     await expect(summary).toContainText("not in the export");
+    await expect(summary).toContainText("Not used: data-2026-03-01.zip › users.json.");
     await page.locator("#import-memory").fill("Works at Helixona. Prefers tables.");
     await page.getByRole("button", { name: "Import" }).click();
     await expect(page.locator(".import-done")).toContainText("Done. 2 chats imported; 1 projects with 1 documents; memory saved as the project's instructions.");

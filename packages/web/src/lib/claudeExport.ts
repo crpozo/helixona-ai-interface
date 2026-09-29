@@ -34,6 +34,8 @@ export interface ClaudeExport {
   memory: string;
   /** What was read, for the summary ("conversations.json, projects.json"). */
   files: string[];
+  /** Files in the export that were not used (frames, metadata), so the person knows nothing was missed by accident. */
+  ignored: string[];
 }
 
 type Json = Record<string, unknown>;
@@ -125,36 +127,97 @@ export function parseMemory(text: string): string {
   }
 }
 
-/** Reads the export from the files the person picked: the zip, or its JSON files, or a memory text file. */
-export async function readClaudeExport(files: File[]): Promise<ClaudeExport> {
-  const result: ClaudeExport = { conversations: [], projects: [], memory: "", files: [] };
-  const entries: Array<{ name: string; text: () => Promise<string> }> = [];
+/** Conversations from a JSON document: an array, an object holding one, or a single conversation. */
+function conversationsIn(json: unknown): ExportConversation[] {
+  if (Array.isArray(json)) return parseConversations(json);
+  const o = obj(json);
+  if (!o) return [];
+  if (Array.isArray(o.conversations)) return parseConversations(o.conversations);
+  if (Array.isArray(o.chat_messages) || Array.isArray(o.messages)) return parseConversations([o]);
+  return [];
+}
+
+function projectsIn(json: unknown): ExportProject[] {
+  if (Array.isArray(json)) return parseProjects(json);
+  const o = obj(json);
+  if (!o) return [];
+  if (Array.isArray(o.projects)) return parseProjects(o.projects);
+  if (o.name !== undefined && (o.docs !== undefined || o.prompt_template !== undefined)) return parseProjects([o]);
+  return [];
+}
+
+type Category = "conversations" | "projects" | "memory" | "manifest" | "other";
+
+/** What a file holds, from its name and the zip it came in (the newer export ships one zip per category). */
+function categoryOf(name: string, zipName: string | null): Category {
+  const n = name.toLowerCase();
+  const z = (zipName ?? "").toLowerCase();
+  if (/manifest/.test(n)) return "manifest";
+  if (/conversation/.test(n) || /^conversations/.test(z)) return /\.json$/.test(n) ? "conversations" : "other";
+  if (/project/.test(n) || /^projects/.test(z)) return /\.json$/.test(n) ? "projects" : "other";
+  if (/memor/.test(n) || /^memor/.test(z)) return /\.(json|txt|md)$/.test(n) ? "memory" : "other";
+  return "other";
+}
+
+export interface ReadOptions {
+  /** An export read earlier in the same session, to add these files to. */
+  previous?: ClaudeExport | null;
+}
+
+/**
+ * Reads the export from the files the person picked: the zip Claude sends, or the several zips of
+ * the newer export (conversations-000.zip, projects-000.zip, memories-000.zip…), or the files
+ * inside them. Files can be added in several picks; chats and projects are not repeated.
+ */
+export async function readClaudeExport(files: File[], opts: ReadOptions = {}): Promise<ClaudeExport> {
+  const prev = opts.previous ?? null;
+  const result: ClaudeExport = { conversations: [...(prev?.conversations ?? [])], projects: [...(prev?.projects ?? [])], memory: prev?.memory ?? "", files: [...(prev?.files ?? [])], ignored: [...(prev?.ignored ?? [])] };
+  const entries: Array<{ name: string; zip: string | null; text: () => Promise<string> }> = [];
   for (const f of files) {
     if (/\.zip$/i.test(f.name) || f.type === "application/zip" || f.type === "application/x-zip-compressed") {
       const { default: JSZip } = await import("jszip");
       const zip = await JSZip.loadAsync(await f.arrayBuffer());
       for (const [path, entry] of Object.entries(zip.files)) {
-        if (!entry.dir) entries.push({ name: path.split("/").pop() ?? path, text: () => entry.async("string") });
+        if (!entry.dir) entries.push({ name: path.split("/").pop() ?? path, zip: f.name, text: () => entry.async("string") });
       }
-    } else entries.push({ name: f.name, text: () => f.text() });
+    } else entries.push({ name: f.name, zip: null, text: () => f.text() });
   }
+  let manifest = false;
+  const seenChats = new Set(result.conversations.map((c) => c.sourceId));
+  const seenProjects = new Set(result.projects.map((p) => p.sourceId));
+  let added = 0;
   for (const e of entries) {
-    const lower = e.name.toLowerCase();
-    if (lower === "conversations.json") {
-      result.conversations.push(...parseConversations(JSON.parse(await e.text())));
-      result.files.push(e.name);
-    } else if (lower === "projects.json") {
-      result.projects.push(...parseProjects(JSON.parse(await e.text())));
-      result.files.push(e.name);
-    } else if (/memor/i.test(lower) && /\.(json|txt|md)$/.test(lower)) {
-      const m = parseMemory(await e.text());
-      if (m) {
-        result.memory = result.memory ? `${result.memory}\n\n${m}` : m;
-        result.files.push(e.name);
-      }
+    const label = e.zip ? `${e.zip} › ${e.name}` : e.name;
+    const category = categoryOf(e.name, e.zip);
+    try {
+      if (category === "conversations") {
+        const found = conversationsIn(JSON.parse(await e.text())).filter((c) => !seenChats.has(c.sourceId));
+        found.forEach((c) => seenChats.add(c.sourceId));
+        result.conversations.push(...found);
+        result.files.push(label);
+        added++;
+      } else if (category === "projects") {
+        const found = projectsIn(JSON.parse(await e.text())).filter((p) => !seenProjects.has(p.sourceId));
+        found.forEach((p) => seenProjects.add(p.sourceId));
+        result.projects.push(...found);
+        result.files.push(label);
+        added++;
+      } else if (category === "memory") {
+        const m = parseMemory(await e.text());
+        if (m && !result.memory.includes(m)) result.memory = result.memory ? `${result.memory}\n\n${m}` : m;
+        result.files.push(label);
+        added++;
+      } else if (category === "manifest") {
+        manifest = true;
+      } else if (!result.ignored.includes(label)) result.ignored.push(label);
+    } catch {
+      if (!result.ignored.includes(label)) result.ignored.push(`${label} (could not be read)`);
     }
   }
-  if (result.files.length === 0) throw new Error("No conversations.json, projects.json or memory file was found. Pick the zip you downloaded from Claude, or the files inside it.");
+  if (added === 0) {
+    if (manifest) throw new Error("That is the manifest, the list of download links Claude gives you. Open each link (they work once), save the zips it downloads, and drop the conversations, projects and memories zips here.");
+    throw new Error(`No conversations, projects or memory file was found. Pick the zip or zips you downloaded from Claude (conversations-000.zip, projects-000.zip, memories-000.zip) or the files inside them.${result.ignored.length > 0 ? ` Files seen: ${result.ignored.slice(0, 8).join(", ")}.` : ""}`);
+  }
   return result;
 }
 

@@ -52,9 +52,9 @@ export function ImportPage({ me, onBack, onImported }: Props) {
     setOutcome(null);
     setReading(true);
     try {
-      const parsed = await readClaudeExport(Array.from(list));
+      const parsed = await readClaudeExport(Array.from(list), { previous: data });
       setData(parsed);
-      setMemory(parsed.memory);
+      if (parsed.memory && !memory.trim()) setMemory(parsed.memory);
     } catch (e) {
       setData(null);
       setError(errMsg(e));
@@ -151,10 +151,10 @@ export function ImportPage({ me, onBack, onImported }: Props) {
             In Claude.ai open <strong>Settings → Privacy → Export data</strong> and confirm. Claude emails a download link within a few minutes (up to a day for large accounts).
           </li>
           <li>
-            Download the <strong>.zip</strong> from that email. It holds <code>conversations.json</code>, <code>projects.json</code> and <code>users.json</code>.
+            Download what the email gives you. Newer exports are several zips, one per part (<code>conversations-000.zip</code>, <code>projects-000.zip</code>, <code>memories-000.zip</code>, plus <code>frames</code> and <code>light_metadata</code>, which are not needed); older ones are a single zip with <code>conversations.json</code> and <code>projects.json</code>. Each download link works once, so save the files.
           </li>
           <li>
-            Memory: if the zip has no memory file, open <strong>Settings → Memory</strong> in Claude.ai (the Memory entry in the left menu), copy the memory text shown there, and paste it below.
+            Memory: the <code>memories</code> zip holds it. If your export has none, open <strong>Settings → Memory</strong> in Claude.ai (the Memory entry in the left menu), copy the memory text shown there, and paste it below.
           </li>
         </ol>
         <p className="muted small">Attachments are not in the export; what Claude extracted from them (the text) is, and comes over with the message.</p>
@@ -165,13 +165,13 @@ export function ImportPage({ me, onBack, onImported }: Props) {
         <div ref={zoneRef} className={`import-drop${dragging ? " dragging" : ""}`}>
           <input ref={fileRef} type="file" accept=".zip,.json,.txt,.md,application/zip,application/json" multiple hidden onChange={(e) => void load(e.target.files)} />
           <p>
-            Drop the zip here, or{" "}
+            Drop the zip or zips here, or{" "}
             <button type="button" className="link" onClick={() => fileRef.current?.click()} disabled={reading || !!progress}>
-              choose the file
+              choose the files
             </button>
-            .
+            {data ? " (more files are added to what is already here)" : ""}.
           </p>
-          <p className="muted small">The zip is read on this computer. Nothing is sent until you press Import.</p>
+          <p className="muted small">The files are read on this computer. Nothing is sent until you press Import.</p>
           {reading && (
             <p className="muted" role="status">
               Reading the export…
@@ -193,6 +193,12 @@ export function ImportPage({ me, onBack, onImported }: Props) {
               </li>
               <li>Memory: {data.memory ? "found in the export" : "not in the export (paste it below if you want it)"}</li>
             </ul>
+            {data.ignored.length > 0 && (
+              <p className="muted small">
+                Not used: {data.ignored.slice(0, 6).join(", ")}
+                {data.ignored.length > 6 ? ` and ${n(data.ignored.length - 6)} more` : ""}.
+              </p>
+            )}
             {data.projects.length > 0 && (
               <label className="check">
                 <input type="checkbox" checked={includeProjects} onChange={(e) => setIncludeProjects(e.target.checked)} /> Import the projects too (instructions and documents)
