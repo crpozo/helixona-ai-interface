@@ -227,6 +227,20 @@ describe('AppStack', () => {
       Rules: Match.arrayWith([Match.objectLike({ Statement: { RateBasedStatement: Match.objectLike({ Limit: 3000 }) } })]),
     });
   });
+
+  it('el Core Rule Set no inspecciona las rutas de texto libre: chat, importación desde Claude y proyectos', () => {
+    const acls = Object.values(appT.findResources('AWS::WAFv2::WebACL', { Properties: { Scope: 'CLOUDFRONT' } })) as Array<{ Properties: { Rules: Array<{ Statement: { ManagedRuleGroupStatement?: { Name: string; ScopeDownStatement?: unknown } } }> } }>;
+    expect(acls).toHaveLength(1);
+    const common = acls[0]!.Properties.Rules.find((r) => r.Statement.ManagedRuleGroupStatement?.Name === 'AWSManagedRulesCommonRuleSet')!;
+    const scope = common.Statement.ManagedRuleGroupStatement!.ScopeDownStatement as { NotStatement: { Statement: { OrStatement: { Statements: Array<{ ByteMatchStatement: { SearchString: string; PositionalConstraint: string } }> } } } };
+    const paths = scope.NotStatement.Statement.OrStatement.Statements.map((s) => s.ByteMatchStatement);
+    expect(paths.map((p) => p.SearchString)).toEqual(['/api/conversations', '/api/import/', '/api/projects']);
+    expect(paths.every((p) => p.PositionalConstraint === 'STARTS_WITH')).toBe(true);
+    // The other rule groups still apply there.
+    const others = acls[0]!.Properties.Rules.filter((r) => r.Statement.ManagedRuleGroupStatement && r.Statement.ManagedRuleGroupStatement.Name !== 'AWSManagedRulesCommonRuleSet');
+    expect(others.map((r) => r.Statement.ManagedRuleGroupStatement!.Name).sort()).toEqual(['AWSManagedRulesAmazonIpReputationList', 'AWSManagedRulesKnownBadInputsRuleSet']);
+    expect(others.every((r) => !r.Statement.ManagedRuleGroupStatement!.ScopeDownStatement)).toBe(true);
+  });
 });
 
 describe('ObservabilityStack (CloudTrail)', () => {

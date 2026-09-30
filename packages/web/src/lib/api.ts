@@ -71,7 +71,7 @@ async function parseError(res: Response): Promise<ApiError> {
 
 async function request<T>(
   path: string,
-  init: { method?: string; body?: unknown; signal?: AbortSignal; authFlow?: boolean } = {},
+  init: { method?: string; body?: unknown; signal?: AbortSignal; authFlow?: boolean; timeoutMs?: number } = {},
 ): Promise<T> {
   const method = init.method ?? "GET";
   const headers: Record<string, string> = { Accept: "application/json" };
@@ -79,14 +79,23 @@ async function request<T>(
   if (init.body !== undefined) headers["Content-Type"] = "application/json";
 
   hooks.onActivity?.();
-  const res = await fetch(path, {
-    method,
-    headers,
-    credentials: "same-origin",
-    cache: "no-store",
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-    signal: init.signal,
-  });
+  // A long request (an import batch) gives up after `timeoutMs` with a clear error instead of hanging.
+  const timeout = init.timeoutMs && !init.signal && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(init.timeoutMs) : undefined;
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers,
+      credentials: "same-origin",
+      cache: "no-store",
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      signal: init.signal ?? timeout,
+    });
+  } catch (e) {
+    if (!init.timeoutMs) throw e;
+    if (e instanceof DOMException && e.name === "TimeoutError") throw new ApiError(0, "timeout", `The server did not answer within ${Math.round(init.timeoutMs / 1000)} seconds.`);
+    throw new ApiError(0, "network", "The connection failed before the server answered. Check the connection and try again.");
+  }
 
   if (res.status === 401 && !init.authFlow) {
     hooks.onUnauthorized?.();
@@ -440,14 +449,17 @@ export interface ImportDestination {
   /** A project shared with the whole team ("Backup Claude") instead of a private one. */
   team?: boolean;
 }
+/** An import request carries megabytes and the server writes many records: give it three minutes. */
+const IMPORT_TIMEOUT_MS = 180_000;
+
 export function importClaudeDestination(d: ImportDestination): Promise<{ projectId: string; name: string; members: number }> {
-  return request("/api/import/claude/destination", { method: "POST", body: { memory: d.memory, memoryFiles: d.memoryFiles ?? "", projectFiles: d.projectFiles ?? "", team: d.team ?? false } });
+  return request("/api/import/claude/destination", { method: "POST", body: { memory: d.memory, memoryFiles: d.memoryFiles ?? "", projectFiles: d.projectFiles ?? "", team: d.team ?? false }, timeoutMs: IMPORT_TIMEOUT_MS });
 }
 
 export function importClaudeProjects(projects: ExportProject[]): Promise<{ projects: ImportedProjectResult[] }> {
-  return request("/api/import/claude/projects", { method: "POST", body: { projects } });
+  return request("/api/import/claude/projects", { method: "POST", body: { projects }, timeoutMs: IMPORT_TIMEOUT_MS });
 }
 
 export function importClaudeConversations(conversations: Array<Omit<ExportConversation, "projectSourceId"> & { projectId: string | null; archive: boolean }>): Promise<{ conversations: ImportedConversationResult[] }> {
-  return request("/api/import/claude/conversations", { method: "POST", body: { conversations } });
+  return request("/api/import/claude/conversations", { method: "POST", body: { conversations }, timeoutMs: IMPORT_TIMEOUT_MS });
 }

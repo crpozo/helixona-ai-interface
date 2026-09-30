@@ -36,7 +36,15 @@ interface Outcome {
 export const TEAM_PROJECT = "Backup Claude";
 export const PRIVATE_PROJECT = "Imported from Claude";
 
-const errMsg = (e: unknown) => (e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Something went wrong.");
+/** What went wrong, with the HTTP status when the server (or something in front of it) refused the request. */
+const errMsg = (e: unknown) => {
+  if (e instanceof ApiError) {
+    if (e.status === 403 && e.code === "http_error") return "The request was blocked before it reached the assistant (HTTP 403). Tell the administrator: the firewall may be inspecting the import.";
+    if (e.status === 413) return "The request was too large for the server (HTTP 413).";
+    return e.status > 0 ? `${e.message} (HTTP ${e.status})` : e.message;
+  }
+  return e instanceof Error ? e.message : "Something went wrong.";
+};
 const n = (v: number) => v.toLocaleString("en-US");
 
 /**

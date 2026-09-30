@@ -166,8 +166,10 @@ HIPAA is mostly about how the organization operates. The clinic needs, at minimu
 - **At Anthropic:** prompts and responses are processed under the BAA and Anthropic's HIPAA
   readiness safeguards (30-day retention for Claude Fable 5.1). Anthropic does not train on this
   data.
-- **Never:** application logs, audit records, CloudWatch metrics, WAF logs (message paths are
-  excluded from body logging), or the GitHub repository.
+- **Never:** application logs, audit records, CloudWatch metrics, WAF logs (the paths that carry
+  free text in the body, `/api/conversations`, `/api/import/` and `/api/projects`, are excluded
+  from the Core Rule Set, so no body fragment of theirs is inspected or logged; the rate limit,
+  known-bad-inputs and IP reputation rules still apply there), or the GitHub repository.
 
 ---
 
@@ -401,8 +403,11 @@ In both cases:
   exists so the team keeps the history of the Claude.ai account, and the Security Officer should
   review the backup project yearly with the retention settings and delete what is no longer needed.
 
-The import is audited (`import_claude_destination` with the destination, whether it is the team
-backup and the member count; `import_claude_projects`, `import_claude_conversations` with counts,
+The import requests carry megabytes of text, so the CloudFront firewall's Core Rule Set (which
+blocks bodies over 8 KB and inspects them for injection patterns) is not applied to `/api/import/`,
+as it is not to the chat routes; the browser gives each import request three minutes before it
+reports a timeout. The import is audited (`import_claude_destination` with the destination, whether
+it is the team backup and the member count; `import_claude_projects`, `import_claude_conversations` with counts,
 including how many chats were kept as a backup). The data lands in the same tables and bucket as
 everything else. Staff should delete the export zips from their computer and downloads folder
 afterwards, as the policies ask for any file with PHI, and should look through the export before a

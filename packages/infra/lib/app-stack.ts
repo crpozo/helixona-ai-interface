@@ -47,6 +47,9 @@ const ORIGIN_VERIFY_HEADER = 'X-Origin-Verify';
 /**
  * Cómputo y borde: ECS Fargate (un contenedor Node que sirve API + SPA), ALB, CloudFront + WAF.
  */
+/** Request paths whose bodies carry free clinical text; the Core Rule Set does not inspect them. */
+export const FREE_TEXT_PATHS = ['/api/conversations', '/api/import/', '/api/projects'];
+
 export class AppStack extends cdk.Stack {
   readonly cluster: ecs.Cluster;
   readonly service: ecs.FargateService;
@@ -335,12 +338,19 @@ export class AppStack extends cdk.Stack {
     });
 
     // ---------------------------------------------------------------- WAF
+    // Rutas que llevan texto clínico libre en el cuerpo: el chat, la importación desde Claude
+    // (cuerpos de varios MB) y los proyectos (instrucciones largas). Las reglas de cuerpo del Core
+    // Rule Set (tamaño > 8 KB, patrones de inyección) las bloquearían o registrarían.
     const chatPathScope: wafv2.CfnWebACL.StatementProperty = {
-      byteMatchStatement: {
-        fieldToMatch: { uriPath: {} },
-        positionalConstraint: 'STARTS_WITH',
-        searchString: '/api/conversations',
-        textTransformations: [{ priority: 0, type: 'NONE' }],
+      orStatement: {
+        statements: FREE_TEXT_PATHS.map((searchString) => ({
+          byteMatchStatement: {
+            fieldToMatch: { uriPath: {} },
+            positionalConstraint: 'STARTS_WITH',
+            searchString,
+            textTransformations: [{ priority: 0, type: 'NONE' }],
+          },
+        })),
       },
     };
     const cfWebAcl = new wafv2.CfnWebACL(this, 'CloudFrontWebAcl', {
@@ -353,8 +363,8 @@ export class AppStack extends cdk.Stack {
         rateLimitRule('RateLimitPerIp', 10, 3000),
         managedRule('AWSManagedRulesAmazonIpReputationList', 20, 'AWSManagedRulesAmazonIpReputationList'),
         managedRule('AWSManagedRulesKnownBadInputsRuleSet', 30, 'AWSManagedRulesKnownBadInputsRuleSet'),
-        // Core Rule Set: bloquea en todo el sitio EXCEPTO bajo `/api/conversations*` (texto clínico
-        // libre = falsos positivos). El contrato pide "modo count" en esa ruta; se implementa como
+        // Core Rule Set: bloquea en todo el sitio EXCEPTO bajo las rutas de texto libre (chat,
+        // importación, proyectos: falsos positivos y cuerpos grandes). El contrato pide "modo count" en esa ruta; se implementa como
         // exclusión por scope-down porque (a) un mismo rule group no puede referenciarse dos veces en
         // un WebACL con scope-downs distintos y (b) `count` seguiría escribiendo el fragmento
         // coincidente (potencial PHI) en el log de WAF. En esa ruta siguen activos el rate limit,

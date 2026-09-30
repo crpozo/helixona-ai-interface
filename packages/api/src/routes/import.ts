@@ -129,6 +129,7 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
       .safeParse(req.body);
     if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
     const s = req.session!;
+    const started = Date.now();
     const t = now().toISOString();
     const memory = body.data.memory.trim();
     const team = body.data.team;
@@ -160,6 +161,8 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
     const projectFiles = body.data.projectFiles.trim();
     if (projectFiles) p = await putKnowledgeFile(p, "Claude projects.md", `# Claude projects\n\nThe projects of the Claude.ai account: their instructions, memory and documents.\n\n${projectFiles}`);
     await audit(deps, req, { action: "import_claude_destination", meta: { projectId: p.id, team, members: p.members.length, memoryChars: memory.length, memoryFilesChars: files.length, projectFilesChars: projectFiles.length } });
+    // Sizes and timing only, so a slow or failed import can be traced in the logs without content.
+    deps.log.info("import_claude_destination", { ms: Date.now() - started, team, members: p.members.length, memoryFilesChars: files.length, projectFilesChars: projectFiles.length });
     return { projectId: p.id, name: p.name, members: p.members.length };
   });
 
