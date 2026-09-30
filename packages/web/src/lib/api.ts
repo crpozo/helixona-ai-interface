@@ -437,7 +437,13 @@ export function adminSendTestBugReport(): Promise<{ ok: true }> {
 // ---- Import from Claude ----
 
 export interface ImportedProjectResult { sourceId: string; id: string; docs: number; skipped: boolean }
-export interface ImportedConversationResult { sourceId: string; id: string | null; status: "imported" | "skipped" | "empty" }
+export interface ImportedConversationResult {
+  sourceId: string;
+  id: string | null;
+  status: "imported" | "skipped" | "empty" | "failed";
+  /** For a failed chat: the class of the error, never its content. */
+  reason?: string;
+}
 
 export interface ImportDestination {
   /** Claude's memory, for the project's instructions. */

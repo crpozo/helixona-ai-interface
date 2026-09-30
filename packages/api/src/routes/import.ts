@@ -5,7 +5,7 @@ import type { Deps } from "../deps.js";
 import { apiError, audit, requireAuth } from "../app.js";
 import { canReadProject, MAX_MEMBERS, projectPartition } from "./projects.js";
 import { requireTraining } from "./training.js";
-import { projectKnowledgeKey, safeName } from "../attachments/policy.js";
+import { attachmentKey, projectKnowledgeKey, safeName } from "../attachments/policy.js";
 
 /**
  * Import from Claude: the browser reads the person's Claude.ai data export (conversations.json,
@@ -20,6 +20,38 @@ const MAX_MESSAGES_PER_CONVERSATION = 2_000;
 const MAX_MESSAGE_CHARS = 400_000;
 const MAX_DOC_CHARS = 2_000_000;
 const MAX_PROJECT_DOCS = 20;
+/**
+ * A stored message must stay well under DynamoDB's 400 KB item limit, so the text Claude extracted
+ * from an attachment becomes a text file in the attachments store (read back like an uploaded file)
+ * and a very long message keeps its full text in a file too, with the start inline.
+ */
+const INLINE_TEXT_BYTES = 120_000;
+const INLINE_FALLBACK_CHARS = 60_000;
+/** Text files may be 5 MB (attachments/policy.ts); stay under it. */
+const MAX_TEXT_FILE_BYTES = 4_500_000;
+const MESSAGE_TEXT_FILE = "Message text.txt";
+
+/** A failure of one step of the import, reported with the step's name and the error's class, never its content. */
+class ImportStepError extends Error {
+  constructor(readonly step: string, readonly errorClass: string) {
+    super(`The import failed while ${step} (${errorClass})`);
+  }
+}
+const errorClass = (e: unknown) => (e instanceof Error && e.name ? e.name : "Error");
+async function step<T>(name: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (e) {
+    throw new ImportStepError(name, errorClass(e));
+  }
+}
+/** Cuts a text so it fits in `maxBytes` of UTF-8. */
+function cutBytes(text: string, maxBytes: number): string {
+  if (Buffer.byteLength(text, "utf8") <= maxBytes) return text;
+  let end = Math.min(text.length, maxBytes);
+  while (end > 0 && Buffer.byteLength(text.slice(0, end), "utf8") > maxBytes) end = Math.floor(end * 0.9);
+  return text.slice(0, end);
+}
 /** One request may carry a few megabytes of chat text. */
 export const IMPORT_BODY_LIMIT = 32 * 1024 * 1024;
 
@@ -136,34 +168,42 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
     const name = team ? "Backup Claude" : "Imported from Claude";
     const who = team ? "the team" : "this person";
     const instructions = memory ? `# Memory imported from Claude\n\nWhat Claude remembered about ${who} and their work. Use it as context; it can be updated here.\n\n${memory}` : "";
-    const all = await deps.repos.projects.list();
-    let p = all.find((x) => x.name === name && (team ? x.visibility === "shared" : x.ownerId === s.userId));
-    if (p && team && p.ownerId !== s.userId && !s.roles.includes("admin")) return apiError(reply, 403, "forbidden", `"${name}" belongs to someone else. Ask its owner or an administrator to run the import.`);
-    const members: ProjectMember[] = team ? (await deps.directory.list()).filter((u) => u.enabled && u.id !== s.userId).slice(0, MAX_MEMBERS).map((u) => ({ id: u.id, name: u.name, email: u.email, addedAt: t })) : [];
-    if (p) {
-      const patch: { instructions?: string; members?: ProjectMember[] } = {};
-      if (instructions && p.instructions !== instructions) patch.instructions = instructions;
-      if (team) {
-        const missing = members.filter((m) => !p!.members.some((x) => x.id === m.id));
-        if (missing.length > 0) patch.members = [...p.members, ...missing].slice(0, MAX_MEMBERS);
-      }
-      if (Object.keys(patch).length > 0) p = (await deps.repos.projects.update(p.id, { ...patch, updatedAt: t })) ?? p;
-    } else {
-      p = {
-        id: ulid(), ownerId: s.userId, ownerName: s.name, name,
-        description: team ? "Everything brought over from the Claude.ai account, shared with the whole team: chats, memory and projects. Ask it anything." : "Chats brought over from the Claude.ai account, with its memory as the instructions.",
-        instructions, visibility: team ? "shared" : "private", members, knowledge: [], createdAt: t, updatedAt: t,
-      };
-      await deps.repos.projects.create(p);
-    }
     const files = body.data.memoryFiles.trim();
-    if (files) p = await putKnowledgeFile(p, "Claude memory files.md", `# Claude memory files\n\nThe files of Claude's memory directory, brought over from the Claude.ai account.\n\n${files}`);
     const projectFiles = body.data.projectFiles.trim();
-    if (projectFiles) p = await putKnowledgeFile(p, "Claude projects.md", `# Claude projects\n\nThe projects of the Claude.ai account: their instructions, memory and documents.\n\n${projectFiles}`);
-    await audit(deps, req, { action: "import_claude_destination", meta: { projectId: p.id, team, members: p.members.length, memoryChars: memory.length, memoryFilesChars: files.length, projectFilesChars: projectFiles.length } });
-    // Sizes and timing only, so a slow or failed import can be traced in the logs without content.
-    deps.log.info("import_claude_destination", { ms: Date.now() - started, team, members: p.members.length, memoryFilesChars: files.length, projectFilesChars: projectFiles.length });
-    return { projectId: p.id, name: p.name, members: p.members.length };
+    try {
+      const all = await step("listing the projects", () => deps.repos.projects.list());
+      let p = all.find((x) => x.name === name && (team ? x.visibility === "shared" : x.ownerId === s.userId));
+      if (p && team && p.ownerId !== s.userId && !s.roles.includes("admin")) return apiError(reply, 403, "forbidden", `"${name}" belongs to someone else. Ask its owner or an administrator to run the import.`);
+      const accounts = team ? await step("reading the list of accounts", () => deps.directory.list()) : [];
+      const members: ProjectMember[] = accounts.filter((u) => u.enabled && u.id !== s.userId).slice(0, MAX_MEMBERS).map((u) => ({ id: u.id, name: u.name, email: u.email, addedAt: t }));
+      if (p) {
+        const patch: { instructions?: string; members?: ProjectMember[] } = {};
+        if (instructions && p.instructions !== instructions) patch.instructions = instructions;
+        if (team) {
+          const missing = members.filter((m) => !p!.members.some((x) => x.id === m.id));
+          if (missing.length > 0) patch.members = [...p.members, ...missing].slice(0, MAX_MEMBERS);
+        }
+        if (Object.keys(patch).length > 0) p = (await step("updating the project", () => deps.repos.projects.update(p!.id, { ...patch, updatedAt: t }))) ?? p;
+      } else {
+        const created: Project = {
+          id: ulid(), ownerId: s.userId, ownerName: s.name, name,
+          description: team ? "Everything brought over from the Claude.ai account, shared with the whole team: chats, memory and projects. Ask it anything." : "Chats brought over from the Claude.ai account, with its memory as the instructions.",
+          instructions, visibility: team ? "shared" : "private", members, knowledge: [], createdAt: t, updatedAt: t,
+        };
+        await step("creating the project", () => deps.repos.projects.create(created));
+        p = created;
+      }
+      if (files) p = await step("saving the memory files", () => putKnowledgeFile(p!, "Claude memory files.md", `# Claude memory files\n\nThe files of Claude's memory directory, brought over from the Claude.ai account.\n\n${files}`));
+      if (projectFiles) p = await step("saving the Claude projects file", () => putKnowledgeFile(p!, "Claude projects.md", `# Claude projects\n\nThe projects of the Claude.ai account: their instructions, memory and documents.\n\n${projectFiles}`));
+      await audit(deps, req, { action: "import_claude_destination", meta: { projectId: p.id, team, members: p.members.length, memoryChars: memory.length, memoryFilesChars: files.length, projectFilesChars: projectFiles.length } });
+      // Sizes and timing only, so a slow or failed import can be traced in the logs without content.
+      deps.log.info("import_claude_destination", { ms: Date.now() - started, team, members: p.members.length, memoryFilesChars: files.length, projectFilesChars: projectFiles.length });
+      return { projectId: p.id, name: p.name, members: p.members.length };
+    } catch (e) {
+      if (!(e instanceof ImportStepError)) throw e;
+      deps.log.error("import_claude_destination_failed", { step: e.step, errorClass: e.errorClass, team, memoryFilesChars: files.length, projectFilesChars: projectFiles.length });
+      return apiError(reply, 500, "import_failed", `${e.message}. Tell the administrator; nothing else was changed.`);
+    }
   });
 
   /** A batch of chats. A chat imported before (same source id) is skipped. */
@@ -186,8 +226,9 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
       }
       return set;
     };
-    const results: Array<{ sourceId: string; id: string | null; status: "imported" | "skipped" | "empty" }> = [];
+    const results: Array<{ sourceId: string; id: string | null; status: "imported" | "skipped" | "empty" | "failed"; reason?: string }> = [];
     let messagesImported = 0;
+    const store = deps.attachments;
     for (const ic of body.data.conversations) {
       let projectId: string | null = null;
       let key = s.userId;
@@ -208,18 +249,38 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
       const updatedAt = ic.updatedAt ?? createdAt;
       const id = ulid();
       const stored: StoredMessage[] = [];
+      const files: Array<{ key: string; bytes: Buffer }> = [];
       let chars = 0;
+      /** A text as a file of this conversation (read back like an uploaded file), or null when there is no store. */
+      const textFile = (name: string, text: string): AttachmentMeta | null => {
+        if (!store) return null;
+        const attachmentId = ulid();
+        const bytes = Buffer.from(cutBytes(text, MAX_TEXT_FILE_BYTES), "utf8");
+        const k = attachmentKey(id, attachmentId, name);
+        files.push({ key: k, bytes });
+        return { id: attachmentId, name: safeName(name), contentType: "text/plain", size: bytes.length, pages: null, key: k };
+      };
       for (const m of ic.messages) {
-        const text = m.text.trim();
+        let text = m.text.trim();
         const docs: BetaContentBlockParam[] = [];
+        const attached: AttachmentMeta[] = [];
         for (const a of m.attachments) {
           const t = (a.text ?? "").trim();
-          if (t) docs.push({ type: "document", title: safeName(a.name), source: { type: "text", media_type: "text/plain", data: t } } as BetaContentBlockParam);
+          if (!t) continue;
           chars += t.length;
+          // The text Claude extracted from the file, as a text file next to the message.
+          const meta = m.role === "user" ? textFile(`${safeName(a.name)}.txt`, t) : null;
+          if (meta) attached.push(meta);
+          else docs.push({ type: "document", title: safeName(a.name), source: { type: "text", media_type: "text/plain", data: t.slice(0, INLINE_FALLBACK_CHARS) } } as BetaContentBlockParam);
         }
         const note = m.attachments.length > 0 ? `[Attached in Claude: ${m.attachments.map((a) => safeName(a.name)).join(", ")}]` : "";
+        if (Buffer.byteLength(text, "utf8") > INLINE_TEXT_BYTES) {
+          const meta = m.role === "user" ? textFile(MESSAGE_TEXT_FILE, text) : null;
+          if (meta) attached.push(meta);
+          text = `${cutBytes(text, meta ? INLINE_TEXT_BYTES : INLINE_TEXT_BYTES / 2)}\n\n[${meta ? `Long message: the full text is in the attached file "${MESSAGE_TEXT_FILE}"` : "Long message shortened at import"}]`;
+        }
         const body = [text, note].filter(Boolean).join("\n\n");
-        if (!body && docs.length === 0) continue;
+        if (!body && docs.length === 0 && attached.length === 0) continue;
         chars += body.length;
         stored.push({
           id: ulid(),
@@ -227,6 +288,7 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
           seq: stored.length + 1,
           role: m.role,
           content: [...docs, { type: "text", text: body || "(attachment)" }] as BetaContentBlockParam[],
+          ...(attached.length > 0 ? { attachments: attached } : {}),
           ...(m.role === "user" ? { authorId: s.userId, authorName: s.name } : {}),
           model: null,
           fallbackReason: null,
@@ -246,13 +308,24 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
         createdBy: s.userId, createdByName: s.name, importedFrom: ic.sourceId, ...(ic.archive ? { archived: true } : {}),
       };
       const life = ic.archive ? null : ttl;
-      await deps.repos.conversations.create(c, life);
-      for (const m of stored) await deps.repos.messages.append(m, life);
+      try {
+        // Files and messages first, the conversation last: a failure leaves no half-imported chat behind.
+        for (const f of files) await step("saving an attachment's text", () => store!.put(f.key, f.bytes, "text/plain"));
+        for (const m of stored) await step("saving a message", () => deps.repos.messages.append(m, life));
+        await step("saving the conversation", () => deps.repos.conversations.create(c, life));
+      } catch (e) {
+        const err = e instanceof ImportStepError ? e : new ImportStepError("saving the chat", errorClass(e));
+        deps.log.warn("import_claude_conversation_failed", { step: err.step, errorClass: err.errorClass, messages: stored.length, files: files.length, chars });
+        await deps.repos.messages.deleteAll(id).catch(() => undefined);
+        if (store && files.length > 0) await store.deletePrefix(`conversations/${id}/`).catch(() => undefined);
+        results.push({ sourceId: ic.sourceId, id: null, status: "failed", reason: `${err.step}: ${err.errorClass}` });
+        continue;
+      }
       done.add(ic.sourceId);
       messagesImported += stored.length;
       results.push({ sourceId: ic.sourceId, id, status: "imported" });
     }
-    await audit(deps, req, { action: "import_claude_conversations", meta: { imported: results.filter((r) => r.status === "imported").length, skipped: results.filter((r) => r.status === "skipped").length, empty: results.filter((r) => r.status === "empty").length, messages: messagesImported, archived: body.data.conversations.filter((c) => c.archive).length } });
+    await audit(deps, req, { action: "import_claude_conversations", meta: { imported: results.filter((r) => r.status === "imported").length, skipped: results.filter((r) => r.status === "skipped").length, empty: results.filter((r) => r.status === "empty").length, failed: results.filter((r) => r.status === "failed").length, messages: messagesImported, archived: body.data.conversations.filter((c) => c.archive).length } });
     return { conversations: results };
   });
 }

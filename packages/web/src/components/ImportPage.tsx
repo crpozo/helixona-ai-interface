@@ -20,6 +20,9 @@ interface Outcome {
   conversations: number;
   skipped: number;
   empty: number;
+  /** Chats the server could not save, with the error classes seen. */
+  failed: number;
+  failures: string[];
   projects: number;
   projectsSkipped: number;
   docs: number;
@@ -112,7 +115,7 @@ export function ImportPage({ me, onBack, onImported }: Props) {
     const total = projects.length + chats.length + 1;
     let done = 0;
     const result: Outcome = {
-      conversations: 0, skipped: 0, empty: data.conversations.length - chats.length, projects: 0, projectsSkipped: 0,
+      conversations: 0, skipped: 0, empty: data.conversations.length - chats.length, failed: 0, failures: [], projects: 0, projectsSkipped: 0,
       docs: folded?.docs ?? 0, docsLeft: folded?.left ?? [], memory: memory.trim().length > 0, memoryFiles: data.memoryFiles.length,
       team, destination: team ? TEAM_PROJECT : PRIVATE_PROJECT, members: 0, archive,
     };
@@ -154,7 +157,10 @@ export function ImportPage({ me, onBack, onImported }: Props) {
         for (const c of r.conversations) {
           if (c.status === "imported") result.conversations++;
           else if (c.status === "skipped") result.skipped++;
-          else result.empty++;
+          else if (c.status === "failed") {
+            result.failed++;
+            if (c.reason && !result.failures.includes(c.reason)) result.failures.push(c.reason);
+          } else result.empty++;
         }
         done += batch.length;
         setProgress({ done, total, step: `Importing chats… ${n(done)} of ${n(total)}` });
@@ -329,6 +335,7 @@ export function ImportPage({ me, onBack, onImported }: Props) {
               <strong>Done.</strong> {n(outcome.conversations)} chats imported
               {outcome.skipped > 0 ? `, ${n(outcome.skipped)} already here (skipped)` : ""}
               {outcome.empty > 0 ? `, ${n(outcome.empty)} empty` : ""}
+              {outcome.failed > 0 ? `, ${n(outcome.failed)} could not be saved` : ""}
               {outcome.projects > 0 || outcome.projectsSkipped > 0 ? `; ${n(outcome.projects)} projects with ${n(outcome.docs)} documents${outcome.projectsSkipped > 0 ? ` (${n(outcome.projectsSkipped)} already here)` : ""}${outcome.team ? " (in one file of the project)" : ""}` : ""}
               {outcome.memory ? "; memory saved as the project's instructions" : ""}
               {outcome.memoryFiles > 0 ? `; ${n(outcome.memoryFiles)} memory files saved as project files` : ""}.
@@ -339,6 +346,11 @@ export function ImportPage({ me, onBack, onImported }: Props) {
                 : `The chats are in the sidebar; the ones from Claude projects are inside those projects.`}
               {outcome.archive ? " The chats are kept as a backup beyond the retention period." : ""}
             </p>
+            {outcome.failed > 0 && (
+              <p className="notice-error small" role="alert">
+                {n(outcome.failed)} {outcome.failed === 1 ? "chat was" : "chats were"} not saved{outcome.failures.length > 0 ? ` (${outcome.failures.join(", ")})` : ""}. Run the import again to retry them; if it happens again, tell the administrator.
+              </p>
+            )}
             {outcome.docsLeft.length > 0 && (
               <p className="muted small">
                 Too large for the project's file, left out: {outcome.docsLeft.slice(0, 5).join(", ")}

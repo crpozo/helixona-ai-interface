@@ -84,10 +84,11 @@ describe("Import from Claude", () => {
       ["Lab summary", p1!.id, "2026-03-01T10:00:00.000Z", 2],
     ]);
     const detail = (await app.inject({ method: "GET", url: `/api/conversations/${results[0]!.id}`, headers: { cookie } })).json();
-    expect(detail.messages[0].content).toEqual([
-      { type: "document", title: "labs.pdf", source: { type: "text", media_type: "text/plain", data: "Hemoglobin 13.1" } },
-      { type: "text", text: "Summarize these labs\n\n[Attached in Claude: labs.pdf]" },
-    ]);
+    // The text Claude extracted from the file is a text file of the conversation, read back like an upload.
+    expect(detail.messages[0].content).toEqual([{ type: "text", text: "Summarize these labs\n\n[Attached in Claude: labs.pdf]" }]);
+    expect(detail.messages[0].attachments).toHaveLength(1);
+    expect(detail.messages[0].attachments[0]).toMatchObject({ name: "labs.pdf.txt", contentType: "text/plain", size: 15 });
+    expect((await store.get(detail.messages[0].attachments[0].key)).toString()).toBe("Hemoglobin 13.1");
     expect(detail.messages[1]).toMatchObject({ role: "assistant", model: null, stopReason: "end_turn" });
     // The chat can be continued here.
     const turn = await post(app, cookie, `/api/conversations/${results[0]!.id}/messages`, { text: "And the iron?" });
@@ -100,7 +101,7 @@ describe("Import from Claude", () => {
 
     const audit = repos.audit.events.filter((e) => e.action.startsWith("import_claude"));
     expect(audit.map((e) => e.action)).toEqual(["import_claude_destination", "import_claude_destination", "import_claude_projects", "import_claude_projects", "import_claude_conversations", "import_claude_conversations"]);
-    expect(audit[4]!.meta).toEqual({ imported: 2, skipped: 0, empty: 1, messages: 3, archived: 0 });
+    expect(audit[4]!.meta).toEqual({ imported: 2, skipped: 0, empty: 1, failed: 0, messages: 3, archived: 0 });
     expect(JSON.stringify(audit)).not.toContain("Hemoglobin");
     // Another person's project cannot be a destination.
     const other = await login(app, "bruno");
@@ -155,7 +156,51 @@ describe("Import from Claude", () => {
     const eva = `hx_session=${adminLogin.cookies.find((c) => c.name === "hx_session")!.value}`;
     expect((await post(app, eva, "/api/import/claude/destination", { memory: "", team: true })).json()).toMatchObject({ projectId: project.id, members: 3 });
     const audit = repos.audit.events.filter((e) => e.action === "import_claude_conversations");
-    expect(audit[0]!.meta).toEqual({ imported: 1, skipped: 0, empty: 0, messages: 2, archived: 1 });
+    expect(audit[0]!.meta).toEqual({ imported: 1, skipped: 0, empty: 0, failed: 0, messages: 2, archived: 1 });
     expect(JSON.stringify(repos.audit.events)).not.toContain("Hemoglobin");
+  });
+
+  it("keeps every message small enough to store: long texts and extracted attachments become files, and one chat that cannot be saved does not stop the others", async () => {
+    const { app, repos, store } = await makeApp();
+    const cookie = await login(app);
+    const long = "Patient history line. ".repeat(6_000); // ~132 KB inline would push the DynamoDB item towards its 400 KB limit
+    const extracted = "EOB line. ".repeat(15_000); // 150 KB of text Claude extracted from a file
+    const original = repos.messages.append.bind(repos.messages);
+    repos.messages.append = async (m, ttl) => {
+      if (JSON.stringify(m.content).includes("boom")) throw Object.assign(new Error("Item size has exceeded the maximum allowed size"), { name: "ValidationException" });
+      return original(m, ttl);
+    };
+    const r = await post(app, cookie, "/api/import/claude/conversations", { conversations: [
+      { sourceId: "big", name: "Long history", messages: [{ role: "user", text: long, attachments: [{ name: "eob.pdf", text: extracted }] }, { role: "assistant", text: "Noted.", attachments: [] }] },
+      { sourceId: "bad", name: "Breaks", messages: [{ role: "user", text: "boom", attachments: [] }] },
+      { sourceId: "ok", name: "Fine", messages: [{ role: "user", text: "hola", attachments: [] }] },
+    ] });
+    expect(r.statusCode).toBe(200);
+    const results = r.json().conversations as Array<{ sourceId: string; id: string | null; status: string; reason?: string }>;
+    expect(results.map((x) => [x.sourceId, x.status, x.reason])).toEqual([["big", "imported", undefined], ["bad", "failed", "saving a message: ValidationException"], ["ok", "imported", undefined]]);
+    const big = (await app.inject({ method: "GET", url: `/api/conversations/${results[0]!.id}`, headers: { cookie } })).json();
+    const first = big.messages[0];
+    expect(JSON.stringify(first).length).toBeLessThan(200_000);
+    expect(first.content[0].text.startsWith("Patient history line.")).toBe(true);
+    expect(first.content[0].text).toContain('[Long message: the full text is in the attached file "Message text.txt"]');
+    expect(first.attachments.map((a: { name: string; size: number }) => [a.name, a.size])).toEqual([["eob.pdf.txt", extracted.trim().length], ["Message text.txt", long.trim().length]]);
+    expect((await store.get(first.attachments[1].key)).toString()).toBe(long.trim());
+    // The chat that failed left nothing behind, and the failure was logged without content.
+    const list = (await app.inject({ method: "GET", url: "/api/conversations", headers: { cookie } })).json().items as Array<{ title: string }>;
+    expect(list.map((c) => c.title).sort()).toEqual(["Fine", "Long history"]);
+    expect(repos.audit.events.find((e) => e.action === "import_claude_conversations")!.meta).toMatchObject({ imported: 2, failed: 1 });
+    // The chat with the files can be continued: the files are read back for the model.
+    const turn = await post(app, cookie, `/api/conversations/${results[0]!.id}/messages`, { text: "Summarize" });
+    expect(turn.statusCode).toBe(200);
+    expect(turn.body).toContain("event: done");
+  });
+
+  it("names the step that failed when the destination cannot be prepared", async () => {
+    const { app, directory } = await makeApp();
+    const cookie = await login(app);
+    directory.list = async () => { throw Object.assign(new Error("not allowed"), { name: "AccessDeniedException" }); };
+    const r = await post(app, cookie, "/api/import/claude/destination", { memory: "m", team: true });
+    expect(r.statusCode).toBe(500);
+    expect(r.json().error).toEqual({ code: "import_failed", message: "The import failed while reading the list of accounts (AccessDeniedException). Tell the administrator; nothing else was changed." });
   });
 });

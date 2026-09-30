@@ -390,9 +390,12 @@ The person importing chooses who can see it:
 In both cases:
 
 - **Chats** become conversations with their messages, dates and titles. The export holds the text
-  Claude extracted from attached files, not the files: that text travels with the message as a
-  text document. A chat imported before into the same place (same Claude id) is skipped, so a
-  second import duplicates nothing.
+  Claude extracted from attached files, not the files: that text is stored as a text file of the
+  conversation in the attachments bucket (encrypted, same retention as the conversation) and read
+  back for the model like an uploaded file; a very long message keeps its full text in such a file
+  too. A chat the server cannot save is reported (step and error class, never content) and the
+  rest of the batch continues. A chat imported before into the same place (same Claude id) is
+  skipped, so a second import duplicates nothing.
 - **Memory** (from the export, or pasted from Claude.ai → Settings → Memory) becomes the
   instructions of the destination project, and the files of Claude's memory directory one
   knowledge file; staff can edit or delete them like any project instructions and files.
