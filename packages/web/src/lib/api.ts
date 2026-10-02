@@ -108,6 +108,11 @@ async function request<T>(
   return (await res.json()) as T;
 }
 
+/** The server's version (the image tag), to notice a deploy from a page left open. */
+export function getHealth(): Promise<{ ok: boolean; version: string }> {
+  return request("/api/health");
+}
+
 // ---- Auth ----
 
 export function getMe(signal?: AbortSignal): Promise<Me> {

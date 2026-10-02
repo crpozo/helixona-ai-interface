@@ -27,6 +27,8 @@ import { AdminPage } from "./components/AdminPage";
 import { ImportPage } from "./components/ImportPage";
 import { ChatPanel } from "./components/ChatPanel";
 import { IdleWarning } from "./components/IdleWarning";
+import { UpdateBanner } from "./components/UpdateBanner";
+import { useVersionWatch } from "./lib/useVersionWatch";
 import { LoginPage } from "./components/LoginPage";
 import { ProjectPage } from "./components/ProjectPage";
 import { Sidebar } from "./components/Sidebar";
@@ -89,6 +91,8 @@ export function App() {
   const [viewerWide, setViewerWide] = useState(false);
   // The start screen accepts dropped files anywhere, not only on the box.
   const homeRef = useRef<HTMLDivElement>(null);
+  // A page left open after a deploy is told to reload.
+  const newVersion = useVersionWatch(true);
   const [chat, dispatch] = useReducer(chatReducer, initialChatState);
   const abortRef = useRef<AbortController | null>(null);
   const loadSeq = useRef(0);
@@ -612,6 +616,7 @@ export function App() {
       {idle.secondsLeft !== null && idle.secondsLeft > 0 && (
         <IdleWarning secondsLeft={idle.secondsLeft} onContinue={idle.reset} onLogout={() => void doLogout(null)} />
       )}
+      {newVersion && <UpdateBanner onReload={() => window.location.reload()} />}
     </>
   );
 }

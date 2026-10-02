@@ -198,6 +198,8 @@ export class AppStack extends cdk.Stack {
         TABLE_PROJECTS: tableNames.projects.tableName,
         TABLE_TRAINING: tableNames.training.tableName,
         TABLE_SETTINGS: tableNames.settings.tableName,
+        // The version the server reports (/api/health): a page left open notices a deploy and asks to reload.
+        APP_VERSION: cfg.imageTag,
         BILLING_VIEWER_EMAILS: cfg.billingViewerEmails,
         AWS_REGION: this.region,
         LLM_MODE: cfg.llmMode,
