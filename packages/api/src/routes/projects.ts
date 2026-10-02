@@ -4,7 +4,7 @@ import { estimateAttachmentTokens, ulid, type Project, type ProjectMember, type 
 import type { Deps } from "../deps.js";
 import type { Session } from "../repos/types.js";
 import { apiError, audit, requireAuth } from "../app.js";
-import { ALLOWED_TYPES, MAX_KNOWLEDGE_FILE_MB, MAX_KNOWLEDGE_PDF_PAGES, MAX_PROJECT_FILES, MAX_PROJECT_KNOWLEDGE_BYTES, MAX_PROJECT_KNOWLEDGE_TOKENS, maxBytesFor, projectKnowledgeKey, safeName } from "../attachments/policy.js";
+import { ALLOWED_TYPES, MAX_KNOWLEDGE_FILE_MB, MAX_KNOWLEDGE_PDF_PAGES, MAX_PROJECT_FILES, MAX_PROJECT_KNOWLEDGE_BYTES, MAX_PROJECT_KNOWLEDGE_TOKENS, maxBytesFor, projectKnowledgeKey, safeName, sheetCharBudget } from "../attachments/policy.js";
 import { AttachmentProblem, inspectUpload } from "../attachments/documents.js";
 
 /**
@@ -229,7 +229,7 @@ export function registerProjectRoutes(app: FastifyInstance, deps: Deps): void {
     if (p.knowledge.some((k) => k.id === attachmentId)) return view(p, req);
     let verified;
     try {
-      verified = { meta: await inspectUpload(deps.attachments, projectKnowledgeKey(p.id, attachmentId, body.data.name), attachmentId, body.data.name, knowledgeMaxMb, MAX_KNOWLEDGE_PDF_PAGES) };
+      verified = { meta: await inspectUpload(deps.attachments, projectKnowledgeKey(p.id, attachmentId, body.data.name), attachmentId, body.data.name, knowledgeMaxMb, MAX_KNOWLEDGE_PDF_PAGES, sheetCharBudget(deps.config.CONTEXT_LIMIT_TOKENS)) };
     } catch (e) {
       if (e instanceof AttachmentProblem) return apiError(reply, 400, e.code, e.message);
       throw e;

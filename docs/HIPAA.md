@@ -335,9 +335,17 @@ Staff can attach Excel workbooks (.xlsx) and CSV files, and ask for an Excel wor
 example "the whole spreadsheet with the original data, plus a tab of the checks the patients
 cashed and a tab of the checks never cashed".
 
-- **Reading an attachment.** The server reads the stored values of each visible sheet. It never
-  runs formulas or macros, and it caps the number of rows and the size of the file. The model sees
-  each row with its Excel row number. Hidden sheets are left out.
+- **Reading an attachment.** The server reads the stored values of each visible sheet once, when
+  the file is attached, and keeps the rows as the model reads them (text with the Excel row
+  numbers) next to the file in the attachments bucket, under the same encryption and retention, so
+  later turns do not reopen the workbook. It never runs formulas or macros, and it caps the number
+  of rows and the size of the file. Hidden sheets are left out.
+- **Files too long for one conversation.** A spreadsheet may take at most about 60% of the model's
+  context window. A longer file is cut: each sheet keeps its header and the share of the rows its
+  size earns, and the sheet heading the model sees says how many rows are left out, so the answer
+  can say the view is partial. Staff should attach a file with only the rows and columns needed, or
+  split it. The size of the text the model sees is kept with the attachment, so the conversation
+  length check is exact instead of a guess from the file size.
 - **Rows are never retyped.** For rows that come from the attachment, the model writes a reference
   such as `{{file: Checks.xlsx | rows: 2-5, 9}}` instead of the values. The browser fills in those
   rows from the file itself, so names, check numbers, amounts and dates are the original ones. The

@@ -23,9 +23,9 @@ export const SHEET_LIMITS = {
   maxCols: 200,
   maxCellChars: 4_000,
   maxSheets: 50,
-  /** A part of the workbook (a sheet, the shared strings) larger than this is refused: a zip bomb guard. */
-  maxPartBytes: 80 * 1024 * 1024,
-  maxTotalBytes: 200 * 1024 * 1024,
+  /** A part of the workbook (a sheet, the shared strings) larger than this is refused: a zip bomb guard. A 10 MB report inflates to about 100 MB of XML. */
+  maxPartBytes: 160 * 1024 * 1024,
+  maxTotalBytes: 320 * 1024 * 1024,
 } as const;
 
 /** The file cannot be read as a spreadsheet (maps to a 400 the person can fix). */
@@ -352,17 +352,49 @@ export async function readTables(contentType: string, bytes: Uint8Array): Promis
   return [{ name: "Sheet1", rows: rows.slice(0, SHEET_LIMITS.maxRows), truncatedRows: truncated }];
 }
 
+export interface ModelText {
+  text: string;
+  /** Rows the model sees (the header rows included) and rows left out. */
+  rows: number;
+  rowsLeft: number;
+}
+
 /**
  * The spreadsheet as the model reads it: each sheet as CSV with a first column, Row, holding the
  * Excel row number (the header is row 1), so an answer can point to rows the way staff see them.
+ * A file longer than `maxChars` is cut: each sheet keeps its header and the share of the rows its
+ * size earns, and its heading says how many rows are left out, so the model and staff know the
+ * view is partial.
  */
-export function tablesForModel(fileName: string, tables: SheetTable[]): string {
-  return tables
-    .map((t) => {
-      const head = `Sheet "${t.name}" of "${fileName}": ${t.rows.length.toLocaleString("en-US")} rows${t.truncatedRows > 0 ? `; ${t.truncatedRows.toLocaleString("en-US")} more rows are not shown because the sheet is too long` : ""}.`;
-      // The first line (row 1, usually the header) is labelled "Row"; the others carry their row number.
-      const lines = t.rows.map((r, i) => [i === 0 ? "Row" : String(i + 1), ...r].map(csvCell).join(","));
-      return [head, ...lines].join("\n");
-    })
-    .join("\n\n");
+export function fitForModel(fileName: string, tables: SheetTable[], maxChars = Infinity): ModelText {
+  const sheets = tables.map((t) => {
+    // The first line (row 1, usually the header) is labelled "Row"; the others carry their row number.
+    const lines = t.rows.map((r, i) => [i === 0 ? "Row" : String(i + 1), ...r].map(csvCell).join(","));
+    return { t, lines, chars: lines.reduce((n, l) => n + l.length + 1, 0) };
+  });
+  const total = sheets.reduce((n, s) => n + s.chars, 0);
+  const parts: string[] = [];
+  let rows = 0;
+  let rowsLeft = 0;
+  for (const s of sheets) {
+    const budget = total <= maxChars ? Infinity : Math.floor((maxChars * s.chars) / total);
+    let used = 0;
+    let n = 0;
+    while (n < s.lines.length && (n === 0 || used + s.lines[n]!.length + 1 <= budget)) {
+      used += s.lines[n]!.length + 1;
+      n++;
+    }
+    const cut = s.lines.length - n;
+    const left = cut + s.t.truncatedRows;
+    rows += n;
+    rowsLeft += left;
+    const why = cut > 0 ? "the file is too long for one conversation" : "the sheet is too long";
+    const head = `Sheet "${s.t.name}" of "${fileName}": ${n.toLocaleString("en-US")} rows${left > 0 ? `; ${left.toLocaleString("en-US")} more rows are not shown because ${why} (ask for a file with only the rows and columns needed, or split it)` : ""}.`;
+    parts.push([head, ...s.lines.slice(0, n)].join("\n"));
+  }
+  return { text: parts.join("\n\n"), rows, rowsLeft };
+}
+
+export function tablesForModel(fileName: string, tables: SheetTable[], maxChars = Infinity): string {
+  return fitForModel(fileName, tables, maxChars).text;
 }

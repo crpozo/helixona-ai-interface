@@ -74,6 +74,8 @@ export interface AttachmentMeta {
   pages: number | null;
   /** Object key in the attachments store. */
   key: string;
+  /** Characters of the text the model receives when it is not the file itself: a spreadsheet read into rows (cut to fit). */
+  modelChars?: number;
 }
 
 export interface StoredMessage {

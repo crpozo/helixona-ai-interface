@@ -10,7 +10,9 @@ import { SessionService } from "../src/auth/session.js";
 import { memoryRepos, MemoryUserDirectory } from "../src/repos/memory.js";
 import { MemoryAttachmentStore } from "../src/attachments/store.js";
 import { MemoryFeedbackSender } from "../src/feedback.js";
-import { parseCsv, parseXlsx, readTables, SpreadsheetError, tablesForModel, XLSX_TYPE } from "../src/attachments/sheets.js";
+import { fitForModel, parseCsv, parseXlsx, readTables, SpreadsheetError, tablesForModel, XLSX_TYPE } from "../src/attachments/sheets.js";
+import { sheetTextKey } from "../src/attachments/documents.js";
+import { sheetCharBudget } from "../src/attachments/policy.js";
 import type { Deps } from "../src/deps.js";
 
 const H = { "x-requested-with": "helixona", "content-type": "application/json" };
@@ -87,6 +89,28 @@ describe("Reading spreadsheets", () => {
     const csv = await readTables("text/csv", Buffer.from("Patient,Amount\nAna,$10.00\nLuis,$5.00\n"));
     expect(tablesForModel("Checks.csv", csv)).toBe(`Sheet "Sheet1" of "Checks.csv": 3 rows.\nRow,Patient,Amount\n2,Ana,$10.00\n3,Luis,$5.00`);
   });
+
+  it("cuts a file that is too long for one conversation: each sheet keeps its header and a share of the rows, and says what is left out", () => {
+    const claims = { name: "Claims", rows: [["Patient", "Amount"], ...Array.from({ length: 100 }, (_, i) => [`P${i}`, `$${i}.00`])], truncatedRows: 0 };
+    const notes = { name: "Notes", rows: [["Note"], ["a"], ["b"]], truncatedRows: 0 };
+    const full = fitForModel("Claims.xlsx", [claims, notes]);
+    expect([full.rows, full.rowsLeft]).toEqual([104, 0]);
+    expect(full.text).not.toContain("not shown");
+    const half = fitForModel("Claims.xlsx", [claims, notes], Math.floor(full.text.length / 2));
+    // The data fits the budget; the sheet headings (with the note) come on top.
+    expect(half.text.length).toBeLessThan(full.text.length / 2 + 2 * 220);
+    expect(half.rows + half.rowsLeft).toBe(104);
+    expect(half.text).toMatch(/^Sheet "Claims" of "Claims.xlsx": \d+ rows; \d+ more rows are not shown because the file is too long for one conversation \(ask for a file with only the rows and columns needed, or split it\)\.\nRow,Patient,Amount\n2,P0,\$0\.00\n/);
+    expect(half.text).toContain('\n\nSheet "Notes" of "Claims.xlsx": ');
+    // The header always goes, even when the sheet's share is smaller than it.
+    const tiny = fitForModel("Claims.xlsx", [claims, notes], 10);
+    expect(tiny.rows).toBe(2);
+    expect(tiny.text).toContain("Row,Patient,Amount\n\n");
+    expect(tiny.text).toContain("Row,Note");
+    // Rows beyond the row cap are reported too, with their own reason.
+    const capped = fitForModel("Big.xlsx", [{ ...notes, truncatedRows: 5000 }]);
+    expect(capped.text).toContain("3 rows; 5,000 more rows are not shown because the sheet is too long (ask for");
+  });
 });
 
 async function makeApp(wrap?: (p: LlmProvider) => LlmProvider) {
@@ -104,7 +128,7 @@ async function makeApp(wrap?: (p: LlmProvider) => LlmProvider) {
     passwordAuth: null,
     feedback: new MemoryFeedbackSender(),
   };
-  return { app: await buildApp(deps), repos };
+  return { app: await buildApp(deps), repos, store: deps.attachments as MemoryAttachmentStore };
 }
 
 async function login(app: FastifyInstance, username = "ana"): Promise<string> {
@@ -159,6 +183,38 @@ describe("Spreadsheets in a conversation", () => {
     const notSheet = await app.inject({ method: "GET", url: `/api/conversations/${conv.id}/attachments/${letter.id}/table`, headers: { cookie } });
     expect(notSheet.statusCode).toBe(400);
     expect(notSheet.json().error.code).toBe("not_a_spreadsheet");
+  });
+
+  it("a file too long for one conversation is cut to fit, read once, and the model is told what is missing", async () => {
+    const calls: StreamParams[] = [];
+    const { app, repos, store } = await makeApp((inner) => ({ stream: (p, o) => (calls.push(p), inner.stream(p, o)) }));
+    const cookie = await login(app);
+    const conv = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "sonnet" } })).json();
+    // 12,000 rows of about 40 characters: 480k characters, over the 315k the test context window allows a file.
+    const csv = "Patient,Account,Amount,Status\n" + Array.from({ length: 12_000 }, (_, i) => `Patient ${i},ACC${100000 + i},$${i}.00,Open`).join("\n") + "\n";
+    const report = await upload(app, cookie, conv.id, "Report.csv", Buffer.from(csv), "text/csv");
+    const r = await app.inject({ method: "POST", url: `/api/conversations/${conv.id}/messages`, headers: { ...H, cookie }, payload: { text: "How many are open?", attachments: [report] } });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("event: done");
+    expect(r.body).not.toContain("context_limit");
+    const doc = (calls.at(-1)!.messages.at(-1)!.content as Array<{ type: string; context?: string; source?: { data: string } }>)[0]!;
+    expect(doc.context).toContain("the view is partial");
+    const text = doc.source!.data;
+    expect(text.length).toBeLessThanOrEqual(sheetCharBudget(150_000) + 200);
+    expect(text).toMatch(/^Sheet "Sheet1" of "Report.csv": [\d,]+ rows; [\d,]+ more rows are not shown because the file is too long for one conversation/);
+    expect(text).toContain("\nRow,Patient,Account,Amount,Status\n2,Patient 0,ACC100000,$0.00,Open\n");
+    // The size the model sees is kept with the file, and the rows are read once and kept next to it.
+    const stored = (await repos.messages.list(conv.id))[0]!.attachments![0]!;
+    expect(stored.modelChars).toBe(text.length);
+    expect(await store.head(sheetTextKey(stored))).toMatchObject({ contentType: "text/plain", size: Buffer.byteLength(text) });
+    const reads: string[] = [];
+    const get = store.get.bind(store);
+    store.get = async (key) => (reads.push(key), get(key));
+    await app.inject({ method: "POST", url: `/api/conversations/${conv.id}/messages`, headers: { ...H, cookie }, payload: { text: "And closed?" } });
+    expect(reads).toEqual([sheetTextKey(stored)]);
+    // The browser still gets every row of the original file.
+    const table = await app.inject({ method: "GET", url: `/api/conversations/${conv.id}/attachments/${report.id}/table`, headers: { cookie } });
+    expect(table.json().sheets[0].rows).toHaveLength(12_001);
   });
 
   it("a file named .xlsx that is not a workbook is refused before the answer, with a message staff can act on", async () => {

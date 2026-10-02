@@ -35,7 +35,8 @@ function errorText(code: string, fallback: string): string {
     case "quota_exceeded":
       return "You have reached your daily quota. You can use the assistant again tomorrow.";
     case "context_limit":
-      return "This conversation is too long. Start a new conversation to continue.";
+      // The server says what is too long (the files, or the conversation) and what to do.
+      return fallback || "This conversation is too long. Start a new conversation to continue.";
     case "model_unavailable":
       return "The model is currently unavailable.";
     case "network":

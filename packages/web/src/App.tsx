@@ -383,7 +383,7 @@ export function App() {
             ? e.code === "quota_exceeded"
               ? "You have reached your daily quota."
               : e.code === "context_limit"
-                ? "This conversation is too long. Please start a new one."
+                ? e.message || "This conversation is too long. Please start a new one."
                 : e.code === "conversation_busy"
                   ? "Someone else is sending a message in this conversation. Wait for the answer, then try again."
                   : "Could not send the message."

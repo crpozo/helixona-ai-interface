@@ -29,6 +29,14 @@ export const MAX_PDF_PAGES = 1000;
  * image), so the documents of one request share a budget. Project files come first; attachments
  * then take what is left, oldest first, and whatever does not fit is read in parts instead.
  */
+/**
+ * Characters of spreadsheet text the model receives per file: about 60% of the context window, at
+ * most two million (~570k tokens). A longer file is cut, and the model is told how many rows are left out.
+ */
+export function sheetCharBudget(contextLimitTokens: number): number {
+  return Math.min(2_000_000, Math.floor(contextLimitTokens * 3.5 * 0.6));
+}
+
 export const INLINE = {
   maxFileBytes: 15 * MiB,
   maxFilePages: 100,

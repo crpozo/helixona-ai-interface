@@ -41,30 +41,56 @@ export function documentBlock(meta: AttachmentMeta, bytes: Buffer, cache: boolea
   return (cache ? { ...block, cache_control: { type: "ephemeral", ttl: "1h" } } : block) as BetaContentBlockParam;
 }
 
+/** Where the rows of a spreadsheet, as the model reads them, are kept: next to the file, so they go with it. */
+export function sheetTextKey(meta: AttachmentMeta): string {
+  return meta.key.replace(/\/[^/]*$/, "/sheet-text-v1.txt");
+}
+
+/** The widest a spreadsheet's text may be when no budget is given (the cap of `sheetCharBudget`). */
+const DEFAULT_SHEET_CHARS = 2_000_000;
+
 /**
- * A spreadsheet (CSV or Excel) as the model reads it: every visible sheet as CSV with its Excel row
- * numbers, so an answer can point to rows and the browser can copy those rows from the file exactly.
+ * The text the model receives for a spreadsheet (CSV or Excel): every visible sheet as CSV with its
+ * Excel row numbers, cut to `maxChars`. Read from the file once (when it is attached), then kept next
+ * to it, so later turns do not reopen the workbook. With `bytes`, the file is read now.
  */
-export async function spreadsheetBlock(meta: AttachmentMeta, bytes: Buffer, cache: boolean): Promise<BetaContentBlockParam> {
+export async function spreadsheetText(store: AttachmentStore, meta: AttachmentMeta, maxChars: number, bytes?: Buffer): Promise<string> {
+  if (!bytes) {
+    try {
+      return (await store.get(sheetTextKey(meta))).toString("utf8");
+    } catch {
+      bytes = await store.get(meta.key); // not prepared yet (an older attachment): read the file
+    }
+  }
+  const text = tablesForModel(meta.name, await readTables(meta.contentType, bytes), maxChars);
+  await store.put(sheetTextKey(meta), Buffer.from(text, "utf8"), "text/plain").catch(() => undefined);
+  return text;
+}
+
+/**
+ * A spreadsheet as a document block, so an answer can point to rows and the browser can copy those
+ * rows from the file exactly. A missing file throws (the caller says it is gone); a file that cannot
+ * be read as a spreadsheet becomes a note.
+ */
+export async function spreadsheetBlock(store: AttachmentStore, meta: AttachmentMeta, cache: boolean, maxChars = DEFAULT_SHEET_CHARS): Promise<BetaContentBlockParam> {
   let block: Record<string, unknown>;
   try {
-    const tables = await readTables(meta.contentType, bytes);
     block = {
       type: "document",
       title: meta.name,
-      context: `Spreadsheet attached by staff, read by the assistant. The first column, Row, is the Excel row number (row 1 is usually the header); it is not part of the file. Use these numbers to point to rows.`,
-      source: { type: "text", media_type: "text/plain", data: tablesForModel(meta.name, tables) },
+      context: `Spreadsheet attached by staff, read by the assistant. The first column, Row, is the Excel row number (row 1 is usually the header); it is not part of the file. Use these numbers to point to rows. When the heading of a sheet says rows are not shown, say so in the answer: the view is partial.`,
+      source: { type: "text", media_type: "text/plain", data: await spreadsheetText(store, meta, maxChars) },
     };
   } catch (e) {
-    const why = e instanceof SpreadsheetError ? e.message : "It could not be read.";
-    block = { type: "text", text: `[Attachment "${meta.name}" could not be read as a spreadsheet: ${why}]` };
+    if (!(e instanceof SpreadsheetError)) throw e;
+    block = { type: "text", text: `[Attachment "${meta.name}" could not be read as a spreadsheet: ${e.message}]` };
   }
   return (cache ? { ...block, cache_control: { type: "ephemeral", ttl: "1h" } } : block) as unknown as BetaContentBlockParam;
 }
 
 /** The block for any attached file sent whole: a PDF, a spreadsheet or a text file. */
-export async function contentBlock(meta: AttachmentMeta, bytes: Buffer, cache: boolean): Promise<BetaContentBlockParam> {
-  return isSpreadsheet(meta.contentType) ? spreadsheetBlock(meta, bytes, cache) : documentBlock(meta, bytes, cache);
+export async function contentBlock(store: AttachmentStore, meta: AttachmentMeta, cache: boolean, maxSheetChars = DEFAULT_SHEET_CHARS): Promise<BetaContentBlockParam> {
+  return isSpreadsheet(meta.contentType) ? spreadsheetBlock(store, meta, cache, maxSheetChars) : documentBlock(meta, await store.get(meta.key), cache);
 }
 
 /**
@@ -88,7 +114,7 @@ export function readingBlock(meta: AttachmentMeta, text: string, failedPages: st
  * Quick check of an object the browser uploaded, before the reply stream starts: it exists, its type
  * and size are allowed, and a PDF starts like one. Pages are counted later (the file may be large).
  */
-export async function checkUpload(store: AttachmentStore, key: string, id: string, rawName: string, maxAttachmentMb: number): Promise<AttachmentMeta> {
+export async function checkUpload(store: AttachmentStore, key: string, id: string, rawName: string, maxAttachmentMb: number, sheetChars = DEFAULT_SHEET_CHARS): Promise<AttachmentMeta> {
   const name = safeName(rawName);
   const head = await store.head(key);
   if (!head) throw new AttachmentProblem("attachment_missing", `The file "${name}" was not uploaded`);
@@ -99,16 +125,19 @@ export async function checkUpload(store: AttachmentStore, key: string, id: strin
     const start = await store.getRange(key, 0, 1023);
     if (!start.includes("%PDF-")) throw new AttachmentProblem("not_a_pdf", `"${name}" is not a PDF file. Open it and save it as PDF, then attach it again.`);
   }
-  if (contentType === XLSX_TYPE) {
-    // Opened now, so a file that is not a workbook (an old .xls renamed, a damaged file) is a plain error.
+  const meta: AttachmentMeta = { id, name, contentType, size: head.size, pages: null, key };
+  if (isSpreadsheet(contentType)) {
+    // Read now, once: a file that is not a workbook (an old .xls renamed, a damaged file) is a plain
+    // error, and the rows the model will see are kept next to the file, with their size.
     try {
-      await readTables(XLSX_TYPE, await store.get(key));
+      const text = await spreadsheetText(store, meta, sheetChars, await store.get(key));
+      return { ...meta, modelChars: text.length };
     } catch (e) {
       const why = e instanceof SpreadsheetError ? e.message : "Save it again as .xlsx or CSV and attach that.";
       throw new AttachmentProblem("not_a_spreadsheet", `"${name}": ${why}`);
     }
   }
-  return { id, name, contentType, size: head.size, pages: null, key };
+  return meta;
 }
 
 /** Downloads a PDF only to count its pages; the bytes are dropped right away. */
@@ -117,8 +146,8 @@ export async function inspectPdf(store: AttachmentStore, key: string): Promise<P
 }
 
 /** Full check for files that always go whole (project knowledge): type, size, page count within `maxPages`. */
-export async function inspectUpload(store: AttachmentStore, key: string, id: string, rawName: string, maxAttachmentMb: number, maxPages = MAX_PDF_PAGES): Promise<AttachmentMeta> {
-  const meta = await checkUpload(store, key, id, rawName, maxAttachmentMb);
+export async function inspectUpload(store: AttachmentStore, key: string, id: string, rawName: string, maxAttachmentMb: number, maxPages = MAX_PDF_PAGES, sheetChars = DEFAULT_SHEET_CHARS): Promise<AttachmentMeta> {
+  const meta = await checkUpload(store, key, id, rawName, maxAttachmentMb, sheetChars);
   if (meta.contentType !== "application/pdf") return meta;
   const { pages } = await inspectPdf(store, key);
   if (pages !== null && pages > maxPages) throw new AttachmentProblem("too_many_pages", `"${meta.name}" has ${pages} pages; files here are limited to ${maxPages} pages each. Please split the document.`);
@@ -126,11 +155,11 @@ export async function inspectUpload(store: AttachmentStore, key: string, id: str
 }
 
 /** Rebuilds document blocks from storage; a file that is gone becomes a short note instead of failing the turn. */
-export async function loadDocumentBlocks(store: AttachmentStore, metas: AttachmentMeta[], cacheLast: boolean): Promise<BetaContentBlockParam[]> {
+export async function loadDocumentBlocks(store: AttachmentStore, metas: AttachmentMeta[], cacheLast: boolean, maxSheetChars = DEFAULT_SHEET_CHARS): Promise<BetaContentBlockParam[]> {
   const blocks: BetaContentBlockParam[] = [];
   for (const [i, meta] of metas.entries()) {
     try {
-      blocks.push(await contentBlock(meta, await store.get(meta.key), cacheLast && i === metas.length - 1));
+      blocks.push(await contentBlock(store, meta, cacheLast && i === metas.length - 1, maxSheetChars));
     } catch {
       blocks.push({ type: "text", text: `[Attachment "${meta.name}" is no longer available]` });
     }

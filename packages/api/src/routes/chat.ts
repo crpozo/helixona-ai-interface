@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { currentModelId, estimateAttachmentTokens, estimateTokens, modelByAlias, ulid, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type TurnEvent, type UsageSummary } from "@helixona/core";
 import type { Deps } from "../deps.js";
-import { attachmentKey, INLINE, MAX_PDF_PAGES, READ } from "../attachments/policy.js";
+import { attachmentKey, INLINE, MAX_PDF_PAGES, READ, sheetCharBudget } from "../attachments/policy.js";
 import { AttachmentProblem, checkUpload, contentBlock, inspectPdf, loadDocumentBlocks, readingBlock, type PdfInfo } from "../attachments/documents.js";
 import { planDelivery } from "../attachments/planner.js";
 import { DocumentReader, Semaphore, type FileReading } from "../attachments/reader.js";
@@ -56,6 +56,8 @@ const EMPTY_USAGE: UsageSummary = { inputTokens: 0, outputTokens: 0, cacheReadTo
 export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
   const now = deps.now ?? (() => new Date());
   const ttl = deps.config.RETENTION_DAYS * 86400;
+  // A spreadsheet's rows are cut to this many characters so one file never fills the conversation.
+  const sheetChars = sheetCharBudget(deps.config.CONTEXT_LIMIT_TOKENS);
   const limiter = new TurnRateLimiter(deps.config.RATE_LIMIT_TURNS_PER_HOUR);
   // Large PDFs are transcribed by a second model, a few pages per request (see attachments/reader.ts).
   const readerEntry = modelByAlias(deps.catalog, deps.config.READER_MODEL_ALIAS) ?? modelByAlias(deps.catalog, deps.catalog.defaultAlias) ?? deps.catalog.models[0]!;
@@ -110,7 +112,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     for (const a of body.data.attachments) {
       if (newFiles.some((f) => f.id === a.id)) continue;
       try {
-        newFiles.push(await checkUpload(deps.attachments!, attachmentKey(id, a.id, a.name), a.id, a.name, deps.config.MAX_ATTACHMENT_MB));
+        newFiles.push(await checkUpload(deps.attachments!, attachmentKey(id, a.id, a.name), a.id, a.name, deps.config.MAX_ATTACHMENT_MB, sheetChars));
       } catch (e) {
         if (e instanceof AttachmentProblem) return apiError(reply, 400, e.code, e.message);
         throw e;
@@ -299,7 +301,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
             continue;
           }
           try {
-            blocks.push(await contentBlock(meta, await store!.get(meta.key), cache));
+            blocks.push(await contentBlock(store!, meta, cache, sheetChars));
           } catch {
             blocks.push({ type: "text", text: `[Attachment "${meta.name}" is no longer available]` });
           }
@@ -320,7 +322,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
       }
       const userContent: BetaContentBlockParam[] = [...(store ? await blocksFor(newFiles, true) : []), { type: "text", text: userText }];
       if (knowledge.length > 0 && store) {
-        const docs = await loadDocumentBlocks(store, knowledge, true);
+        const docs = await loadDocumentBlocks(store, knowledge, true, sheetChars);
         const first = history[0];
         if (first && first.role === "user") history[0] = { ...first, content: [...docs, ...(first.content as BetaContentBlockParam[])] };
         else userContent.unshift(...docs);
