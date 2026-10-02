@@ -35,6 +35,8 @@ const Env = z.object({
   MAX_TOKENS: z.coerce.number().int().positive().default(64000),
   THINKING_DISPLAY: z.enum(["omitted", "summarized"]).default("omitted"),
   CONTEXT_LIMIT_TOKENS: z.coerce.number().int().positive().default(150000),
+  /** Characters of a spreadsheet's rows the model receives per file (the rest is summarised; the browser computes over every row). */
+  SHEET_MODEL_CHARS: z.coerce.number().int().positive().default(300_000),
   DAILY_QUOTA_USD: z.coerce.number().nonnegative().default(10),
   RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   /** Nobody, administrators included, uses the assistant before completing the workforce training. */

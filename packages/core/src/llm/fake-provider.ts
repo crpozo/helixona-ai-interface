@@ -122,7 +122,7 @@ export class FakeProvider implements LlmProvider {
   private replyFor(userText: string, model: string, fileTitle = ""): string {
     if (/^\/sheet\b/.test(userText)) {
       const f = fileTitle || "attachment.csv";
-      return `Here is the workbook.\n\n\`\`\`document-xlsx\n# Check follow-up\n\nPrepared from ${f}.\n\n## Original data\n\n{{file: ${f}}}\n\n## Cashed by patient\n\n{{file: ${f} | rows: 2, 4}}\n\n## Never cashed\n\n{{file: ${f} | rows: 3}}\n\n## Summary\n\n| Tab | Rows |\n| --- | --- |\n| Cashed by patient | 2 |\n| Never cashed | 1 |\n\`\`\`\n\nCashed by patient: 2 rows (status "Cashed"). Never cashed: 1 row (status "Outstanding").`;
+      return `Here is the workbook.\n\n\`\`\`document-xlsx\n# Check follow-up\n\nPrepared from ${f}.\n\n## Original data\n\n{{file: ${f}}}\n\n## Cashed by patient\n\n{{file: ${f} | rows: 2, 4}}\n\n## Never cashed\n\n{{file: ${f} | rows: 3}}\n\n## Largest check per status\n\n{{file: ${f} | group: Status | pick: highest Amount | columns: Status, Patient, Amount}}\n\n## Summary\n\n| Tab | Rows |\n| --- | --- |\n| Cashed by patient | 2 |\n| Never cashed | 1 |\n\`\`\`\n\nCashed by patient: 2 rows (status "Cashed"). Never cashed: 1 row (status "Outstanding"). Largest check per status: computed from the whole file.`;
     }
     const reading = userText.match(/^Transcribe pages? (\d+)(?:–(\d+))?/);
     if (reading) {

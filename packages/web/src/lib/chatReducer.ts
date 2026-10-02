@@ -35,6 +35,8 @@ export interface ChatMessage {
   authorName: string | null;
   /** Large files the server checked or read page by page before this answer (this session only). */
   files: SseFiles | null;
+  /** What the server is waiting for while the answer is pending, and since when (this session only). */
+  wait: { stage: "waiting" | "responding"; inputTokens: number | null; since: number } | null;
 }
 
 export interface ChatState {
@@ -105,6 +107,7 @@ export function fromServerMessage(m: Message): ChatMessage {
     retryAttachments: [],
     authorName: m.authorName ?? null,
     files: null,
+    wait: null,
   };
 }
 
@@ -139,6 +142,8 @@ function applySse(state: ChatState, event: ChatSseEvent): ChatState {
       }));
     case "thinking_delta":
       return updateActive(state, (m) => ({ ...m, thinking: m.thinking + event.data.text }));
+    case "status":
+      return updateActive(state, (m) => ({ ...m, wait: { stage: event.data.stage, inputTokens: event.data.inputTokens, since: Date.now() } }));
     case "files":
       // A snapshot: the list replaces the previous one; an empty list clears it.
       return updateActive(state, (m) => ({ ...m, files: event.data.files.length > 0 ? event.data : null }));
@@ -227,6 +232,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         retryAttachments: [],
         authorName: action.authorName ?? null,
         files: null,
+    wait: null,
       };
       const assistant: ChatMessage = {
         id: action.assistantId,
@@ -244,6 +250,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         retryAttachments: action.attachments ?? [],
         authorName: null,
         files: null,
+    wait: null,
       };
       return {
         ...state,

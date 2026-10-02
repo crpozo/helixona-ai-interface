@@ -11,6 +11,41 @@ const mk = (extra: Partial<ConstructorParameters<typeof ModelRouter>[0]> = {}) =
   new ModelRouter({ catalog: DEFAULT_CATALOG, provider: new FakeProvider({ refusalFallbacks, delayMs: 0 }), firstEventTimeoutMs: 200, ...extra });
 
 describe("ModelRouter", () => {
+  it("says when it is waiting for the model and when the model has started, and waits longer for a large request", async () => {
+    const c = collect();
+    const inner = new FakeProvider({ refusalFallbacks, delayMs: 0 });
+    // The first event takes 30 ms to arrive, like a large request being read.
+    const slow: LlmProvider = {
+      stream: (p, o) => {
+        const h = inner.stream(p, o);
+        const handle: StreamHandle = {
+          async *[Symbol.asyncIterator]() {
+            await new Promise((r) => setTimeout(r, 30));
+            if (o.signal.aborted) throw new Error("aborted before the first event");
+            yield* h;
+          },
+          finalMessage: () => h.finalMessage(),
+          abort: () => h.abort(),
+        };
+        return handle;
+      },
+    };
+    // 400k tokens at 1 ms per thousand: 400 ms on top of a 10 ms base, enough for a first event that takes 30 ms.
+    const r = await new ModelRouter({ catalog: DEFAULT_CATALOG, provider: slow, firstEventTimeoutMs: 10, firstEventMsPerThousandTokens: 1 }).runTurn({ conversation: conv(), history, userText: "hola", systemPrompt: "s", emit: c.emit, estimatedInputTokens: 400_000 });
+    expect(r.ok).toBe(true);
+    const statuses = c.events.filter((e) => e.type === "status");
+    expect(statuses).toEqual([
+      { type: "status", stage: "waiting", model: "anthropic.claude-fable-5-1", inputTokens: 400_000 },
+      { type: "status", stage: "responding", model: "anthropic.claude-fable-5-1", inputTokens: 400_000 },
+    ]);
+    expect(c.events[1]).toEqual(statuses[0]);
+    // Without the allowance the same request gives up at 10 ms and tries the next model.
+    const c2 = collect();
+    await new ModelRouter({ catalog: DEFAULT_CATALOG, provider: slow, firstEventTimeoutMs: 10, firstEventMsPerThousandTokens: 0 }).runTurn({ conversation: conv(), history, userText: "hola", systemPrompt: "s", emit: c2.emit, estimatedInputTokens: 400_000 });
+    expect(c2.events.some((e) => e.type === "model_switched")).toBe(true);
+    expect(c2.events.filter((e) => e.type === "status" && e.stage === "responding")).toHaveLength(0);
+  });
+
   it("turno normal en el modelo elegido, sin pin", async () => {
     const c = collect();
     const r = await mk().runTurn({ conversation: conv(), history, userText: "hola", systemPrompt: "sistema", emit: c.emit });

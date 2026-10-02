@@ -1,5 +1,6 @@
 import type { PhrasingContent, RootContent, Table } from "mdast";
 import { expandDocumentNodes, inlinePlainText, parseMarkdown } from "./markdownExport";
+import { applyRule, applyRuleOption, describeRule, emptyRule, hasRule, type TableRule } from "./tableQuery";
 
 /**
  * Spreadsheets the assistant prepares: an Excel workbook (.xlsx) with one tab per section of the
@@ -39,16 +40,26 @@ interface FileRef {
   file: string;
   sheet: string | null;
   rows: string | null;
+  /** A filter, grouping, total or sort to compute over the rows (see tableQuery.ts). */
+  rule: TableRule;
+  /** Options that could not be read, named back in a note. */
+  unknown: string[];
 }
 
-function parseRef(inner: string): FileRef {
+export function parseRef(inner: string): FileRef {
   const [file = "", ...opts] = inner.split("|").map((s) => s.trim());
-  const ref: FileRef = { file, sheet: null, rows: null };
+  const ref: FileRef = { file, sheet: null, rows: null, rule: emptyRule(), unknown: [] };
   for (const o of opts) {
-    const m = /^(sheet|rows?)\s*:\s*(.*)$/i.exec(o);
-    if (!m) continue;
-    if (m[1]!.toLowerCase() === "sheet") ref.sheet = m[2]!.trim();
-    else ref.rows = m[2]!.trim();
+    if (!o) continue;
+    const m = /^([A-Za-z][A-Za-z ]*?)\s*:\s*(.*)$/s.exec(o) ?? (/^count$/i.test(o) ? ["", "count", ""] : null);
+    if (!m) {
+      ref.unknown.push(o);
+      continue;
+    }
+    const key = m[1]!.trim().toLowerCase();
+    if (key === "sheet" || key === "tab") ref.sheet = m[2]!.trim();
+    else if (key === "row" || key === "rows") ref.rows = m[2]!.trim();
+    else if (!applyRuleOption(ref.rule, key, m[2]!)) ref.unknown.push(o);
   }
   return ref;
 }
@@ -118,11 +129,20 @@ export async function expandFileRefs(markdown: string, resolve: ResolveFile): Pr
       const sheet = ref.sheet ? file.sheets.find((s) => sameFile(s.name, ref.sheet!)) : file.sheets[0];
       if (!sheet) return note(`"${file.name}" has no sheet named "${ref.sheet}".`);
       if (sheet.rows.length === 0) return note(`The sheet "${sheet.name}" of "${file.name}" is empty.`);
-      if (!ref.rows) return markdownTable(sheet.rows);
-      const wanted = parseRowList(ref.rows).filter((r) => r !== 1);
-      const missing = wanted.filter((r) => r > sheet.rows.length);
-      if (missing.length > 0) problems.push(`Rows ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? "…" : ""} are not in "${file.name}".`);
-      return markdownTable([sheet.rows[0]!, ...wanted.filter((r) => r <= sheet.rows.length).map((r) => sheet.rows[r - 1]!)]);
+      if (ref.unknown.length > 0) problems.push(`In a reference to "${file.name}", this was not understood and was ignored: ${ref.unknown.join("; ")}.`);
+      let data = sheet.rows.slice(1);
+      if (ref.rows) {
+        const wanted = parseRowList(ref.rows).filter((r) => r !== 1);
+        const missing = wanted.filter((r) => r > sheet.rows.length);
+        if (missing.length > 0) problems.push(`Rows ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? "…" : ""} are not in "${file.name}".`);
+        data = wanted.filter((r) => r <= sheet.rows.length).map((r) => sheet.rows[r - 1]!);
+      }
+      if (!hasRule(ref.rule)) return markdownTable([sheet.rows[0]!, ...data]);
+      // A rule is computed here over the whole file, so it holds even for rows the model never saw.
+      const result = applyRule(sheet.rows[0]!, data, ref.rule, file.name);
+      if (result.rows.length === 0) return note(`The rule for "${file.name}" (${describeRule(ref.rule)}) could not be applied: ${result.problems.join(" ")}`);
+      problems.push(...result.problems);
+      return markdownTable(result.rows);
     }),
   );
   let i = 0;

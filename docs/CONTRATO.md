@@ -93,6 +93,7 @@ La SPA no puede cargar scripts, fuentes ni imágenes remotas. Todo se empaqueta 
 | `thinking_delta` | `{ text }` | Solo si `THINKING_DISPLAY=summarized` |
 | `fallback` | `{ from, to, reason: "refusal" }` | Cambio de modelo por rechazo (el texto ya emitido se conserva; el nuevo modelo continúa) |
 | `model_switched` | `{ from, to, reason: "availability" }` | Cambio por indisponibilidad antes de emitir texto |
+| `status` | `{ stage: "waiting" \| "responding", model, inputTokens }` | Esperando el primer evento del modelo (con el tamaño estimado de la petición), y el modelo ya respondiendo |
 | `refused` | `{ category: string \| null }` | Toda la cadena rechazó. El cliente descarta lo parcial y muestra mensaje neutro |
 | `error` | `{ code, message, retryable: boolean, partial: boolean }` | Error; `partial=true` = se emitió texto y no se sustituye; ofrecer "Reintentar" |
 | `done` | `{ assistantMessageId, model, stopReason, usage, fallbackReason }` | Fin. `stopReason="max_tokens"` = respuesta truncada (mostrar aviso) |

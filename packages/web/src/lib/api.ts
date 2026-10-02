@@ -261,6 +261,7 @@ export function uploadFile(target: UploadTarget, file: File, onProgress: (fracti
 
 const KNOWN_EVENTS = new Set<ChatSseEvent["type"]>([
   "message_start",
+  "status",
   "text_delta",
   "thinking_delta",
   "fallback",

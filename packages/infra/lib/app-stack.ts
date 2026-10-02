@@ -202,6 +202,7 @@ export class AppStack extends cdk.Stack {
         THINKING_DISPLAY: 'omitted',
         // Claude Sonnet 5.5 / Opus 5.5 / Fable 5.1 have a 1M-token context; leave headroom for output and thinking.
         CONTEXT_LIMIT_TOKENS: '900000',
+        SHEET_MODEL_CHARS: '300000',
         // Large PDFs take longer before the first token arrives.
         FIRST_EVENT_TIMEOUT_MS: '180000',
         // PDFs that do not fit one request whole are transcribed a few pages at a time by Sonnet 5.5

@@ -78,7 +78,7 @@ export async function spreadsheetBlock(store: AttachmentStore, meta: AttachmentM
     block = {
       type: "document",
       title: meta.name,
-      context: `Spreadsheet attached by staff, read by the assistant. The first column, Row, is the Excel row number (row 1 is usually the header); it is not part of the file. Use these numbers to point to rows. When the heading of a sheet says rows are not shown, say so in the answer: the view is partial.`,
+      context: `Spreadsheet attached by staff, read by the assistant. The first column, Row, is the Excel row number (row 1 is usually the header); it is not part of the file. Use these numbers to point to rows. When the heading of a sheet says rows are not shown, the interface still has every row and computes {{file: …}} references over all of them; say in the answer that the figures come from the whole file.`,
       source: { type: "text", media_type: "text/plain", data: await spreadsheetText(store, meta, maxChars) },
     };
   } catch (e) {

@@ -321,8 +321,17 @@ export interface SseFiles {
   files: SseFileProgress[];
 }
 
+/** What the server is doing while the answer is pending: waiting for the model's first event, or the model has started. */
+export interface SseStatus {
+  stage: "waiting" | "responding";
+  model: string;
+  /** Rough size of the request, so the interface can say a large file is being read. */
+  inputTokens: number | null;
+}
+
 export type ChatSseEvent =
   | { type: "message_start"; data: SseMessageStart }
+  | { type: "status"; data: SseStatus }
   | { type: "text_delta"; data: SseTextDelta }
   | { type: "thinking_delta"; data: SseTextDelta }
   | { type: "fallback"; data: SseFallback }

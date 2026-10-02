@@ -229,7 +229,7 @@ export function registerProjectRoutes(app: FastifyInstance, deps: Deps): void {
     if (p.knowledge.some((k) => k.id === attachmentId)) return view(p, req);
     let verified;
     try {
-      verified = { meta: await inspectUpload(deps.attachments, projectKnowledgeKey(p.id, attachmentId, body.data.name), attachmentId, body.data.name, knowledgeMaxMb, MAX_KNOWLEDGE_PDF_PAGES, sheetCharBudget(deps.config.CONTEXT_LIMIT_TOKENS)) };
+      verified = { meta: await inspectUpload(deps.attachments, projectKnowledgeKey(p.id, attachmentId, body.data.name), attachmentId, body.data.name, knowledgeMaxMb, MAX_KNOWLEDGE_PDF_PAGES, Math.min(deps.config.SHEET_MODEL_CHARS, sheetCharBudget(deps.config.CONTEXT_LIMIT_TOKENS))) };
     } catch (e) {
       if (e instanceof AttachmentProblem) return apiError(reply, 400, e.code, e.message);
       throw e;

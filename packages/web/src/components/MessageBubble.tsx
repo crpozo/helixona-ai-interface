@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import type { ChatMessage, Notice } from "../lib/chatReducer";
 import type { CatalogModel } from "../lib/types";
 import { modelLabel } from "../lib/models";
@@ -28,6 +28,47 @@ function noticeText(n: Notice, models: CatalogModel[]): string {
     case "stopped":
       return "Stopped by you";
   }
+}
+
+/** Seconds since `since`, ticking once a second while shown. */
+function useElapsed(since: number | null): number {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (since === null) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [since]);
+  return since === null ? 0 : Math.max(0, Math.floor((now - since) / 1000));
+}
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+/** A request this large (a big file, a long conversation) takes minutes to read before the answer starts. */
+const LARGE_INPUT_TOKENS = 100_000;
+
+/**
+ * What is happening while the answer is pending: sending a large request, waiting for the model,
+ * or the model thinking; with the time elapsed, so a long wait is not a frozen screen.
+ */
+function WaitIndicator({ wait, model, models }: { wait: ChatMessage["wait"]; model: string | null; models: CatalogModel[] }) {
+  const elapsed = useElapsed(wait?.since ?? null);
+  const name = model ? modelLabel(models, model) : "the model";
+  const big = (wait?.inputTokens ?? 0) >= LARGE_INPUT_TOKENS;
+  const time = elapsed >= 5 ? ` ${clock(elapsed)}` : "";
+  const text = wait?.stage === "waiting" ? (big ? `Sending about ${Math.round(wait.inputTokens! / 1000).toLocaleString("en-US")}k tokens to ${name}…${time}` : `Waiting for ${name}…${time}`) : `Thinking…${time}`;
+  return (
+    <>
+      <p className="thinking-indicator" role="status" aria-live="polite">
+        <span className="dot" aria-hidden="true" /> {text}
+      </p>
+      {big && (
+        <p className="wait-note muted small">
+          {wait?.stage === "waiting"
+            ? "A large file or a long conversation takes a few minutes to read before the answer starts."
+            : "A large file takes longer to reason about. For lists, totals or per-patient figures, asking for a spreadsheet is fastest: the interface computes it from the file."}
+        </p>
+      )}
+    </>
+  );
 }
 
 function errorText(code: string, fallback: string): string {
@@ -152,9 +193,7 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
             {m.refusalCategory ? ` (${m.refusalCategory})` : ""}.
           </p>
         ) : thinkingWhileWaiting ? (
-          <p className="thinking-indicator" role="status" aria-live="polite">
-            <span className="dot" aria-hidden="true" /> Thinking…
-          </p>
+          <WaitIndicator wait={m.wait} model={m.model} models={models} />
         ) : m.text ? (
           <Markdown text={m.text} documentReady={finished} fallbackTitle={exportTitle} />
         ) : null}
@@ -162,6 +201,11 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
 
       {!isUser && (m.notices.length > 0 || m.error) && (
         <footer className="msg-foot">
+          {m.stopReason === "max_tokens" && !m.text && m.status !== "pending" && m.status !== "streaming" && (
+            <p className="notice small" role="status">
+              The answer ran out of room before any text was written: the model spent it all reasoning over the data. Ask for a narrower result (one patient, one payer, fewer columns), or ask for a spreadsheet, which the interface computes from the file.
+            </p>
+          )}
           {m.notices.map((n, i) => (
             <span key={i} className="notice">
               {noticeText(n, models)}

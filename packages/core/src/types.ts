@@ -105,6 +105,8 @@ export type TurnEvent =
   | { type: "thinking_delta"; text: string }
   | { type: "fallback"; from: string; to: string; reason: "refusal" }
   | { type: "model_switched"; from: string; to: string; reason: "availability" }
+  /** Waiting for the model's first event (a large request takes a while), then the model has started. */
+  | { type: "status"; stage: "waiting" | "responding"; model: string; inputTokens: number | null }
   | { type: "refused"; category: string | null }
   | { type: "error"; code: "model_unavailable" | "bad_request" | "internal" | "aborted"; message: string; retryable: boolean; partial: boolean }
   | { type: "done"; model: string; stopReason: string | null; usage: UsageSummary; fallbackReason: PinReason | null };

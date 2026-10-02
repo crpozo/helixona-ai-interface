@@ -10,7 +10,7 @@ import { SessionService } from "../src/auth/session.js";
 import { memoryRepos, MemoryUserDirectory } from "../src/repos/memory.js";
 import { MemoryAttachmentStore } from "../src/attachments/store.js";
 import { MemoryFeedbackSender } from "../src/feedback.js";
-import { fitForModel, parseCsv, parseXlsx, readTables, SpreadsheetError, tablesForModel, XLSX_TYPE } from "../src/attachments/sheets.js";
+import { columnSummary, fitForModel, parseCsv, parseXlsx, readTables, SpreadsheetError, tablesForModel, XLSX_TYPE } from "../src/attachments/sheets.js";
 import { sheetTextKey } from "../src/attachments/documents.js";
 import { sheetCharBudget } from "../src/attachments/policy.js";
 import type { Deps } from "../src/deps.js";
@@ -98,9 +98,9 @@ describe("Reading spreadsheets", () => {
     expect(full.text).not.toContain("not shown");
     const half = fitForModel("Claims.xlsx", [claims, notes], Math.floor(full.text.length / 2));
     // The data fits the budget; the sheet headings (with the note) come on top.
-    expect(half.text.length).toBeLessThan(full.text.length / 2 + 2 * 220);
+    expect(half.text.length).toBeLessThan(full.text.length / 2 + 2 * 480);
     expect(half.rows + half.rowsLeft).toBe(104);
-    expect(half.text).toMatch(/^Sheet "Claims" of "Claims.xlsx": \d+ rows; \d+ more rows are not shown because the file is too long for one conversation \(ask for a file with only the rows and columns needed, or split it\)\.\nRow,Patient,Amount\n2,P0,\$0\.00\n/);
+    expect(half.text).toMatch(/^Sheet "Claims" of "Claims.xlsx": \d+ rows; \d+ more rows are not shown because the file is too long for one conversation \(ask for a file with only the rows and columns needed, or split it\)\. The interface still has every row[^\n]*\nRow,Patient,Amount\n2,P0,\$0\.00\n/);
     expect(half.text).toContain('\n\nSheet "Notes" of "Claims.xlsx": ');
     // The header always goes, even when the sheet's share is smaller than it.
     const tiny = fitForModel("Claims.xlsx", [claims, notes], 10);
@@ -110,6 +110,20 @@ describe("Reading spreadsheets", () => {
     // Rows beyond the row cap are reported too, with their own reason.
     const capped = fitForModel("Big.xlsx", [{ ...notes, truncatedRows: 5000 }]);
     expect(capped.text).toContain("3 rows; 5,000 more rows are not shown because the sheet is too long (ask for");
+  });
+
+  it("describes every column of a long sheet over all its rows, so the model knows the file it sees only part of", () => {
+    const rows = [["Patient", "DOS", "Status", "Paid Amount", "Note", "Empty"], ...Array.from({ length: 300 }, (_, i) => [`Patient ${i % 120}`, `${1 + (i % 12)}/${1 + (i % 28)}/2026`, i % 3 === 0 ? "Denied" : "Paid", `$${(i * 10.5).toFixed(2)}`, i % 50 === 0 ? "call" : "", ""])];
+    const summary = columnSummary(rows);
+    expect(summary).toBe(
+      "Columns, over all 300 rows: Patient (text, 300 filled, 120 distinct, e.g. Patient 0, Patient 1, Patient 2); DOS (date, 300 filled, from 1/1/2026 to 12/28/2026); Status (text, 300 filled: Paid ×200, Denied ×100); Paid Amount (number, 300 filled, 300 distinct, min $0.00, max $3,139.50, sum $470,925.00); Note (text, 6 filled: call ×6); Empty (empty).",
+    );
+    const fitted = fitForModel("Claims.xlsx", [{ name: "Claims", rows, truncatedRows: 0 }], 6_000);
+    expect(fitted.text).toMatch(/^Sheet "Claims" of "Claims.xlsx": \d+ rows; \d+ more rows are not shown because the file is too long for one conversation \(ask for a file with only the rows and columns needed, or split it\)\. The interface still has every row: a \{\{file: …\}\} reference with where, group, max, min, sum, avg, count, sort or top is computed over the whole file, so use references for lists, totals and per-patient figures instead of reading rows\.\nColumns, over all 300 rows: /);
+    expect(fitted.text.length).toBeLessThan(6_000 + 500);
+    expect(fitted.text).toContain("\nRow,Patient,DOS,Status,Paid Amount,Note,Empty\n2,Patient 0,1/1/2026,Denied,$0.00,call,\n");
+    // A short sheet has no summary.
+    expect(fitForModel("Small.xlsx", [{ name: "S", rows: rows.slice(0, 50), truncatedRows: 0 }]).text).not.toContain("Columns, over all");
   });
 });
 
@@ -198,10 +212,13 @@ describe("Spreadsheets in a conversation", () => {
     expect(r.body).toContain("event: done");
     expect(r.body).not.toContain("context_limit");
     const doc = (calls.at(-1)!.messages.at(-1)!.content as Array<{ type: string; context?: string; source?: { data: string } }>)[0]!;
-    expect(doc.context).toContain("the view is partial");
+    expect(doc.context).toContain("computes {{file: …}} references over all of them");
     const text = doc.source!.data;
-    expect(text.length).toBeLessThanOrEqual(sheetCharBudget(150_000) + 200);
+    // The rows fit the budget; the sheet heading and the column summary come on top.
+    expect(text.length).toBeLessThanOrEqual(Math.min(300_000, sheetCharBudget(150_000)) + 1_000);
     expect(text).toMatch(/^Sheet "Sheet1" of "Report.csv": [\d,]+ rows; [\d,]+ more rows are not shown because the file is too long for one conversation/);
+    expect(text).toContain("The interface still has every row");
+    expect(text).toContain("\nColumns, over all 12,000 rows: Patient (text, 12,000 filled, 12,000 distinct, e.g. Patient 0, Patient 1, Patient 2); Account (text, 12,000 filled, 12,000 distinct, e.g. ACC100000, ACC100001, ACC100002); Amount (number, 12,000 filled, 12,000 distinct, min $0.00, max $11,999.00, sum $71,994,000.00); Status (text, 12,000 filled: Open ×12,000).\n");
     expect(text).toContain("\nRow,Patient,Account,Amount,Status\n2,Patient 0,ACC100000,$0.00,Open\n");
     // The size the model sees is kept with the file, and the rows are read once and kept next to it.
     const stored = (await repos.messages.list(conv.id))[0]!.attachments![0]!;

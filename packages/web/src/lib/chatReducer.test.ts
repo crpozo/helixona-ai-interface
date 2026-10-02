@@ -23,6 +23,16 @@ describe("chatReducer", () => {
     expect(assistant(s).model).toBe("anthropic.claude-opus-5");
   });
 
+  it("status says what the server is waiting for while the answer is pending", () => {
+    let s = started();
+    s = sse(s, { type: "status", data: { stage: "waiting", model: "anthropic.claude-opus-5", inputTokens: 380_000 } });
+    expect(assistant(s).wait).toMatchObject({ stage: "waiting", inputTokens: 380_000 });
+    expect(assistant(s).wait!.since).toBeGreaterThan(0);
+    s = sse(s, { type: "status", data: { stage: "responding", model: "anthropic.claude-opus-5", inputTokens: 380_000 } });
+    expect(assistant(s).wait?.stage).toBe("responding");
+    expect(assistant(s).status).toBe("pending");
+  });
+
   it("text_delta moves from pending to streaming and accumulates text", () => {
     let s = started();
     s = sse(s, { type: "text_delta", data: { text: "Hola" } });

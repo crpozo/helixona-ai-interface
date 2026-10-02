@@ -15,6 +15,8 @@ export interface ModelRouterOptions {
   maxTokens?: number;
   thinkingDisplay?: "omitted" | "summarized";
   firstEventTimeoutMs?: number;
+  /** Extra wait for the first event per thousand estimated input tokens: a long conversation or a large file takes longer to read. */
+  firstEventMsPerThousandTokens?: number;
   availabilityPinMinutes?: number;
   now?: () => Date;
 }
@@ -28,6 +30,8 @@ export interface TurnInput {
   systemPrompt: string;
   /** Extra operator instructions (e.g. a project's instructions), sent as a second cached system block. */
   systemExtra?: string;
+  /** Rough size of the request, to wait longer for the first event and to tell the person what is being read. */
+  estimatedInputTokens?: number;
   signal?: AbortSignal;
   emit: (ev: TurnEvent) => void;
 }
@@ -116,19 +120,27 @@ export class ModelRouter {
       const onAbort = () => controller.abort();
       input.signal?.addEventListener("abort", onAbort, { once: true });
       let timedOut = false;
-      const firstEventMs = this.opts.firstEventTimeoutMs ?? 60_000;
+      const inputTokens = input.estimatedInputTokens ?? null;
+      const firstEventMs = (this.opts.firstEventTimeoutMs ?? 60_000) + Math.ceil((inputTokens ?? 0) / 1000) * (this.opts.firstEventMsPerThousandTokens ?? 500);
       let timer: ReturnType<typeof setTimeout> | null = setTimeout(() => { timedOut = true; controller.abort(); }, firstEventMs);
 
       let emittedChars = 0;
       let partialText = "";
       let currentModel = model;
       let refusalFallback = false;
+      let responded = false;
       input.emit({ type: "message_start", model });
+      input.emit({ type: "status", stage: "waiting", model, inputTokens });
 
       try {
         const stream = this.opts.provider.stream(params, { signal: controller.signal, conversationId: input.conversation.id });
         for await (const ev of stream) {
           if (timer) { clearTimeout(timer); timer = null; }
+          if (!responded) {
+            responded = true;
+            log.info("model_first_event", { model, ms: this.now().getTime() - started, estimatedInputTokens: inputTokens ?? undefined, attempt });
+            input.emit({ type: "status", stage: "responding", model: currentModel, inputTokens });
+          }
           if (ev.type === "message_start") {
             // Thinking blocks the API dropped because the history before them changed (counts only).
             const dropped = ((ev.message as { input_transformations?: Array<{ type?: string; reason?: string }> }).input_transformations ?? []).filter((t) => t.type === "thinking_dropped" && t.reason === "prefix_binding_mismatch").length;

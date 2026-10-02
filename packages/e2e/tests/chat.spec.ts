@@ -245,7 +245,7 @@ test.describe("Conversations", () => {
     expect(download.suggestedFilename()).toBe("Check follow-up.xlsx");
     const zip = await JSZip.loadAsync(fs.readFileSync((await download.path())!));
     const book = await zip.file("xl/workbook.xml")!.async("string");
-    expect([...book.matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1])).toEqual(["Original data", "Cashed by patient", "Never cashed", "Summary"]);
+    expect([...book.matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1])).toEqual(["Original data", "Cashed by patient", "Never cashed", "Largest check per status", "Summary"]);
     const sheet = (n: number) => zip.file(`xl/worksheets/sheet${n}.xml`)!.async("string");
     const all = await sheet(1);
     // The original rows, exactly: the check number keeps its zeros, the amount is a number formatted as money.
@@ -261,6 +261,14 @@ test.describe("Conversations", () => {
     const never = await sheet(3);
     expect(never).toContain(">Luis Romero<");
     expect(never).not.toContain("Mia Lee");
+    // A rule computed in the browser over the whole file: the largest check per status, with the chosen columns.
+    const largest = await sheet(4);
+    expect(largest).toContain(">Status<");
+    expect(largest).toContain(">Ana Pérez<");
+    expect(largest).toContain("<v>1234.5</v>");
+    expect(largest).toContain(">Luis Romero<");
+    expect(largest).not.toContain("Mia Lee");
+    expect(largest).not.toContain("Check #");
 
     // The preview shows the same rows.
     await card.getByRole("button", { name: "Open Check follow-up" }).click();

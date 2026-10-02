@@ -56,8 +56,9 @@ const EMPTY_USAGE: UsageSummary = { inputTokens: 0, outputTokens: 0, cacheReadTo
 export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
   const now = deps.now ?? (() => new Date());
   const ttl = deps.config.RETENTION_DAYS * 86400;
-  // A spreadsheet's rows are cut to this many characters so one file never fills the conversation.
-  const sheetChars = sheetCharBudget(deps.config.CONTEXT_LIMIT_TOKENS);
+  // A spreadsheet's rows are cut to this many characters: the model reads a part and a column
+  // summary, and the browser computes references over every row. One file never fills the conversation.
+  const sheetChars = Math.min(deps.config.SHEET_MODEL_CHARS, sheetCharBudget(deps.config.CONTEXT_LIMIT_TOKENS));
   const limiter = new TurnRateLimiter(deps.config.RATE_LIMIT_TURNS_PER_HOUR);
   // Large PDFs are transcribed by a second model, a few pages per request (see attachments/reader.ts).
   const readerEntry = modelByAlias(deps.catalog, deps.config.READER_MODEL_ALIAS) ?? modelByAlias(deps.catalog, deps.catalog.defaultAlias) ?? deps.catalog.models[0]!;
@@ -341,7 +342,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
           default: { const { type, ...data } = ev; return sse.send(type, data); }
         }
       };
-      const result = await deps.router.runTurn({ conversation: conv, history, userText, userContent, systemPrompt: deps.systemPrompt.text, systemExtra, signal: ac.signal, emit });
+      const result = await deps.router.runTurn({ conversation: conv, history, userText, userContent, systemPrompt: deps.systemPrompt.text, systemExtra, signal: ac.signal, emit, estimatedInputTokens: contextBefore + newTokens });
       const latencyMs = now().getTime() - started.getTime();
       if (result.ok && result.servedModel) {
         const createdAt = now().toISOString();

@@ -352,6 +352,115 @@ export async function readTables(contentType: string, bytes: Uint8Array): Promis
   return [{ name: "Sheet1", rows: rows.slice(0, SHEET_LIMITS.maxRows), truncatedRows: truncated }];
 }
 
+// ---- Cell values, read the way staff read them (the browser has the same rules in tableQuery.ts).
+
+/** "$1,234.50" → 1234.5; "($20.00)" → -20; "12.5%" → 12.5; "" or text → null. */
+export function cellNumber(s: string): number | null {
+  let t = s.trim();
+  if (!t) return null;
+  let neg = false;
+  if (/^\(.*\)$/.test(t)) {
+    neg = true;
+    t = t.slice(1, -1).trim();
+  }
+  if (t.startsWith("-")) {
+    neg = !neg;
+    t = t.slice(1).trim();
+  }
+  t = t.replace(/^[$€£]\s*/, "").replace(/%$/, "").replace(/,/g, "").trim();
+  if (!/^\d+(\.\d+)?$|^\.\d+$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? (neg ? -n : n) : null;
+}
+
+/** m/d/yyyy (with an optional time) or yyyy-mm-dd → milliseconds; else null. */
+export function cellDate(s: string): number | null {
+  const t = s.trim();
+  let m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i.exec(t);
+  if (m) {
+    let y = Number(m[3]);
+    if (y < 100) y += 2000;
+    let h = Number(m[4] ?? 0);
+    const ap = (m[7] ?? "").toUpperCase();
+    if (ap === "PM" && h < 12) h += 12;
+    if (ap === "AM" && h === 12) h = 0;
+    const d = new Date(y, Number(m[1]) - 1, Number(m[2]), h, Number(m[5] ?? 0), Number(m[6] ?? 0));
+    return Number.isNaN(d.getTime()) ? null : d.getTime();
+  }
+  m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(t);
+  if (m) {
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4] ?? 0), Number(m[5] ?? 0), Number(m[6] ?? 0));
+    return Number.isNaN(d.getTime()) ? null : d.getTime();
+  }
+  return null;
+}
+
+/** A total formatted like the cells it came from: money stays money, percentages stay percentages. */
+export function formatLike(samples: string[], n: number): string {
+  const money = samples.some((s) => /[$€£]/.test(s));
+  const percent = samples.length > 0 && samples.every((s) => /%\s*$/.test(s.trim()) || s.trim() === "");
+  const decimals = Math.min(4, samples.reduce((d, s) => Math.max(d, (/\.(\d+)/.exec(s.replace(/[%$€£,\s]/g, ""))?.[1] ?? "").length), 0));
+  const digits = money ? 2 : decimals;
+  const text = Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: Math.max(digits, money ? 2 : 0) });
+  const sign = n < 0 ? "-" : "";
+  if (money) return `${sign}${(samples.find((s) => /[$€£]/.test(s)) ?? "$").match(/[$€£]/)![0]}${text}`;
+  if (percent) return `${sign}${text}%`;
+  return `${sign}${text}`;
+}
+
+/** Sheets with more rows than this get a column summary, so the model knows the whole file even when it sees part of it. */
+export const SUMMARY_FROM_ROWS = 200;
+const SUMMARY_MAX_COLUMNS = 60;
+const SUMMARY_LIST_VALUES = 25;
+
+/**
+ * One line describing every column over all the rows: how many are filled, the range and total of
+ * numbers, the range of dates, the values of a short list (with counts) or examples of a long one.
+ */
+export function columnSummary(rows: string[][]): string {
+  const [header = [], ...data] = rows;
+  const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+  const parts: string[] = [];
+  const cols = Math.min(header.length, SUMMARY_MAX_COLUMNS);
+  for (let c = 0; c < cols; c++) {
+    const name = cut(header[c]?.trim() || `Column ${c + 1}`, 60);
+    const values = data.map((r) => (r[c] ?? "").trim()).filter((v) => v !== "");
+    if (values.length === 0) {
+      parts.push(`${name} (empty)`);
+      continue;
+    }
+    const filled = values.length.toLocaleString("en-US");
+    const nums = values.map(cellNumber);
+    const numCount = nums.filter((n) => n !== null).length;
+    const dates = values.map(cellDate);
+    const dateCount = dates.filter((d) => d !== null).length;
+    const distinct = new Map<string, { text: string; count: number }>();
+    for (const v of values) {
+      const k = v.toLowerCase();
+      const e = distinct.get(k);
+      if (e) e.count++;
+      else distinct.set(k, { text: v, count: 1 });
+    }
+    if (numCount >= values.length * 0.9 && dateCount < values.length * 0.9) {
+      let min = Infinity, max = -Infinity, sum = 0;
+      for (const n of nums) if (n !== null) { min = Math.min(min, n); max = Math.max(max, n); sum += n; }
+      parts.push(`${name} (number, ${filled} filled, ${distinct.size.toLocaleString("en-US")} distinct, min ${formatLike(values, min)}, max ${formatLike(values, max)}, sum ${formatLike(values, sum)})`);
+    } else if (dateCount >= values.length * 0.9) {
+      let lo = 0, hi = 0;
+      dates.forEach((d, i) => { if (d === null) return; if (dates[lo] === null || d < dates[lo]!) lo = i; if (dates[hi] === null || d > dates[hi]!) hi = i; });
+      parts.push(`${name} (date, ${filled} filled, from ${values[lo]} to ${values[hi]})`);
+    } else if (distinct.size <= SUMMARY_LIST_VALUES) {
+      const listed = [...distinct.values()].sort((a, b) => b.count - a.count).map((e) => `${cut(e.text, 40)} ×${e.count.toLocaleString("en-US")}`).join(", ");
+      parts.push(`${name} (text, ${filled} filled: ${listed})`);
+    } else {
+      const examples = [...distinct.values()].slice(0, 3).map((e) => cut(e.text, 40)).join(", ");
+      parts.push(`${name} (text, ${filled} filled, ${distinct.size.toLocaleString("en-US")} distinct, e.g. ${examples})`);
+    }
+  }
+  if (header.length > cols) parts.push(`and ${header.length - cols} more columns`);
+  return `Columns, over all ${data.length.toLocaleString("en-US")} rows: ${parts.join("; ")}.`;
+}
+
 export interface ModelText {
   text: string;
   /** Rows the model sees (the header rows included) and rows left out. */
@@ -370,14 +479,15 @@ export function fitForModel(fileName: string, tables: SheetTable[], maxChars = I
   const sheets = tables.map((t) => {
     // The first line (row 1, usually the header) is labelled "Row"; the others carry their row number.
     const lines = t.rows.map((r, i) => [i === 0 ? "Row" : String(i + 1), ...r].map(csvCell).join(","));
-    return { t, lines, chars: lines.reduce((n, l) => n + l.length + 1, 0) };
+    const summary = t.rows.length > SUMMARY_FROM_ROWS ? columnSummary(t.rows) : "";
+    return { t, lines, summary, chars: lines.reduce((n, l) => n + l.length + 1, 0) + summary.length + 1 };
   });
   const total = sheets.reduce((n, s) => n + s.chars, 0);
   const parts: string[] = [];
   let rows = 0;
   let rowsLeft = 0;
   for (const s of sheets) {
-    const budget = total <= maxChars ? Infinity : Math.floor((maxChars * s.chars) / total);
+    const budget = total <= maxChars ? Infinity : Math.floor((maxChars * s.chars) / total) - s.summary.length - 1;
     let used = 0;
     let n = 0;
     while (n < s.lines.length && (n === 0 || used + s.lines[n]!.length + 1 <= budget)) {
@@ -389,8 +499,9 @@ export function fitForModel(fileName: string, tables: SheetTable[], maxChars = I
     rows += n;
     rowsLeft += left;
     const why = cut > 0 ? "the file is too long for one conversation" : "the sheet is too long";
-    const head = `Sheet "${s.t.name}" of "${fileName}": ${n.toLocaleString("en-US")} rows${left > 0 ? `; ${left.toLocaleString("en-US")} more rows are not shown because ${why} (ask for a file with only the rows and columns needed, or split it)` : ""}.`;
-    parts.push([head, ...s.lines.slice(0, n)].join("\n"));
+    const still = cut > 0 ? " The interface still has every row: a {{file: …}} reference with where, group, max, min, sum, avg, count, sort or top is computed over the whole file, so use references for lists, totals and per-patient figures instead of reading rows." : "";
+    const head = `Sheet "${s.t.name}" of "${fileName}": ${n.toLocaleString("en-US")} rows${left > 0 ? `; ${left.toLocaleString("en-US")} more rows are not shown because ${why} (ask for a file with only the rows and columns needed, or split it).${still}` : "."}`;
+    parts.push([head, ...(s.summary ? [s.summary] : []), ...s.lines.slice(0, n)].join("\n"));
   }
   return { text: parts.join("\n\n"), rows, rowsLeft };
 }
