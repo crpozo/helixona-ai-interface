@@ -98,8 +98,7 @@ test.describe("Administration", () => {
     await page.getByRole("button", { name: "Save credits" }).click();
     // The fake turn costs a fraction of a cent, so the credits are (nearly) whole.
     await expect(page.locator(".billing-remaining")).toContainText(/\$(499\.\d\d|500\.00) left/);
-    await expect(page.getByText(/this assistant's own estimate/)).toBeVisible();
-    await expect(page.getByText(/Bought \$500\.00 as of 2026-01-01 \(Bought in the console\)/)).toBeVisible();
+    await expect(page.getByText(/Bought \$500\.00 as of 2026-01-01 \(Bought in the console\); spent since then \$0\.00 according to this assistant's own estimate/)).toBeVisible();
     // The detail of the month names the user.
     await expect(page.locator(".billing tbody").nth(1)).toContainText("billing");
     errs.expectNone();
