@@ -3,7 +3,7 @@
  * No imports on purpose (also used by /api/me), so it never creates import cycles.
  */
 
-export type AttachmentKind = "pdf" | "text" | "sheet";
+export type AttachmentKind = "pdf" | "text" | "sheet" | "zip";
 
 /** Accepted MIME types. `maxMb: null` means the configurable MAX_ATTACHMENT_MB applies. */
 export const ALLOWED_TYPES: Record<string, { kind: AttachmentKind; maxMb: number | null }> = {
@@ -13,6 +13,9 @@ export const ALLOWED_TYPES: Record<string, { kind: AttachmentKind; maxMb: number
   "text/csv": { kind: "sheet", maxMb: 5 },
   // Excel workbooks: read on the server into rows of text (sheets.ts); compressed, so 10 MB is a lot of rows.
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { kind: "sheet", maxMb: 10 },
+  // A ZIP is stored as it is; the server lists what is inside and the model reads files from it with tools (zips.ts).
+  "application/zip": { kind: "zip", maxMb: null },
+  "application/x-zip-compressed": { kind: "zip", maxMb: null },
 };
 
 const MiB = 1024 * 1024;

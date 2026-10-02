@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useRef } from "react";
-import JSZip from "jszip";
 import type { CatalogModel } from "../lib/types";
 import { StartComposer } from "./StartComposer";
 
@@ -49,18 +48,16 @@ describe("Dropping files on the start screen", () => {
     await vi.waitFor(() => expect(screen.getByText("Checks.csv")).toBeTruthy());
   });
 
-  it("opens a ZIP and attaches the files inside it", async () => {
-    const zip = new JSZip();
-    zip.file("EOBs/EOB 1.pdf", "%PDF-1.4");
-    zip.file("Checks.csv", "Patient,Amount\nAna,$10.00\n");
-    zip.file("notes.docx", "no");
-    const archive = new File([await zip.generateAsync({ type: "blob" })], "EOBs.zip", { type: "application/zip" });
-    render(<StartComposer models={models} defaultAlias="sonnet" attachments={limits} onStart={vi.fn(async () => undefined)} />);
+  it("attaches a ZIP as one file, whatever the browser calls its type; the assistant reads inside it", async () => {
+    const archive = new File(["PK\u0003\u0004"], "EOBs.zip", { type: "application/x-zip-compressed" });
+    const onStart = vi.fn(async () => undefined);
+    render(<StartComposer models={models} defaultAlias="sonnet" attachments={limits} onStart={onStart} />);
     const form = screen.getByRole("button", { name: "Send" }).closest("form")!;
     fireEvent.drop(form, withFiles([archive]));
-    await vi.waitFor(() => expect(screen.getByText("EOB 1.pdf")).toBeTruthy());
-    expect(screen.getByText("Checks.csv")).toBeTruthy();
-    expect(screen.queryByText("EOBs.zip")).toBeNull();
-    expect(screen.getByRole("alert").textContent).toContain("EOBs.zip: 2 files attached; 1 file of other types");
+    await vi.waitFor(() => expect(screen.getByText("EOBs.zip")).toBeTruthy());
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "What is inside?" } });
+    fireEvent.submit(form);
+    await vi.waitFor(() => expect(onStart).toHaveBeenCalledWith("What is inside?", "sonnet", [archive]));
   });
 });

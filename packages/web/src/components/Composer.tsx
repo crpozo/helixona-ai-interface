@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { AttachmentLimits, AttachmentMeta } from "../lib/types";
 import { ApiError, createAttachment, uploadFile } from "../lib/api";
-import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, maxMbFor, readsPageByPage } from "../lib/files";
+import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, isZipType, maxMbFor, readsPageByPage } from "../lib/files";
 import { useFileDrop } from "../lib/useFileDrop";
-import { expandZips } from "../lib/zipFiles";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -68,8 +67,9 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
 
   const addFiles = async (picked: FileList | null) => {
     if (!picked || !attachments) return;
-    // A ZIP is opened here and its files attached one by one.
-    const { files, notes } = await expandZips(Array.from(picked));
+    // A ZIP travels as one file: the server lists what is inside and the assistant reads from it in parts.
+    const files = Array.from(picked);
+    const notes: string[] = [];
     const room = Math.max(0, attachments.maxPerMessage - pending.length);
     if (files.length > room) notes.push(`Up to ${attachments.maxPerMessage} files per message: ${files.length - room} ${files.length - room === 1 ? "file was" : "files were"} not added.`);
     setLimitNote(notes.length > 0 ? notes.join(" ") : null);
@@ -147,14 +147,14 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
         <ul className="attach-list composer-pending" aria-label="Files to send">
           {pending.map((p) => (
             <li key={p.localId} className={`attach-chip${p.status === "error" ? " error" : ""}`} title={p.error ?? p.name}>
-              <span className="attach-icon" aria-hidden="true">📄</span>
+              <span className="attach-icon" aria-hidden="true">{isZipType(p.contentType) ? "🗂️" : "📄"}</span>
               <span className="attach-name">{p.name}</span>
               {p.status === "uploading" && (
                 <span className="attach-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p.progress * 100)} aria-label={`Uploading ${p.name}`}>
                   <span style={{ width: `${Math.round(p.progress * 100)}%` }} />
                 </span>
               )}
-              {p.status === "ready" && <span className="attach-meta">{formatSize(p.size)}</span>}
+              {p.status === "ready" && <span className="attach-meta">{isZipType(p.contentType) ? `ZIP · ${formatSize(p.size)}` : formatSize(p.size)}</span>}
               {p.status === "error" && <span className="attach-meta">{p.error}</span>}
               <button type="button" className="attach-remove" onClick={() => remove(p.localId)} aria-label={`Remove ${p.name}`}>
                 ×
@@ -170,6 +170,9 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
       )}
       {readsPageByPage(pending.filter((p) => p.status !== "error")) && (
         <p className="muted small composer-note">Large files are read page by page before the answer; hundreds of pages can take a few minutes.</p>
+      )}
+      {pending.some((p) => p.status !== "error" && isZipType(p.contentType)) && (
+        <p className="muted small composer-note">The assistant gets the list of files in the ZIP and reads the ones your question needs, in parts.</p>
       )}
       <label htmlFor="composer-text" className="visually-hidden">
         Message

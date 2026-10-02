@@ -54,6 +54,7 @@ export function buildRequestBody(mode: SdkProviderMode, params: StreamParams): M
     system: params.system,
     messages: params.messages,
     thinking,
+    ...(params.tools && params.tools.length > 0 ? { tools: params.tools } : {}),
     betas: [THINKING_BINDING_BETA],
     // No temperature/top_p/top_k, no prefill, no forced tool_choice: 400 on the current models.
   };

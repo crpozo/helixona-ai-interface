@@ -1,4 +1,4 @@
-import type { BetaMessage, BetaRawMessageStreamEvent, BetaMessageParam, BetaTextBlockParam, BetaThinkingConfigParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type { BetaMessage, BetaRawMessageStreamEvent, BetaMessageParam, BetaTextBlockParam, BetaThinkingConfigParam, BetaToolUnion } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { Effort } from "../catalog.js";
 
 export interface StreamParams {
@@ -8,6 +8,8 @@ export interface StreamParams {
   system: BetaTextBlockParam[];
   messages: BetaMessageParam[];
   thinking?: BetaThinkingConfigParam;
+  /** Tools the model may call (executed by the caller between rounds). Absent: no tools. */
+  tools?: BetaToolUnion[];
 }
 
 export interface StreamHandle extends AsyncIterable<BetaRawMessageStreamEvent> {

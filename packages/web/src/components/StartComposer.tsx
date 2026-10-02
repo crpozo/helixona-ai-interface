@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CatalogModel } from "../lib/types";
 import { ApiError } from "../lib/api";
-import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, maxMbFor, readsPageByPage } from "../lib/files";
+import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, isZipType, maxMbFor, readsPageByPage } from "../lib/files";
 import { Icon } from "./Icon";
 import { useFileDrop } from "../lib/useFileDrop";
-import { expandZips } from "../lib/zipFiles";
 
 export interface StartAttachmentLimits {
   maxMb: number;
@@ -55,10 +54,10 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
 
   const addFiles = async (list: FileList | null) => {
     if (!list || !attachments) return;
-    // A ZIP is opened here and its files attached one by one.
-    const { files: picked, notes } = await expandZips(Array.from(list));
+    // A ZIP travels as one file: the server lists what is inside and the assistant reads from it in parts.
+    const picked = Array.from(list);
     const room = Math.max(0, attachments.maxPerMessage - files.length);
-    const problems: string[] = [...notes];
+    const problems: string[] = [];
     const accepted: File[] = [];
     for (const file of picked.slice(0, room)) {
       const type = attachmentType(file);
@@ -122,9 +121,9 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
         <ul className="attach-list composer-pending" aria-label="Files to send">
           {files.map((f, i) => (
             <li key={`${f.name}-${i}`} className="attach-chip" title={f.name}>
-              <span className="attach-icon" aria-hidden="true">📄</span>
+              <span className="attach-icon" aria-hidden="true">{isZipType(attachmentType(f) ?? "") ? "🗂️" : "📄"}</span>
               <span className="attach-name">{f.name}</span>
-              <span className="attach-meta">{formatSize(f.size)}</span>
+              <span className="attach-meta">{isZipType(attachmentType(f) ?? "") ? `ZIP · ${formatSize(f.size)}` : formatSize(f.size)}</span>
               <button type="button" className="attach-remove" onClick={() => setFiles((prev) => prev.filter((_, k) => k !== i))} aria-label={`Remove ${f.name}`} disabled={busy}>
                 ×
               </button>
@@ -164,6 +163,9 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
       )}
       {readsPageByPage(files.map((f) => ({ contentType: attachmentType(f) ?? "", size: f.size }))) && (
         <p className="muted small composer-note">Large files are read page by page before the answer; hundreds of pages can take a few minutes.</p>
+      )}
+      {files.some((f) => isZipType(attachmentType(f) ?? "")) && (
+        <p className="muted small composer-note">The assistant gets the list of files in the ZIP and reads the ones your question needs, in parts.</p>
       )}
       <div className="composer-bar">
         <div className="composer-left">

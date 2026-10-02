@@ -270,6 +270,7 @@ const KNOWN_EVENTS = new Set<ChatSseEvent["type"]>([
   "message_start",
   "status",
   "step",
+  "round",
   "text_delta",
   "thinking_delta",
   "fallback",

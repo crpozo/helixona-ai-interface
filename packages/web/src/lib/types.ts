@@ -124,6 +124,8 @@ export interface Message {
   /** Who wrote a user turn (shared projects). */
   authorId?: string;
   authorName?: string;
+  /** An answer that used tools (reading inside a ZIP): what was done, step by step. */
+  tools?: { steps: Array<{ text: string; ms: number }> };
 }
 
 /** A file attached to a user turn (metadata only; bytes stay in the clinic's storage). */
@@ -135,6 +137,8 @@ export interface AttachmentMeta {
   pages: number | null;
   /** A spreadsheet: its data rows and columns, and how many rows the model receives. */
   sheet?: { rows: number; columns: number; shown: number };
+  /** A ZIP: the files it holds, how many the assistant can read, and their size unpacked. */
+  zip?: { files: number; readable: number; bytes: number };
 }
 
 export interface AttachmentLimits {
@@ -362,10 +366,17 @@ export interface SseStep {
   steps: Array<{ id: string; text: string; state: "running" | "done" }>;
 }
 
+/** The model paused to use tools: the text streamed so far in this round was a remark along the way, not the answer. */
+export interface SseRound {
+  round: number;
+  note: string | null;
+}
+
 export type ChatSseEvent =
   | { type: "message_start"; data: SseMessageStart }
   | { type: "status"; data: SseStatus }
   | { type: "step"; data: SseStep }
+  | { type: "round"; data: SseRound }
   | { type: "text_delta"; data: SseTextDelta }
   | { type: "thinking_delta"; data: SseTextDelta }
   | { type: "fallback"; data: SseFallback }

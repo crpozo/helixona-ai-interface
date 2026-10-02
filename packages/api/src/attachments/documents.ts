@@ -3,6 +3,7 @@ import type { AttachmentMeta, BetaContentBlockParam } from "@helixona/core";
 import type { AttachmentStore } from "./store.js";
 import { ALLOWED_TYPES, MAX_PDF_PAGES, maxBytesFor, safeName } from "./policy.js";
 import { fitForModel, isSpreadsheet, readTables, SpreadsheetError, tablesForModel, XLSX_TYPE } from "./sheets.js";
+import { isZipType, loadZipIndex, prepareZip, ZIP_TYPE, ZipProblem } from "./zips.js";
 
 /** A problem with an uploaded file that the client can fix (maps to a 400). */
 export class AttachmentProblem extends Error {
@@ -88,8 +89,30 @@ export async function spreadsheetBlock(store: AttachmentStore, meta: AttachmentM
   return (cache ? { ...block, cache_control: { type: "ephemeral", ttl: "1h" } } : block) as unknown as BetaContentBlockParam;
 }
 
-/** The block for any attached file sent whole: a PDF, a spreadsheet or a text file. */
+/**
+ * A ZIP goes to the model as the list of what is inside, not as its contents: the model reads the
+ * files it needs with the ZIP tools, in parts. A missing file throws (the caller says it is gone).
+ */
+export async function zipBlock(store: AttachmentStore, meta: AttachmentMeta, cache: boolean): Promise<BetaContentBlockParam> {
+  let block: Record<string, unknown>;
+  try {
+    const { manifest } = await loadZipIndex(store, meta);
+    block = {
+      type: "document",
+      title: meta.name,
+      context: "A ZIP archive attached by staff. This is only the list of the files inside it, not their contents. Read what the question needs with the tools: search_zip_files to find which files mention something, list_zip_files to see one folder or kind of file, read_zip_files to get the contents of up to 20 files per call. Work in parts: look first, then read the files that matter, several per call, then answer. Name the files you used, and never describe or quote a file you have not read.",
+      source: { type: "text", media_type: "text/plain", data: manifest },
+    };
+  } catch (e) {
+    if (!(e instanceof ZipProblem)) throw e;
+    block = { type: "text", text: `[Attachment "${meta.name}" ${e.message}]` };
+  }
+  return (cache ? { ...block, cache_control: { type: "ephemeral", ttl: "1h" } } : block) as unknown as BetaContentBlockParam;
+}
+
+/** The block for any attached file sent whole: a PDF, a spreadsheet, a text file, or the file list of a ZIP. */
 export async function contentBlock(store: AttachmentStore, meta: AttachmentMeta, cache: boolean, maxSheetChars = DEFAULT_SHEET_CHARS): Promise<BetaContentBlockParam> {
+  if (isZipType(meta.contentType)) return zipBlock(store, meta, cache);
   return isSpreadsheet(meta.contentType) ? spreadsheetBlock(store, meta, cache, maxSheetChars) : documentBlock(meta, await store.get(meta.key), cache);
 }
 
@@ -119,13 +142,24 @@ export async function checkUpload(store: AttachmentStore, key: string, id: strin
   const head = await store.head(key);
   if (!head) throw new AttachmentProblem("attachment_missing", `The file "${name}" was not uploaded`);
   const lower = name.toLowerCase();
-  const contentType = head.contentType && ALLOWED_TYPES[head.contentType] ? head.contentType : lower.endsWith(".pdf") ? "application/pdf" : lower.endsWith(".xlsx") ? XLSX_TYPE : lower.endsWith(".csv") ? "text/csv" : "text/plain";
+  const declared = head.contentType && ALLOWED_TYPES[head.contentType] ? head.contentType : lower.endsWith(".pdf") ? "application/pdf" : lower.endsWith(".xlsx") ? XLSX_TYPE : lower.endsWith(".csv") ? "text/csv" : lower.endsWith(".zip") ? ZIP_TYPE : "text/plain";
+  const contentType = isZipType(declared) ? ZIP_TYPE : declared;
   if (head.size > maxBytesFor(contentType, maxAttachmentMb)) throw new AttachmentProblem("file_too_large", `The file "${name}" is too large`);
   if (contentType === "application/pdf") {
     const start = await store.getRange(key, 0, 1023);
     if (!start.includes("%PDF-")) throw new AttachmentProblem("not_a_pdf", `"${name}" is not a PDF file. Open it and save it as PDF, then attach it again.`);
   }
   const meta: AttachmentMeta = { id, name, contentType, size: head.size, pages: null, key };
+  if (isZipType(contentType)) {
+    // Opened once, now: what is inside is listed and kept next to the file; the model reads from it with tools.
+    try {
+      const { index, manifest } = await prepareZip(store, meta, await store.get(key));
+      return { ...meta, modelChars: manifest.length, zip: { files: index.files, readable: index.readable, bytes: index.bytes } };
+    } catch (e) {
+      if (e instanceof ZipProblem) throw new AttachmentProblem(e.code, `"${name}" ${e.message}.`);
+      throw e;
+    }
+  }
   if (isSpreadsheet(contentType)) {
     // Read now, once: a file that is not a workbook (an old .xls renamed, a damaged file) is a plain
     // error, and the rows the model will see are kept next to the file, with their size.
@@ -152,6 +186,7 @@ export async function inspectPdf(store: AttachmentStore, key: string): Promise<P
 /** Full check for files that always go whole (project knowledge): type, size, page count within `maxPages`. */
 export async function inspectUpload(store: AttachmentStore, key: string, id: string, rawName: string, maxAttachmentMb: number, maxPages = MAX_PDF_PAGES, sheetChars = DEFAULT_SHEET_CHARS): Promise<AttachmentMeta> {
   const meta = await checkUpload(store, key, id, rawName, maxAttachmentMb, sheetChars);
+  if (isZipType(meta.contentType)) throw new AttachmentProblem("unsupported_type", `"${meta.name}" is a ZIP: a project file is sent whole with every message. Attach the ZIP in a chat instead.`);
   if (meta.contentType !== "application/pdf") return meta;
   const { pages } = await inspectPdf(store, key);
   if (pages !== null && pages > maxPages) throw new AttachmentProblem("too_many_pages", `"${meta.name}" has ${pages} pages; files here are limited to ${maxPages} pages each. Please split the document.`);

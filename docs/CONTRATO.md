@@ -61,6 +61,8 @@ interface Message {
   fallbackReason: "refusal" | "availability" | null;
   stopReason: string | null;
   usage: Usage | null; createdAt: string;
+  attachments?: AttachmentMeta[];      // archivos del turno de usuario (metadatos; un ZIP trae `zip: { files, readable, bytes }`)
+  tools?: { steps: { text: string; ms: number }[] }; // respuesta que usó herramientas: su lista de actividad
 }
 interface Usage { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; estimatedUsd: number }
 
@@ -94,7 +96,8 @@ La SPA no puede cargar scripts, fuentes ni imágenes remotas. Todo se empaqueta 
 | `fallback` | `{ from, to, reason: "refusal" }` | Cambio de modelo por rechazo (el texto ya emitido se conserva; el nuevo modelo continúa) |
 | `model_switched` | `{ from, to, reason: "availability" }` | Cambio por indisponibilidad antes de emitir texto |
 | `status` | `{ stage: "waiting" \| "responding", model, inputTokens }` | Esperando el primer evento del modelo (con el tamaño estimado de la petición), y el modelo ya respondiendo |
-| `step` | `{ steps: [{ id, text, state: "running" \| "done" }] }` | Líneas de actividad del servidor (qué se leyó de un archivo, etc.); la interfaz las muestra en lugar de "Thinking…" |
+| `step` | `{ steps: [{ id, text, state: "running" \| "done" }] }` | Líneas de actividad: qué se leyó de un archivo, y cada herramienta que el modelo usa (leer, buscar o listar dentro de un ZIP) mientras corre y al terminar; la interfaz las muestra en lugar de "Thinking…" |
+| `round` | `{ round, note }` | El modelo pausó para usar herramientas: el texto emitido hasta ahí en esa ronda era un comentario de paso (`note`, recortado), no la respuesta; la interfaz lo pasa a la lista de actividad y vacía el texto |
 | `refused` | `{ category: string \| null }` | Toda la cadena rechazó. El cliente descarta lo parcial y muestra mensaje neutro |
 | `error` | `{ code, message, retryable: boolean, partial: boolean }` | Error; `partial=true` = se emitió texto y no se sustituye; ofrecer "Reintentar" |
 | `done` | `{ assistantMessageId, model, stopReason, usage, fallbackReason }` | Fin. `stopReason="max_tokens"` = respuesta truncada (mostrar aviso) |

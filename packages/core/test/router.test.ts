@@ -251,3 +251,106 @@ describe("ModelRouter: provider model ids", () => {
     expect(r.pin).toBeNull();
   });
 });
+
+describe("ModelRouter with tools", () => {
+  const zipDoc = { type: "document", title: "EOBs.zip", source: { type: "text", media_type: "text/plain", data: 'ZIP "EOBs.zip": 2 files.\nFiles (path · size):\nChecks.csv · 45 B\nnotes.docx · 2 B (not readable)' } } as never;
+  const definitions = [{ name: "read_zip_files", description: "reads", input_schema: { type: "object" as const, properties: {}, required: [] } }];
+  const tools = (execute: (call: { name: string; input: unknown }, signal: AbortSignal) => Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean; summary: string }>, maxRounds?: number) => ({
+    definitions,
+    execute,
+    describe: (c: { name: string }) => `Reading files (${c.name})`,
+    ...(maxRounds ? { maxRounds } : {}),
+  });
+
+  it("runs the tool the model asks for, shows it as a step, and feeds the result back to the same model", async () => {
+    const c = collect();
+    const calls: unknown[] = [];
+    const r = await mk().runTurn({
+      conversation: conv(),
+      history,
+      userText: "What is in the checks file?",
+      userContent: [zipDoc, { type: "text", text: "What is in the checks file?" }],
+      systemPrompt: "s",
+      emit: c.emit,
+      tools: tools(async (call) => {
+        calls.push(call.input);
+        return { content: [{ type: "text", text: "=== EOBs.zip › Checks.csv ===\nRow,Patient,Amount\n2,Ana,$10.00" }], summary: "Read 1 file from EOBs.zip: Checks.csv" };
+      }),
+    });
+    expect(r.ok).toBe(true);
+    expect(calls).toEqual([{ attachment: "EOBs.zip", paths: ["Checks.csv"] }]);
+    // The remark before the call became a note; the call ran as a step; the answer quotes what was read.
+    const types = c.events.map((e) => e.type);
+    expect(types.slice(0, 3)).toEqual(["message_start", "status", "status"]);
+    expect(c.events.find((e) => e.type === "round")).toEqual({ type: "round", round: 1, note: "Let me read the files first." });
+    const steps = c.events.filter((e) => e.type === "step").map((e) => (e as { steps: Array<{ text: string; state: string }> }).steps[0]!);
+    expect(steps).toEqual([{ id: expect.any(String), text: "Reading files (read_zip_files)", state: "running" }, { id: expect.any(String), text: "Read 1 file from EOBs.zip: Checks.csv", state: "done" }]);
+    expect(c.text()).toContain("Let me read the files first.");
+    expect(c.text()).toContain("Read from the ZIP:");
+    expect(c.text()).toContain("Ana,$10.00");
+    // Stored: the final round as the content, the earlier round replayable, the activity list.
+    expect(r.content.map((b) => b.type)).toEqual(["text"]);
+    expect((r.content[0] as { text: string }).text).toContain("Read from the ZIP");
+    expect(r.rounds).toHaveLength(1);
+    expect(r.rounds[0]!.assistant.map((b) => b.type)).toEqual(["text", "tool_use"]);
+    expect(r.rounds[0]!.results[0]).toMatchObject({ type: "tool_result", tool_use_id: (r.rounds[0]!.assistant[1] as { id: string }).id });
+    expect(r.steps.map((s) => s.text)).toEqual(["Let me read the files first.", "Read 1 file from EOBs.zip: Checks.csv"]);
+    // Both rounds are paid for; the conversation's size is the last round's.
+    expect(r.usage.outputTokens).toBeGreaterThan(20);
+    expect(r.contextTokens).toBeLessThan(r.usage.inputTokens + r.usage.cacheReadTokens + r.usage.outputTokens);
+    expect(c.events.at(-1)!.type).toBe("done");
+  });
+
+  it("a tool that fails answers the model with an error result, and the turn goes on", async () => {
+    const c = collect();
+    const r = await mk().runTurn({
+      conversation: conv(),
+      history,
+      userText: "q",
+      userContent: [zipDoc, { type: "text", text: "q" }],
+      systemPrompt: "s",
+      emit: c.emit,
+      tools: tools(async () => { throw new Error("boom"); }),
+    });
+    expect(r.ok).toBe(true);
+    expect(r.rounds[0]!.results[0]).toMatchObject({ is_error: true });
+    expect(c.text()).toContain("The tool failed");
+    expect(r.steps.at(-1)!.text).toBe("Reading files (read_zip_files): failed");
+  });
+
+  it("at the round cap the model's pending tool call is dropped so the stored turn stays valid", async () => {
+    const c = collect();
+    const r = await mk().runTurn({
+      conversation: conv(),
+      history,
+      userText: "q",
+      userContent: [zipDoc, { type: "text", text: "q" }],
+      systemPrompt: "s",
+      emit: c.emit,
+      tools: tools(async () => ({ content: [{ type: "text", text: "x" }], summary: "x" }), 1),
+    });
+    expect(r.ok).toBe(true);
+    expect(r.rounds).toHaveLength(0);
+    expect(r.content.map((b) => b.type)).toEqual(["text"]);
+    expect(c.events.some((e) => e.type === "round")).toBe(false);
+  });
+
+  it("Stop while a tool runs ends the turn as canceled", async () => {
+    const c = collect();
+    const ac = new AbortController();
+    const r = await mk().runTurn({
+      conversation: conv(),
+      history,
+      userText: "q",
+      userContent: [zipDoc, { type: "text", text: "q" }],
+      systemPrompt: "s",
+      emit: c.emit,
+      signal: ac.signal,
+      // The person presses Stop while the tool runs; the tool itself never settles.
+      tools: tools(() => new Promise(() => { ac.abort(); })),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error?.kind).toBe("aborted");
+    expect(c.events.at(-1)).toMatchObject({ type: "error", code: "aborted" });
+  });
+});

@@ -305,10 +305,8 @@ Chart prep often means ten or more files per patient, some of them hundreds of p
 carry up to 20 files, each up to 100 MB and 1,000 pages (PDF, Excel, CSV, TXT or MD; Excel files up to
 10 MB, text files up to 5 MB).
 Project knowledge files keep their own limits (20 MB and 600 pages per file, 18 MB per project),
-because they are sent whole with every message in the project. A ZIP picked or dropped into the
-chat is opened in the browser, and the PDF, Excel, CSV and text files inside it are attached one by
-one under the same limits; the ZIP itself is never uploaded, and other file types, nested ZIPs and
-anything beyond 200 files or 600 MB are left out and named to the person.
+because they are sent whole with every message in the project. A ZIP (up to 100 MB) is one
+attachment: the assistant reads inside it in parts, as described under "ZIP archives" below.
 
 - **Sent whole** when they fit one request: up to 15 MB and 100 pages per file, 19 MB and 150 pages
   per message together with the project's files. The model sees the pages as they are.
@@ -331,6 +329,40 @@ The audit log records `attachments_read` with the number of files, pages and par
 the cost, never file names or content. The cost of reading counts toward the person's daily quota
 (roughly $1 to $2 per 100 scanned pages with Claude Sonnet 5.5). The API task has 1 vCPU and 4 GB of
 memory so that large files can be opened in memory; nothing is written to the container's disk.
+
+### ZIP archives
+
+A ZIP dropped or picked into a chat is uploaded as it is, like any other file, to the attachments
+bucket (same KMS key, same 30-day retention, deleted with the conversation). Nothing inside it is
+unpacked into storage. When the message is sent, the server opens the archive once in memory, lists
+what is inside (path, size, type) and keeps that list next to the file
+(`conversations/<conversation>/<attachment>/zip-index-v1.json`). Folder bookkeeping (`__MACOSX`,
+hidden files) is left out.
+
+The model receives the list, not the contents, together with three tools it can call during its
+turn, the way Claude reads an archive in parts:
+
+- `list_zip_files`: the list again, filtered by folder or pattern (for archives with more than
+  1,500 files, whose list is cut short).
+- `search_zip_files`: which text-like files (text, Markdown, CSV, JSON, XML, HTML and the like)
+  mention something, with the matching lines; PDFs, Excel files and images are not searched.
+- `read_zip_files`: the contents of up to 20 files per call. Text comes back as text (cut at
+  200,000 characters, with the offset to continue), Excel as rows with their row numbers, PDFs up
+  to 15 MB and 100 pages as the document itself, images up to 3.5 MB as images. Larger PDFs are
+  refused with a note asking to attach that PDF on its own, where it is read page by page.
+
+The tools run on the API server, between the model's rounds; one turn may take up to 30 rounds.
+The chat shows every call in the activity list ("Reading 3 files from X.zip: …"), with the
+model's remarks between calls, and the list stays with the answer after a reload. What the tools
+returned is kept with the conversation (`conversations/<conversation>/tools/<message>.json`, same
+key and retention), so the next message replays it and the model keeps what it read; only the two
+most recent tool turns are replayed in full, older ones keep their answer and the model reads a
+file again if it needs it. A ZIP cannot be a project file, because project files travel whole with
+every message.
+
+Logs and the audit log record counts only: `turn` carries the number of tool rounds and calls,
+`tool_call` the tool name and its duration, `zip_read` and `zip_search` how many files or matches;
+never paths, file names or content.
 
 ## Spreadsheets
 

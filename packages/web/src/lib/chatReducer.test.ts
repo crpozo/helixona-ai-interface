@@ -175,3 +175,37 @@ describe("chatReducer", () => {
     expect(s.messages[1]?.status).toBe("done");
   });
 });
+
+describe("a turn that uses tools", () => {
+  it("moves the remark before a tool call into the steps, shows the call, and numbers the next round's work", () => {
+    let s = started();
+    s = sse(s, { type: "status", data: { stage: "waiting", model: "m", inputTokens: 1200 } });
+    s = sse(s, { type: "status", data: { stage: "responding", model: "m", inputTokens: 1200 } });
+    s = sse(s, { type: "text_delta", data: { text: "Let me read the files first." } });
+    expect(assistant(s).status).toBe("streaming");
+    s = sse(s, { type: "round", data: { round: 1, note: "Let me read the files first." } });
+    expect(assistant(s).text).toBe("");
+    expect(assistant(s).status).toBe("pending");
+    expect(assistant(s).round).toBe(2);
+    expect(assistant(s).steps.map((x) => [x.id, x.state])).toEqual([["send", "done"], ["reason", "done"], ["write", "done"], ["note-1", "done"]]);
+    expect(assistant(s).steps.at(-1)!.text).toBe("“Let me read the files first.”");
+    s = sse(s, { type: "step", data: { steps: [{ id: "toolu_1", text: "Reading 1 file from EOBs.zip: Checks.csv", state: "running" }] } });
+    s = sse(s, { type: "step", data: { steps: [{ id: "toolu_1", text: "Read 1 file from EOBs.zip: Checks.csv", state: "done" }] } });
+    s = sse(s, { type: "status", data: { stage: "waiting", model: "m", inputTokens: 1400 } });
+    s = sse(s, { type: "status", data: { stage: "responding", model: "m", inputTokens: 1400 } });
+    s = sse(s, { type: "text_delta", data: { text: "Ana was paid $10." } });
+    const ids = assistant(s).steps.map((x) => x.id);
+    expect(ids).toEqual(["send", "reason", "write", "note-1", "toolu_1", "send-2", "reason-2", "write-2"]);
+    expect(assistant(s).steps.find((x) => x.id === "send-2")!.text).toBe("Sending what was read to {model}");
+    expect(assistant(s).text).toBe("Ana was paid $10.");
+    s = sse(s, { type: "done", data: { assistantMessageId: "a1", model: "m", stopReason: "end_turn", usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, estimatedUsd: 0 }, fallbackReason: null } });
+    expect(assistant(s).status).toBe("done");
+    expect(assistant(s).steps.every((x) => x.state === "done")).toBe(true);
+  });
+
+  it("a loaded answer that used tools brings its activity list back", () => {
+    const msg: Message = { id: "a", role: "assistant", content: [{ type: "text", text: "Ana was paid $10." }], model: "m", fallbackReason: null, stopReason: "end_turn", usage: null, createdAt: "2026-10-02T00:00:00Z", tools: { steps: [{ text: "“Let me read the files first.”", ms: 0 }, { text: "Read 1 file from EOBs.zip: Checks.csv", ms: 120 }] } };
+    const s = chatReducer(initialChatState, { type: "load", conversationId: "c", messages: [msg] });
+    expect(s.messages[0]!.steps.map((x) => [x.text, x.ms, x.state])).toEqual([["“Let me read the files first.”", 0, "done"], ["Read 1 file from EOBs.zip: Checks.csv", 120, "done"]]);
+  });
+});

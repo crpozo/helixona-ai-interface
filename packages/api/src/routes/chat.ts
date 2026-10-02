@@ -1,11 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { currentModelId, estimateAttachmentTokens, estimateTokens, modelByAlias, ulid, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type TurnEvent, type UsageSummary } from "@helixona/core";
+import { currentModelId, estimateAttachmentTokens, estimateTokens, modelByAlias, ulid, withoutRounds, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type ToolRound, type TurnEvent, type UsageSummary } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import { attachmentKey, INLINE, MAX_PDF_PAGES, READ, sheetCharBudget } from "../attachments/policy.js";
 import { AttachmentProblem, checkUpload, contentBlock, inspectPdf, loadDocumentBlocks, readingBlock, type PdfInfo } from "../attachments/documents.js";
 import { planDelivery } from "../attachments/planner.js";
 import { DocumentReader, Semaphore, type FileReading } from "../attachments/reader.js";
+import { isZipType, ZipTools } from "../attachments/zips.js";
 import { locateConversation } from "./conversations.js";
 import { requireTraining } from "./training.js";
 import { apiError, audit, requireAuth, today } from "../app.js";
@@ -18,6 +19,17 @@ const LOCK_MS = 15 * 60_000;
 const LOCK_RENEW_MS = 5 * 60_000;
 /** Above this many megabytes of new PDFs, the browser is told that the files are being checked. */
 const SHOW_CHECKING_BYTES = 5 * 1024 * 1024;
+/**
+ * Turns that used tools whose rounds (what was read) travel with the next requests. Older tool turns
+ * keep their answer only: the model reads a file again if it needs it, instead of every earlier
+ * reading growing the conversation.
+ */
+const TOOL_TURNS_REPLAYED = 2;
+
+/** Where the rounds of a turn that used tools are kept: under the conversation, with its retention. */
+function toolsKey(conversationId: string, assistantMessageId: string): string {
+  return `conversations/${conversationId}/tools/${assistantMessageId}.json`;
+}
 
 /** Límite simple por usuario: N turnos por hora (en memoria; suficiente para 1-2 tareas). */
 class TurnRateLimiter {
@@ -175,11 +187,16 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     };
 
     try {
-      // What was done with the new spreadsheets before the stream opened, as activity lines.
-      const sheets = newFiles.filter((f) => f.sheet);
-      if (sheets.length > 0) {
+      // What was done with the new spreadsheets and ZIPs before the stream opened, as activity lines.
+      const prepared = newFiles.filter((f) => f.sheet || f.zip);
+      if (prepared.length > 0) {
         sse.send("step", {
-          steps: sheets.map((f) => {
+          steps: prepared.map((f) => {
+            if (f.zip) {
+              const z = f.zip;
+              const other = z.files - z.readable;
+              return { id: `zip-${f.id}`, text: `Opened ${f.name}: ${z.files.toLocaleString("en-US")} ${z.files === 1 ? "file" : "files"}${other > 0 ? ` (${z.readable.toLocaleString("en-US")} readable, ${other.toLocaleString("en-US")} of other types)` : ""}. The model reads the ones it needs`, state: "done" as const };
+            }
             const s = f.sheet!;
             const shape = `${s.rows.toLocaleString("en-US")} rows × ${s.columns} columns`;
             const partial = s.shown < s.rows ? `. The model sees the first ${s.shown.toLocaleString("en-US")} rows plus a summary of every column; the tabs it asks for are computed from all ${s.rows.toLocaleString("en-US")} rows` : "";
@@ -324,8 +341,24 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
       // The most recent set of earlier files gets the cache breakpoint unless the new turn brings its own
       // (at most 4 breakpoints per request).
       const latest = [...rawHistory].reverse().find((m) => m.role === "user" && (m.attachments?.length ?? 0) > 0);
+      // The last few turns that used tools are replayed round by round; older ones keep their answer only.
+      const toolTurns = rawHistory.filter((m) => m.role === "assistant" && m.tools?.key).map((m) => m.id);
+      const replayed = new Set(toolTurns.slice(-TOOL_TURNS_REPLAYED));
       const history: StoredMessage[] = [];
       for (const m of rawHistory) {
+        if (m.role === "assistant" && m.tools?.key) {
+          if (!store || !replayed.has(m.id)) {
+            history.push(withoutRounds(m));
+            continue;
+          }
+          try {
+            const rounds = (JSON.parse((await store.get(m.tools.key)).toString("utf8")) as { rounds: ToolRound[] }).rounds;
+            history.push({ ...m, rounds });
+          } catch {
+            history.push(withoutRounds(m)); // the rounds are gone (expired): the answer stays
+          }
+          continue;
+        }
         if (!store || m.role !== "user" || !m.attachments?.length) {
           history.push(m);
           continue;
@@ -345,6 +378,10 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
         return fail("context_limit", newFiles.length > 0 ? "The attached documents are too large for this conversation. Split them or start a new conversation." : "This conversation is too long; please start a new one");
       }
 
+      // ZIPs in the conversation: the model reads inside them with tools, run here between rounds.
+      const zips = [...historyFiles, ...newFiles].filter((f) => isZipType(f.contentType));
+      const zipTools = zips.length > 0 && store ? new ZipTools({ store, log: deps.log, zips, sheetChars }) : null;
+
       // ---- The answer ----
       phase = "model";
       const emit = (ev: TurnEvent) => {
@@ -354,24 +391,41 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
           default: { const { type, ...data } = ev; return sse.send(type, data); }
         }
       };
-      const result = await deps.router.runTurn({ conversation: conv, history, userText, userContent, systemPrompt: deps.systemPrompt.text, systemExtra, signal: ac.signal, emit, estimatedInputTokens: contextBefore + newTokens });
+      const result = await deps.router.runTurn({
+        conversation: conv,
+        history,
+        userText,
+        userContent,
+        systemPrompt: deps.systemPrompt.text,
+        systemExtra,
+        signal: ac.signal,
+        emit,
+        estimatedInputTokens: contextBefore + newTokens,
+        ...(zipTools ? { tools: { definitions: zipTools.definitions, execute: (c, s) => zipTools.execute(c, s), describe: (c) => zipTools.describe(c) } } : {}),
+      });
       const latencyMs = now().getTime() - started.getTime();
       if (result.ok && result.servedModel) {
         const createdAt = now().toISOString();
         const userMsg = storedUserMessage(createdAt);
         const assistantMsg: StoredMessage = { id: assistantMessageId, conversationId: id, seq: seq + 2, role: "assistant", content: result.content, model: result.servedModel, fallbackReason: result.fallbackReason, stopReason: result.stopReason, usage: result.usage, createdAt: now().toISOString() };
+        if (result.rounds.length > 0 && store) {
+          // What the tools returned can be large (files): it lives in storage, the message keeps a pointer and the activity list.
+          const roundsKey = toolsKey(id, assistantMessageId);
+          await store.put(roundsKey, Buffer.from(JSON.stringify({ rounds: result.rounds }), "utf8"), "application/json");
+          assistantMsg.tools = { key: roundsKey, steps: result.steps };
+        }
         await deps.repos.messages.append(userMsg, ttl);
         await deps.repos.messages.append(assistantMsg, ttl);
         await deps.repos.conversations.update(key, id, {
           messageCount: seq + 2,
-          lastInputTokens: result.usage.inputTokens + result.usage.cacheReadTokens + result.usage.cacheWriteTokens + result.usage.outputTokens,
+          lastInputTokens: result.contextTokens,
           // No pin means the conversation's own model answered: clear any earlier pin (expired or stale).
           pinnedModel: result.pin?.model ?? null,
           pinReason: result.pin?.reason ?? null,
           pinnedUntil: result.pin?.until ?? null,
         });
         await deps.repos.usage.add(userId, day, result.servedModel, result.usage);
-        await audit(deps, req, { action: "turn", conversationId: id, model: result.requestedModel, servedBy: result.servedModel, fallbackReason: result.fallbackReason ?? undefined, stopReason: result.stopReason ?? undefined, usage: result.usage, latencyMs });
+        await audit(deps, req, { action: "turn", conversationId: id, model: result.requestedModel, servedBy: result.servedModel, fallbackReason: result.fallbackReason ?? undefined, stopReason: result.stopReason ?? undefined, usage: result.usage, latencyMs, ...(result.rounds.length > 0 ? { meta: { toolRounds: result.rounds.length, toolCalls: result.rounds.reduce((n, r) => n + r.results.length, 0) } } : {}) });
       } else if (result.error?.kind === "aborted") {
         // The reader pressed Stop or left the page: the message they sent and whatever was answered stay in
         // the conversation (the answer marked as stopped) instead of vanishing on the next load.

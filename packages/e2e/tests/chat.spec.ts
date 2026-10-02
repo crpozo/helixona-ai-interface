@@ -3,6 +3,15 @@ import JSZip from "jszip";
 import { expect, test } from "@playwright/test";
 import { devLogin, samplePdf, skipTraining, uniqueUser, watchErrors } from "./helpers";
 
+/** A small archive: a CSV the fake model reads, a PDF, and a type the tools cannot read. */
+function sampleZip(): JSZip {
+  const archive = new JSZip();
+  archive.file("EOBs/EOB 1.pdf", "%PDF-1.4");
+  archive.file("Checks.csv", "Patient,Amount\nAna,$10.00\n");
+  archive.file("notes.docx", "no");
+  return archive;
+}
+
 test.describe("Conversations", () => {
   test.beforeEach(async ({ context }) => {
     await devLogin(context, uniqueUser("e2e-chat"), "staff");
@@ -25,18 +34,12 @@ test.describe("Conversations", () => {
     await expect(page.locator(".composer-start .attach-chip")).toContainText("Checks.csv");
     await page.getByRole("button", { name: "Remove Checks.csv" }).click();
     await expect(page.locator(".composer-start .attach-chip")).toHaveCount(0);
-    // A ZIP is opened in the browser: its supported files are attached, the rest is named.
-    const archive = new JSZip();
-    archive.file("EOBs/EOB 1.pdf", "%PDF-1.4");
-    archive.file("Checks.csv", "Patient,Amount\nAna,$10.00\n");
-    archive.file("notes.docx", "no");
-    await page.locator(".composer-start input[type=file]").setInputFiles({ name: "EOBs.zip", mimeType: "application/zip", buffer: Buffer.from(await archive.generateAsync({ type: "uint8array" })) });
-    await expect(page.locator(".composer-start .attach-chip")).toHaveCount(2);
-    await expect(page.locator(".composer-start .attach-chip").first()).toContainText("Checks.csv");
-    await expect(page.locator(".composer-start .attach-chip").nth(1)).toContainText("EOB 1.pdf");
-    await expect(page.locator(".composer-start [role=alert]")).toContainText("EOBs.zip: 2 files attached; 1 file of other types");
-    await page.getByRole("button", { name: "Remove Checks.csv" }).click();
-    await page.getByRole("button", { name: "Remove EOB 1.pdf" }).click();
+    // A ZIP stays one file (the assistant reads inside it later).
+    await page.locator(".composer-start input[type=file]").setInputFiles({ name: "EOBs.zip", mimeType: "application/zip", buffer: Buffer.from(await sampleZip().generateAsync({ type: "uint8array" })) });
+    await expect(page.locator(".composer-start .attach-chip")).toHaveCount(1);
+    await expect(page.locator(".composer-start .attach-chip").first()).toContainText("EOBs.zip");
+    await expect(page.locator(".composer-start [role=alert]")).toHaveCount(0);
+    await page.getByRole("button", { name: "Remove EOBs.zip" }).click();
     await expect(page.locator(".composer-start .attach-chip")).toHaveCount(0);
     await page.getByPlaceholder("Write a message…").fill("Summarize the HIPAA safeguards");
     await page.getByRole("button", { name: "Send" }).click();
@@ -250,6 +253,45 @@ test.describe("Conversations", () => {
     await expect(page.locator(".msg-user").nth(1).locator(".attach-chip")).toContainText("EOB March.pdf");
     await expect(page.locator(".msg-assistant")).toHaveCount(2);
     await expect(page.locator(".composer-pending .attach-chip")).toHaveCount(0);
+    errs.expectNone();
+  });
+
+  test("a ZIP is attached as one file; the assistant reads inside it with tools, step by step, and the steps survive a reload", async ({ page }) => {
+    const errs = watchErrors(page);
+    await page.goto("/", { waitUntil: "load" });
+    await page.locator(".composer-start input[type=file]").setInputFiles({ name: "EOBs.zip", mimeType: "application/zip", buffer: Buffer.from(await sampleZip().generateAsync({ type: "uint8array" })) });
+    await expect(page.locator(".composer-start .attach-chip")).toContainText("EOBs.zip");
+    await expect(page.locator(".composer-start")).toContainText("reads the ones your question needs");
+    await page.getByPlaceholder("Write a message…").fill("What is in the checks file?");
+    await page.getByRole("button", { name: "Send" }).click();
+    // One chip for the archive.
+    const chip = page.locator(".msg-user .attach-chip");
+    await expect(chip).toHaveCount(1);
+    await expect(chip).toContainText("EOBs.zip");
+    // The model's remark went to the activity list; the tool call shows there; the answer quotes what was read.
+    const answer = page.locator(".msg-assistant").first();
+    await expect(answer).toContainText("Read from the ZIP");
+    await expect(answer).toContainText("Ana");
+    await expect(answer).not.toContainText("Let me read the files first.", { useInnerText: true });
+    const steps = answer.locator(".steps");
+    await expect(steps.locator("summary")).toContainText("steps ·");
+    await steps.locator("summary").click();
+    await expect(steps).toContainText("Opened EOBs.zip: 3 files (2 readable, 1 of other types)");
+    await expect(steps).toContainText("“Let me read the files first.”");
+    await expect(steps).toContainText("Read 1 file from EOBs.zip: Checks.csv");
+    await expect(page.locator(".composer-stop")).toHaveCount(0);
+    // After a reload the chip says what the archive holds, and the answer keeps its activity list (what the server kept with it).
+    await page.reload({ waitUntil: "load" });
+    await expect(page.locator(".msg-user .attach-chip")).toContainText("3 files");
+    const saved = page.locator(".msg-assistant").first().locator(".steps");
+    await expect(saved.locator("summary")).toContainText("2 steps ·");
+    await saved.locator("summary").click();
+    await expect(saved).toContainText("Read 1 file from EOBs.zip: Checks.csv");
+    // A follow-up turn in the same conversation works (the earlier reading is replayed to the model).
+    await page.locator("#composer-text").fill("Thanks");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".msg-assistant")).toHaveCount(2);
+    await expect(page.locator(".msg-assistant").nth(1)).toContainText("Simulated reply");
     errs.expectNone();
   });
 

@@ -24,7 +24,7 @@ export function registerAttachmentRoutes(app: FastifyInstance, deps: Deps): void
     const located = await locateConversation(deps, req.session!, id);
     if (!located) return apiError(reply, 404, "not_found", "Conversation not found");
     const { contentType, size } = body.data;
-    if (!ALLOWED_TYPES[contentType]) return apiError(reply, 400, "unsupported_type", "Only PDF, Excel (.xlsx), CSV, plain text and Markdown files are supported");
+    if (!ALLOWED_TYPES[contentType]) return apiError(reply, 400, "unsupported_type", "Only PDF, Excel (.xlsx), CSV, plain text, Markdown and ZIP files are supported");
     const maxBytes = maxBytesFor(contentType, deps.config.MAX_ATTACHMENT_MB);
     if (size > maxBytes) return apiError(reply, 400, "file_too_large", `Files of this type are limited to ${Math.round(maxBytes / 1048576)} MB`);
 

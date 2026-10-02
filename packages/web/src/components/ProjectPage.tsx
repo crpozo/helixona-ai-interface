@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AttachmentMeta, CatalogModel, Conversation, Project, ProjectVisibility } from "../lib/types";
 import { ApiError, createProjectKnowledge, deleteProjectKnowledge, registerProjectKnowledge, updateProject, uploadFile } from "../lib/api";
-import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, maxMbFor } from "../lib/files";
+import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, isZipType, maxMbFor } from "../lib/files";
 import { modelLabel } from "../lib/models";
 import { useFileDrop } from "../lib/useFileDrop";
 import { ProjectMembers } from "./ProjectMembers";
@@ -183,6 +183,10 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
       const contentType = attachmentType(file);
       if (!contentType) {
         setFileError(`"${file.name}": unsupported type. Use ${ATTACH_TYPES_TEXT}.`);
+        continue;
+      }
+      if (isZipType(contentType)) {
+        setFileError(`"${file.name}": a ZIP cannot be a project file, because project files are sent whole with every message. Attach it in a chat instead.`);
         continue;
       }
       const cap = maxMbFor(contentType, maxMb);

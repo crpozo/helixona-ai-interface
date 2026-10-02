@@ -16,6 +16,9 @@ import type { LlmProvider, StreamHandle, StreamParams } from "./provider.js";
  *                     request for a Word file, a PDF or a spreadsheet would get.
  * A request that starts with "Transcribe page(s) A–B" is the server reading a large file in parts: the
  * reply is a short, deterministic transcription of those pages.
+ * With the ZIP tools offered and a ZIP's file list in the last user message, the reply is a remark
+ * plus a `read_zip_files` call for the first readable file in the list; the next request (which
+ * carries the tool result) is answered with a short quote of what was read.
  */
 export interface FakeProviderOptions { refusalFallbacks?: Record<string, string[]>; delayMs?: number; sleep?: (ms: number) => Promise<void> }
 
@@ -69,8 +72,28 @@ export class FakeProvider implements LlmProvider {
           return;
         }
         // The newest attached file's title, for "/sheet" (a workbook that references its rows).
-        const titles = (Array.isArray(last?.content) ? last!.content : []).flatMap((b) => ((b as { type?: string; title?: string }).type === "document" ? [(b as { title?: string }).title ?? ""] : []));
-        const reply = self.replyFor(userText, model, titles[titles.length - 1] ?? "");
+        const blocks = (Array.isArray(last?.content) ? last!.content : []) as unknown as Array<Record<string, unknown>>;
+        const titles = blocks.flatMap((b) => (b.type === "document" ? [String(b.title ?? "")] : []));
+        const zipCall = cmd ? null : zipToolCall(params, blocks);
+        if (zipCall) {
+          const remark = "Let me read the files first.";
+          yield { type: "content_block_start", index: content.length, content_block: { type: "text", text: "", citations: null } } as BetaRawMessageStreamEvent;
+          yield { type: "content_block_delta", index: content.length, delta: { type: "text_delta", text: remark } } as BetaRawMessageStreamEvent;
+          yield { type: "content_block_stop", index: content.length } as BetaRawMessageStreamEvent;
+          content.push({ type: "text", text: remark, citations: null } as BetaTextBlock);
+          const call = { type: "tool_use", id: `toolu_fake_${params.messages.length}`, name: "read_zip_files", input: zipCall } as unknown as BetaContentBlock;
+          yield { type: "content_block_start", index: content.length, content_block: { ...(call as object), input: {} } } as unknown as BetaRawMessageStreamEvent;
+          yield { type: "content_block_delta", index: content.length, delta: { type: "input_json_delta", partial_json: JSON.stringify(zipCall) } } as unknown as BetaRawMessageStreamEvent;
+          yield { type: "content_block_stop", index: content.length } as BetaRawMessageStreamEvent;
+          content.push(call);
+          const u = usage(Math.ceil(JSON.stringify(params.messages).length / 4), 20);
+          yield { type: "message_delta", delta: { stop_reason: "tool_use", stop_sequence: null, container: null, stop_details: null }, usage: u, context_management: null } as unknown as BetaRawMessageStreamEvent;
+          yield { type: "message_stop" } as BetaRawMessageStreamEvent;
+          final = { ...msg(model, content), stop_reason: "tool_use", usage: { ...msg(model, content).usage, ...u } };
+          finalResolve(final);
+          return;
+        }
+        const reply = self.replyFor(userText, model, titles[titles.length - 1] ?? "", toolResultText(blocks));
         // A transcription streams a page at a time, so reading a long file in tests takes seconds, not minutes.
         const parts = /^Transcribe pages? \d/.test(userText) ? reply.split(/(?=\(p\. \d+\))/) : (reply.match(/.{1,12}/gs) ?? []);
         let idx = content.length;
@@ -119,7 +142,8 @@ export class FakeProvider implements LlmProvider {
     };
   }
 
-  private replyFor(userText: string, model: string, fileTitle = ""): string {
+  private replyFor(userText: string, model: string, fileTitle = "", toolResult: string | null = null): string {
+    if (toolResult !== null) return `**Simulated reply** (${model}).\n\nRead from the ZIP:\n\n${toolResult.slice(0, 400)}`;
     if (/^\/sheet\b/.test(userText)) {
       const f = fileTitle || "attachment.csv";
       return `Here is the workbook.\n\n\`\`\`document-xlsx\n# Check follow-up\n\nPrepared from ${f}.\n\n## Original data\n\n{{file: ${f}}}\n\n## Cashed by patient\n\n{{file: ${f} | rows: 2, 4}}\n\n## Never cashed\n\n{{file: ${f} | rows: 3}}\n\n## Largest check per status\n\n{{file: ${f} | group: Status | pick: highest Amount | columns: Status, Patient, Amount}}\n\n## Summary\n\n| Tab | Rows |\n| --- | --- |\n| Cashed by patient | 2 |\n| Never cashed | 1 |\n\`\`\`\n\nCashed by patient: 2 rows (status "Cashed"). Never cashed: 1 row (status "Outstanding"). Largest check per status: computed from the whole file.`;
@@ -147,6 +171,29 @@ export class FakeProvider implements LlmProvider {
 }
 
 function abortError(): Error { const e = new Error("aborted"); e.name = "AbortError"; return e; }
+
+/** The `read_zip_files` call to make: the first readable file in a ZIP's list, when the tools are on offer. */
+function zipToolCall(params: StreamParams, blocks: Array<Record<string, unknown>>): { attachment: string; paths: string[] } | null {
+  if (!(params.tools ?? []).some((t) => (t as { name?: string }).name === "read_zip_files")) return null;
+  const doc = blocks.find((b) => b.type === "document" && /\.zip$/i.test(String(b.title ?? "")));
+  if (!doc) return null;
+  const data = String((doc.source as { data?: string } | undefined)?.data ?? "");
+  for (const line of data.split("\n")) {
+    const m = line.match(/^(.+?) · \d/);
+    if (m && /\.(csv|txt|md|json|pdf)$/i.test(m[1]!)) return { attachment: String(doc.title), paths: [m[1]!] };
+  }
+  return null;
+}
+
+/** The text of the first tool result in the last message, when the last message carries one. */
+function toolResultText(blocks: Array<Record<string, unknown>>): string | null {
+  const r = blocks.find((b) => b.type === "tool_result");
+  if (!r) return null;
+  const c = r.content;
+  if (typeof c === "string") return c;
+  if (Array.isArray(c)) return (c as Array<Record<string, unknown>>).map((b) => (b.type === "text" ? String(b.text ?? "") : `[${String(b.type)}]`)).join("\n");
+  return "";
+}
 
 function extractText(content: unknown): string {
   if (typeof content === "string") return content;

@@ -37,8 +37,10 @@ export interface ChatMessage {
   files: SseFiles | null;
   /** What the server is waiting for while the answer is pending, and since when (this session only). */
   wait: { stage: "waiting" | "responding"; inputTokens: number | null; since: number } | null;
-  /** What was done for this answer, step by step, with how long each took (this session only). */
+  /** What was done for this answer, step by step, with how long each took. */
   steps: Step[];
+  /** Round of the model's work being shown (a turn that uses tools has several); the step ids carry it. */
+  round: number;
 }
 
 export interface Step {
@@ -144,8 +146,14 @@ export function fromServerMessage(m: Message): ChatMessage {
     authorName: m.authorName ?? null,
     files: null,
     wait: null,
-    steps: [],
+    steps: (m.tools?.steps ?? []).map((s, i) => ({ id: `saved-${i}`, text: s.text, model: null, state: "done" as const, startedAt: 0, ms: s.ms })),
+    round: 1,
   };
+}
+
+/** Step ids of the model's own work carry the round, so each round gets its own lines. */
+function roundId(m: ChatMessage, id: string): string {
+  return m.round > 1 ? `${id}-${m.round}` : id;
 }
 
 function updateActive(state: ChatState, fn: (m: ChatMessage) => ChatMessage): ChatState {
@@ -177,7 +185,7 @@ function applySse(state: ChatState, event: ChatSseEvent): ChatState {
         text: m.text + event.data.text,
         status: m.status === "pending" ? "streaming" : m.status,
         // The first text: whatever was running (reasoning, sending) is over; the answer is being written.
-        steps: m.status === "pending" && m.steps.length > 0 ? upsertStep(finishSteps(m.steps), { id: "write", text: "Writing the answer", state: "running" }) : m.steps,
+        steps: m.status === "pending" && m.steps.length > 0 ? upsertStep(finishSteps(m.steps), { id: roundId(m, "write"), text: m.round > 1 ? "Writing" : "Writing the answer", state: "running" }) : m.steps,
       }));
     case "thinking_delta":
       return updateActive(state, (m) => ({ ...m, thinking: m.thinking + event.data.text }));
@@ -186,17 +194,27 @@ function applySse(state: ChatState, event: ChatSseEvent): ChatState {
       const big = (inputTokens ?? 0) >= 100_000;
       return updateActive(state, (m) => {
         let steps = m.steps;
-        if (stage === "waiting") steps = upsertStep(steps, { id: "send", text: big ? `Sending about ${Math.round(inputTokens! / 1000).toLocaleString("en-US")}k tokens to {model}` : "Sending the request to {model}", model, state: "running" });
+        const send = roundId(m, "send");
+        if (stage === "waiting") steps = upsertStep(steps, { id: send, text: big ? `Sending about ${Math.round(inputTokens! / 1000).toLocaleString("en-US")}k tokens to {model}` : m.round > 1 ? "Sending what was read to {model}" : "Sending the request to {model}", model, state: "running" });
         else {
-          const sent = steps.find((s) => s.id === "send");
-          if (sent) steps = upsertStep(steps, { id: "send", text: sent.text, state: "done" });
-          steps = upsertStep(steps, { id: "reason", text: big ? "{model} is reasoning over the data" : "{model} is reasoning", model, state: "running" });
+          const sent = steps.find((s) => s.id === send);
+          if (sent) steps = upsertStep(steps, { id: send, text: sent.text, state: "done" });
+          steps = upsertStep(steps, { id: roundId(m, "reason"), text: big ? "{model} is reasoning over the data" : m.round > 1 ? "{model} is reasoning over what it read" : "{model} is reasoning", model, state: "running" });
         }
         return { ...m, wait: { stage, inputTokens, since: Date.now() }, steps };
       });
     }
     case "step":
       return updateActive(state, (m) => ({ ...m, steps: event.data.steps.reduce((acc, s) => upsertStep(acc, s), m.steps) }));
+    case "round": {
+      // The model paused to use tools: its remark so far moves to the activity list, and the answer is pending again.
+      const { round, note } = event.data;
+      return updateActive(state, (m) => {
+        let steps = finishSteps(m.steps);
+        if (note) steps = upsertStep(steps, { id: `note-${round}`, text: `“${note}”`, state: "done" });
+        return { ...m, text: "", status: "pending", round: round + 1, wait: null, steps };
+      });
+    }
     case "files":
       // A snapshot: the list replaces the previous one; an empty list clears it.
       return updateActive(state, (m) => ({ ...m, files: event.data.files.length > 0 ? event.data : null, steps: event.data.files.length > 0 ? upsertStep(m.steps, filesStep(event.data)) : m.steps }));
@@ -290,8 +308,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         retryAttachments: [],
         authorName: action.authorName ?? null,
         files: null,
-    wait: null,
-    steps: [],
+        wait: null,
+        steps: [],
+        round: 1,
       };
       const assistant: ChatMessage = {
         id: action.assistantId,
@@ -309,8 +328,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         retryAttachments: action.attachments ?? [],
         authorName: null,
         files: null,
-    wait: null,
-    steps: [],
+        wait: null,
+        steps: [],
+        round: 1,
       };
       return {
         ...state,

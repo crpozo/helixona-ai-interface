@@ -1,4 +1,4 @@
-import type { BetaContentBlock, BetaContentBlockParam, BetaMessageParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type { BetaContentBlock, BetaContentBlockParam, BetaMessageParam, BetaToolResultBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 
 export type Role = "staff" | "admin";
 export type PinReason = "refusal" | "availability";
@@ -78,6 +78,23 @@ export interface AttachmentMeta {
   modelChars?: number;
   /** A spreadsheet: its data rows and columns, and how many rows the model receives. */
   sheet?: { rows: number; columns: number; shown: number };
+  /** A ZIP archive: the files it holds, how many of them the tools can read, and their size unpacked. */
+  zip?: { files: number; readable: number; bytes: number };
+}
+
+/**
+ * One round of an assistant turn that used tools: what the model sent (its tool calls included) and
+ * what the tools returned. Replayed exactly on later turns, so the model keeps what it read.
+ */
+export interface ToolRound {
+  assistant: BetaContentBlock[];
+  results: BetaToolResultBlockParam[];
+}
+
+/** A line of the activity list kept with an answer: what a tool did, or a remark the model made along the way. */
+export interface TurnStep {
+  text: string;
+  ms: number;
 }
 
 export interface StoredMessage {
@@ -91,6 +108,10 @@ export interface StoredMessage {
   /** Who wrote a user turn (shown in shared projects, where several people write in one conversation). */
   authorId?: string;
   authorName?: string;
+  /** Earlier rounds of this turn (tool calls and their results), loaded from storage when the turn is replayed; `content` is the final round. */
+  rounds?: ToolRound[];
+  /** A turn that used tools: where its rounds are kept, and the activity list shown with the answer. */
+  tools?: { key: string; steps: TurnStep[] };
   model: string | null;
   fallbackReason: PinReason | null;
   stopReason: string | null;
@@ -98,7 +119,7 @@ export interface StoredMessage {
   createdAt: string;
 }
 
-export type { BetaContentBlock, BetaContentBlockParam, BetaMessageParam };
+export type { BetaContentBlock, BetaContentBlockParam, BetaMessageParam, BetaToolResultBlockParam };
 
 /** Eventos normalizados del turno (mapeo 1:1 con los eventos SSE del contrato). */
 export type TurnEvent =
@@ -109,6 +130,10 @@ export type TurnEvent =
   | { type: "model_switched"; from: string; to: string; reason: "availability" }
   /** Waiting for the model's first event (a large request takes a while), then the model has started. */
   | { type: "status"; stage: "waiting" | "responding"; model: string; inputTokens: number | null }
+  /** Activity lines: a tool being used, then done (same shape as the server's own lines). */
+  | { type: "step"; steps: Array<{ id: string; text: string; state: "running" | "done" }> }
+  /** The model paused to use tools: the text streamed so far in this round was a remark along the way, not the answer. */
+  | { type: "round"; round: number; note: string | null }
   | { type: "refused"; category: string | null }
   | { type: "error"; code: "model_unavailable" | "bad_request" | "internal" | "aborted"; message: string; retryable: boolean; partial: boolean }
   | { type: "done"; model: string; stopReason: string | null; usage: UsageSummary; fallbackReason: PinReason | null };
