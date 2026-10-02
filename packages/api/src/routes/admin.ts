@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Deps } from "../deps.js";
 import { apiError, audit, requireAuth, today } from "../app.js";
+import { isBillingViewer } from "../billing/viewer.js";
+import { aggregateMonths, dailyEstimates, monthsBack, spentSince, type CreditsRecord } from "../billing/monthly.js";
 
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -99,5 +101,50 @@ export function registerAdminRoutes(app: FastifyInstance, deps: Deps): void {
     const q = z.object({ day: Day.default(today(now)) }).safeParse(req.query);
     if (!q.success) return apiError(reply, 400, "bad_request", "Invalid request");
     return { items: await deps.repos.usage.listByDay(q.data.day) };
+  });
+
+  // ---- Billing view: usage by month and the credits left, for the administrators named in BILLING_VIEWER_EMAILS.
+  const Credits = z.object({ purchasedUsd: z.coerce.number().min(0).max(10_000_000), asOf: Day, note: z.string().trim().max(200).default("") });
+  const notViewer = (reply: Parameters<typeof apiError>[0]) => apiError(reply, 403, "forbidden", "The billing view is limited to the accounts named in the server settings.");
+
+  app.get("/api/admin/billing", { preHandler: admin }, async (req, reply) => {
+    const s = req.session!;
+    if (!isBillingViewer(deps.config, s)) return notViewer(reply);
+    const months = monthsBack(now(), 12);
+    const fromDay = `${months[months.length - 1]}-01`;
+    const credits = await deps.repos.settings.get<CreditsRecord>("billing-credits");
+    // Spending counts from the credits' date, which may be earlier than the months shown.
+    const since = credits && credits.asOf < fromDay ? credits.asOf : fromDay;
+    const rows = await deps.repos.usage.listFrom(since);
+    const anthropic: { configured: boolean; months: Array<{ month: string; costUsd: number }>; sinceAnchorUsd: number | null; fetchedAt: string | null; error: string | null } = { configured: !!deps.billing, months: [], sinceAnchorUsd: null, fetchedAt: null, error: null };
+    if (deps.billing) {
+      try {
+        const r = await deps.billing.report(since);
+        anthropic.fetchedAt = r.fetchedAt;
+        anthropic.months = months.map((m) => ({ month: m, costUsd: r.days.filter((d) => d.day.startsWith(m)).reduce((n, d) => n + d.usd, 0) }));
+        if (credits) anthropic.sinceAnchorUsd = spentSince(r.days, credits.asOf);
+      } catch (e) {
+        anthropic.error = e instanceof Error ? e.message : "The cost report could not be read";
+        deps.log.warn("billing_report_failed", { errorClass: e instanceof Error ? e.name : "unknown" });
+      }
+    }
+    let remaining: { usd: number; spentUsd: number; basis: "anthropic" | "estimate" } | null = null;
+    if (credits) {
+      const spentUsd = anthropic.sinceAnchorUsd ?? spentSince(dailyEstimates(rows), credits.asOf);
+      remaining = { usd: credits.purchasedUsd - spentUsd, spentUsd, basis: anthropic.sinceAnchorUsd !== null ? "anthropic" : "estimate" };
+    }
+    return { months: aggregateMonths(rows, months), credits, anthropic, remaining };
+  });
+
+  app.put("/api/admin/billing/credits", { preHandler: admin }, async (req, reply) => {
+    const s = req.session!;
+    if (!isBillingViewer(deps.config, s)) return notViewer(reply);
+    const body = Credits.safeParse(req.body);
+    if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
+    const record: CreditsRecord = { ...body.data, updatedAt: now().toISOString(), updatedBy: s.name };
+    await deps.repos.settings.put("billing-credits", record);
+    // Amount and date only: the note is free text and stays out of the audit log.
+    await audit(deps, req, { action: "admin_billing_credits", meta: { purchasedUsd: record.purchasedUsd, asOf: record.asOf } });
+    return record;
   });
 }

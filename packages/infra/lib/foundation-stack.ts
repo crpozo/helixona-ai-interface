@@ -22,6 +22,7 @@ export interface HelixonaTables {
   readonly usage: dynamodb.Table;
   readonly projects: dynamodb.Table;
   readonly training: dynamodb.Table;
+  readonly settings: dynamodb.Table;
 }
 
 /**
@@ -37,6 +38,7 @@ export class FoundationStack extends cdk.Stack {
   readonly sessionSecret: secretsmanager.Secret;
   readonly cognitoClientSecret: secretsmanager.Secret;
   readonly anthropicApiKeySecret: secretsmanager.Secret;
+  readonly anthropicAdminApiKeySecret: secretsmanager.Secret;
   readonly apiRepository: ecr.Repository;
 
   constructor(scope: Construct, id: string, props: FoundationStackProps) {
@@ -160,7 +162,14 @@ export class FoundationStack extends cdk.Stack {
       tableName: resourceName(stage, 'training'),
       partitionKey: { name: 'userId', type: s },
     });
-    this.tables = { conversations, messages, sessions, audit, usage, projects, training };
+    // Settings: a handful of named values administrators set (the credits bought, for the billing
+    // view); no PHI, no TTL.
+    const settings = new dynamodb.Table(this, 'SettingsTable', {
+      ...tableDefaults,
+      tableName: resourceName(stage, 'settings'),
+      partitionKey: { name: 'name', type: s },
+    });
+    this.tables = { conversations, messages, sessions, audit, usage, projects, training, settings };
 
     // --------------------------------------------------------- AWS Backup
     // Copia diaria (35 días) de las tablas a un vault cifrado con la CMK. Idealmente el vault
@@ -253,6 +262,17 @@ export class FoundationStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
+    // Admin API key of the Anthropic organization (ANTHROPIC_ADMIN_API_KEY): the billed cost report
+    // for the billing view. Optional: the view works from the assistant's own estimates until an
+    // administrator pastes the key here by hand (it never passes through the repository or CI).
+    this.anthropicAdminApiKeySecret = new secretsmanager.Secret(this, 'AnthropicAdminApiKeySecret', {
+      secretName: resourceName(stage, 'anthropic-admin-api-key'),
+      description: 'Admin API key of the Anthropic organization (ANTHROPIC_ADMIN_API_KEY): cost report for the billing view. Optional; fill in by hand.',
+      encryptionKey: this.phiKey,
+      secretStringValue: cdk.SecretValue.unsafePlainText('REPLACE_ME_WITH_ANTHROPIC_ADMIN_API_KEY'),
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     // ---------------------------------------------------------------- ECR
     // El repositorio vive aquí (y no en AppStack) para poder hacer build+push de la imagen antes
     // del primer despliegue del servicio Fargate. `cdk synth` no necesita Docker.
@@ -296,7 +316,7 @@ export class FoundationStack extends cdk.Stack {
         { id: 'HIPAA.Security-DynamoDBAutoScalingEnabled', reason: 'Tabla on-demand (PAY_PER_REQUEST); el autoscaling de capacidad no aplica.' },
       ]);
     }
-    for (const secret of [this.sessionSecret, this.cognitoClientSecret, this.anthropicApiKeySecret]) {
+    for (const secret of [this.sessionSecret, this.cognitoClientSecret, this.anthropicApiKeySecret, this.anthropicAdminApiKeySecret]) {
       NagSuppressions.addResourceSuppressions(secret, [
         { id: 'AwsSolutions-SMG4', reason: 'Rotación manual documentada: rotar SESSION_SECRET invalida todas las sesiones, el client secret lo emite Cognito y la clave de Anthropic se rota desde console.anthropic.com; no hay lambda de rotación.' },
         { id: 'HIPAA.Security-SecretsManagerRotationEnabled', reason: 'Rotación manual documentada (ver README); rotación automática no aplicable a estos valores.' },

@@ -113,6 +113,14 @@ export interface UsageRepo {
   add(userId: string, day: string, model: string, usage: UsageSummary): Promise<void>;
   get(userId: string, day: string): Promise<UsageRow | null>;
   listByDay(day: string): Promise<UsageRow[]>;
+  /** Rows from `fromDay` (YYYY-MM-DD, inclusive) on: the usage by month. */
+  listFrom(fromDay: string): Promise<UsageRow[]>;
+}
+
+/** A handful of named values administrators set (the credits bought, for the billing view); no PHI. */
+export interface SettingsRepo {
+  get<T>(name: string): Promise<T | null>;
+  put<T>(name: string, value: T): Promise<void>;
 }
 
 /** `invited`: created by an administrator and still on the temporary password (first sign-in pending). */
@@ -172,4 +180,4 @@ export interface TrainingRepo {
   list(): Promise<TrainingRecord[]>;
 }
 
-export interface Repos { conversations: ConversationRepo; messages: MessageRepo; sessions: SessionRepo; audit: AuditRepo; usage: UsageRepo; projects: ProjectRepo; training: TrainingRepo }
+export interface Repos { conversations: ConversationRepo; messages: MessageRepo; sessions: SessionRepo; audit: AuditRepo; usage: UsageRepo; projects: ProjectRepo; training: TrainingRepo; settings: SettingsRepo }

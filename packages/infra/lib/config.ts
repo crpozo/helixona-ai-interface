@@ -19,6 +19,8 @@ export interface DeployConfig {
   readonly cognitoDomainPrefix: string;
   /** Proveedor de modelos: `anthropic` (Claude API, clave en Secrets Manager) o `bedrock`. */
   readonly llmMode: 'anthropic' | 'bedrock';
+  /** Administrators, by email (comma-separated), who see the billing view: usage by month and the credits left. */
+  readonly billingViewerEmails: string;
   /** Crear NAT Gateway (egreso a Internet). Forzado a true con `llmMode=anthropic` (api.anthropic.com). */
   readonly enableNat: boolean;
   /** TLS entre ALB y contenedor (el contenedor debe servir HTTPS con certificado autofirmado). */
@@ -97,6 +99,7 @@ export function loadConfig(app: cdk.App): DeployConfig {
     cloudFrontCertificateArn: opt(str(app, 'cloudFrontCertificateArn')),
     cognitoDomainPrefix: str(app, 'cognitoDomainPrefix', `helixona-${stage}`),
     llmMode,
+    billingViewerEmails: str(app, 'billingViewerEmails', 'carlos@mindfultech.ec'),
     // La Claude API vive en Internet: el contenedor necesita egreso (NAT). Con Bedrock puede ir por PrivateLink.
     enableNat: bool(app, 'enableNat', false) || llmMode === 'anthropic',
     tlsToContainer: bool(app, 'tlsToContainer', false),

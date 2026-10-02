@@ -30,6 +30,7 @@ export interface AppStackProps extends cdk.StackProps {
   readonly sessionSecret: secretsmanager.ISecret;
   readonly cognitoClientSecret: secretsmanager.ISecret;
   readonly anthropicApiKeySecret: secretsmanager.ISecret;
+  readonly anthropicAdminApiKeySecret: secretsmanager.ISecret;
   readonly apiRepository: ecr.IRepository;
   readonly userPool: cognito.IUserPool;
   readonly userPoolClient: cognito.IUserPoolClient;
@@ -129,6 +130,7 @@ export class AppStack extends cdk.Stack {
     const sessionSecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'SessionSecretRef', props.sessionSecret.secretArn);
     const cognitoClientSecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'CognitoClientSecretRef', props.cognitoClientSecret.secretArn);
     const anthropicApiKeySecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'AnthropicApiKeySecretRef', props.anthropicApiKeySecret.secretArn);
+    const anthropicAdminApiKeySecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'AnthropicAdminApiKeySecretRef', props.anthropicAdminApiKeySecret.secretArn);
 
     // Bug reports from the sidebar: the API publishes them to this topic and the maintainer's inbox is
     // subscribed (SNS asks that address to confirm once). Its own key: the PHI key stays with the data.
@@ -195,6 +197,8 @@ export class AppStack extends cdk.Stack {
         TABLE_USAGE: tableNames.usage.tableName,
         TABLE_PROJECTS: tableNames.projects.tableName,
         TABLE_TRAINING: tableNames.training.tableName,
+        TABLE_SETTINGS: tableNames.settings.tableName,
+        BILLING_VIEWER_EMAILS: cfg.billingViewerEmails,
         AWS_REGION: this.region,
         LLM_MODE: cfg.llmMode,
         EFFORT: 'medium',
@@ -228,6 +232,7 @@ export class AppStack extends cdk.Stack {
         SESSION_SECRET: ecs.Secret.fromSecretsManager(sessionSecretRef),
         COGNITO_CLIENT_SECRET: ecs.Secret.fromSecretsManager(cognitoClientSecretRef),
         ...(cfg.llmMode === 'anthropic' ? { ANTHROPIC_API_KEY: ecs.Secret.fromSecretsManager(anthropicApiKeySecretRef) } : {}),
+        ANTHROPIC_ADMIN_API_KEY: ecs.Secret.fromSecretsManager(anthropicAdminApiKeySecretRef),
       },
     });
     // Sistema de archivos de solo lectura: /tmp escribible para Node.
@@ -499,7 +504,7 @@ export class AppStack extends cdk.Stack {
       new iam.PolicyStatement({
         sid: 'DynamoDbAppTables',
         actions: rwActions,
-        resources: [tables.conversations, tables.messages, tables.sessions, tables.usage, tables.projects, tables.training].flatMap(withIndexes),
+        resources: [tables.conversations, tables.messages, tables.sessions, tables.usage, tables.projects, tables.training, tables.settings].flatMap(withIndexes),
       }),
     );
     // Daily usage report: the usage table has no per-day index, so the admin listing scans it

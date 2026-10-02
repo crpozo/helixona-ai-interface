@@ -23,11 +23,16 @@ const Env = z.object({
   TABLE_USAGE: z.string().optional(),
   TABLE_PROJECTS: z.string().optional(),
   TABLE_TRAINING: z.string().optional(),
+  TABLE_SETTINGS: z.string().optional(),
   AWS_REGION: z.string().optional(),
   LLM_MODE: z.enum(["bedrock", "anthropic", "claude-platform-aws", "fake"]).default("bedrock"),
   /** Dev only: delay between simulated tokens of the fake provider (slower = easier to test streaming UI). */
   FAKE_DELAY_MS: z.coerce.number().int().nonnegative().default(15),
   ANTHROPIC_API_KEY: z.string().optional(),
+  /** Admin API key of the Anthropic organization (not the key that sends messages): the billed cost report for the billing view. Optional. */
+  ANTHROPIC_ADMIN_API_KEY: z.string().optional(),
+  /** Administrators, by email (comma-separated), who see the billing view: usage by month and the credits left. */
+  BILLING_VIEWER_EMAILS: z.string().default(""),
   ANTHROPIC_AWS_WORKSPACE_ID: z.string().optional(),
   MODEL_CATALOG_JSON: z.string().optional(),
   SYSTEM_PROMPT_FILE: z.string().default("prompts/system.en.md"),
@@ -82,7 +87,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
   }
   if (cfg.STORE_MODE === "dynamo") {
-    for (const k of ["TABLE_CONVERSATIONS", "TABLE_MESSAGES", "TABLE_SESSIONS", "TABLE_AUDIT", "TABLE_USAGE", "TABLE_PROJECTS", "TABLE_TRAINING", "AWS_REGION"] as const) {
+    for (const k of ["TABLE_CONVERSATIONS", "TABLE_MESSAGES", "TABLE_SESSIONS", "TABLE_AUDIT", "TABLE_USAGE", "TABLE_PROJECTS", "TABLE_TRAINING", "TABLE_SETTINGS", "AWS_REGION"] as const) {
       if (!cfg[k]) throw new Error(`${k} is required for STORE_MODE=dynamo`);
     }
   }

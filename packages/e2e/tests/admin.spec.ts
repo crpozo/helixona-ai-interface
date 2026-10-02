@@ -11,6 +11,8 @@ test.describe("Administration", () => {
     await page.getByRole("link", { name: "Administration" }).click();
     await expect(page).toHaveURL(/\/admin$/);
     await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
+    // An administrator not named in the settings has no billing view.
+    await expect(page.getByRole("heading", { name: "Usage by month and credits" })).toHaveCount(0);
     // The signed-in administrator appears in the Users table (and, having attested the training, in the log).
     await expect(page.locator("tr", { hasText: adminName }).first()).toBeVisible();
     // Bug reports: where they go and that the inbox is confirmed (memory sender in this environment).
@@ -69,6 +71,37 @@ test.describe("Administration", () => {
 
     await page.getByRole("link", { name: /Back/ }).or(page.getByRole("button", { name: /Back/ })).first().click();
     await expect(page.locator(".home-start")).toBeVisible();
+    errs.expectNone();
+  });
+
+  test("usage by month and the credits left, for the administrator named in the settings", async ({ page, context }) => {
+    const errs = watchErrors(page);
+    await devLogin(context, "billing", "admin");
+    await skipTraining(context);
+    await page.goto("/", { waitUntil: "load" });
+    // One turn, so this month has usage.
+    await page.getByPlaceholder("Write a message…").fill("A short question");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.locator(".msg-assistant").first()).toContainText("Simulated reply");
+    // The usage row is written when the turn ends.
+    await expect(page.locator(".composer-stop")).toHaveCount(0);
+    await page.getByRole("link", { name: "Administration" }).click();
+    await expect(page.getByRole("heading", { name: "Usage by month and credits" })).toBeVisible();
+    const thisMonth = new Date().toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+    const months = page.locator(".billing-months");
+    await expect(months).toContainText(thisMonth);
+    await expect(months.locator("tbody tr").first().locator("td").nth(1)).not.toHaveText("0");
+    await expect(page.getByText("No credits recorded yet")).toBeVisible();
+    await page.getByLabel("Credits purchased (USD)").fill("500");
+    await page.getByLabel("As of").fill("2026-01-01");
+    await page.getByLabel("Note").fill("Bought in the console");
+    await page.getByRole("button", { name: "Save credits" }).click();
+    // The fake turn costs a fraction of a cent, so the credits are (nearly) whole.
+    await expect(page.locator(".billing-remaining")).toContainText(/\$(499\.\d\d|500\.00) left/);
+    await expect(page.getByText(/this assistant's own estimate/)).toBeVisible();
+    await expect(page.getByText(/Bought \$500\.00 as of 2026-01-01 \(Bought in the console\)/)).toBeVisible();
+    // The detail of the month names the user.
+    await expect(page.locator(".billing tbody").nth(1)).toContainText("billing");
     errs.expectNone();
   });
 });

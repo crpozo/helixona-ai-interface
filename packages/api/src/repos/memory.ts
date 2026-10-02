@@ -1,5 +1,5 @@
 import type { Conversation, Project, StoredMessage, UsageSummary } from "@helixona/core";
-import type { AuditEvent, AuditRepo, ConversationPatch, ConversationRepo, DirectoryUser, MessageRepo, ProjectPatch, ProjectRepo, Repos, Session, SessionRepo, TrainingRecord, TrainingRepo, UsageRepo, UsageRow, UserDirectory } from "./types.js";
+import type { AuditEvent, AuditRepo, ConversationPatch, ConversationRepo, DirectoryUser, MessageRepo, ProjectPatch, ProjectRepo, Repos, Session, SessionRepo, TrainingRecord, TrainingRepo, UsageRepo, UsageRow, UserDirectory, SettingsRepo } from "./types.js";
 
 export class MemoryConversationRepo implements ConversationRepo {
   private data = new Map<string, Conversation>();
@@ -74,6 +74,13 @@ export class MemoryUsageRepo implements UsageRepo {
   }
   async get(userId: string, day: string) { const r = this.data.get(`${userId}|${day}`); return r ? structuredClone(r) : null; }
   async listByDay(day: string) { return [...this.data.values()].filter((r) => r.day === day).map((r) => structuredClone(r)); }
+  async listFrom(fromDay: string) { return [...this.data.values()].filter((r) => r.day >= fromDay).map((r) => structuredClone(r)); }
+}
+
+export class MemorySettingsRepo implements SettingsRepo {
+  private data = new Map<string, unknown>();
+  async get<T>(name: string) { return this.data.has(name) ? (structuredClone(this.data.get(name)) as T) : null; }
+  async put<T>(name: string, value: T) { this.data.set(name, structuredClone(value)); }
 }
 
 export class MemoryUserDirectory implements UserDirectory {
@@ -107,5 +114,5 @@ export class MemoryTrainingRepo implements TrainingRepo {
 }
 
 export function memoryRepos(): Repos & { audit: MemoryAuditRepo } {
-  return { conversations: new MemoryConversationRepo(), messages: new MemoryMessageRepo(), sessions: new MemorySessionRepo(), audit: new MemoryAuditRepo(), usage: new MemoryUsageRepo(), projects: new MemoryProjectRepo(), training: new MemoryTrainingRepo() };
+  return { conversations: new MemoryConversationRepo(), messages: new MemoryMessageRepo(), sessions: new MemorySessionRepo(), audit: new MemoryAuditRepo(), usage: new MemoryUsageRepo(), projects: new MemoryProjectRepo(), training: new MemoryTrainingRepo(), settings: new MemorySettingsRepo() };
 }

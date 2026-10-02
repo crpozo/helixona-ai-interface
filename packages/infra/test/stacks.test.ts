@@ -31,6 +31,7 @@ beforeAll(() => {
     sessionSecret: f.sessionSecret,
     cognitoClientSecret: f.cognitoClientSecret,
     anthropicApiKeySecret: f.anthropicApiKeySecret,
+    anthropicAdminApiKeySecret: f.anthropicAdminApiKeySecret,
     apiRepository: f.apiRepository,
     userPool: a.userPool,
     userPoolClient: a.userPoolClient,
@@ -46,11 +47,11 @@ beforeAll(() => {
 });
 
 describe('FoundationStack', () => {
-  it('crea las 7 tablas cifradas con la CMK, con PITR y protección de borrado', () => {
+  it('crea las 8 tablas cifradas con la CMK, con PITR y protección de borrado', () => {
     const tables = foundation.findResources('AWS::DynamoDB::Table');
-    expect(Object.keys(tables)).toHaveLength(7);
+    expect(Object.keys(tables)).toHaveLength(8);
     const names = Object.values(tables).map((t) => (t as { Properties: { TableName: string } }).Properties.TableName).sort();
-    expect(names).toEqual(['helixona-test-audit', 'helixona-test-conversations', 'helixona-test-messages', 'helixona-test-projects', 'helixona-test-sessions', 'helixona-test-training', 'helixona-test-usage']);
+    expect(names).toEqual(['helixona-test-audit', 'helixona-test-conversations', 'helixona-test-messages', 'helixona-test-projects', 'helixona-test-sessions', 'helixona-test-settings', 'helixona-test-training', 'helixona-test-usage']);
     foundation.allResourcesProperties('AWS::DynamoDB::Table', {
       BillingMode: 'PAY_PER_REQUEST',
       SSESpecification: { SSEEnabled: true, SSEType: 'KMS', KMSMasterKeyId: Match.objectLike({ 'Fn::GetAtt': Match.arrayWith([Match.stringLikeRegexp('PhiDataKey')]) }) },
@@ -162,7 +163,7 @@ describe('AppStack', () => {
             { Name: 'MAX_ATTACHMENTS_PER_MESSAGE', Value: '20' },
             { Name: 'READER_MODEL_ALIAS', Value: 'sonnet' },
           ]),
-          Secrets: Match.arrayWith([Match.objectLike({ Name: 'SESSION_SECRET' }), Match.objectLike({ Name: 'COGNITO_CLIENT_SECRET' }), Match.objectLike({ Name: 'ANTHROPIC_API_KEY' })]),
+          Secrets: Match.arrayWith([Match.objectLike({ Name: 'SESSION_SECRET' }), Match.objectLike({ Name: 'COGNITO_CLIENT_SECRET' }), Match.objectLike({ Name: 'ANTHROPIC_API_KEY' }), Match.objectLike({ Name: 'ANTHROPIC_ADMIN_API_KEY' })]),
         }),
       ],
     });
@@ -260,6 +261,7 @@ describe('ObservabilityStack (CloudTrail)', () => {
       sessionSecret: f.sessionSecret,
       cognitoClientSecret: f.cognitoClientSecret,
       anthropicApiKeySecret: f.anthropicApiKeySecret,
+    anthropicAdminApiKeySecret: f.anthropicAdminApiKeySecret,
       apiRepository: f.apiRepository,
       userPool: a.userPool,
       userPoolClient: a.userPoolClient,
@@ -315,6 +317,7 @@ describe('Custom domain (certificateArn)', () => {
       sessionSecret: f.sessionSecret,
       cognitoClientSecret: f.cognitoClientSecret,
       anthropicApiKeySecret: f.anthropicApiKeySecret,
+    anthropicAdminApiKeySecret: f.anthropicAdminApiKeySecret,
       apiRepository: f.apiRepository,
       userPool: a.userPool,
       userPoolClient: a.userPoolClient,

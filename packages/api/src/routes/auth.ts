@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { modelsForRole, type Role } from "@helixona/core";
 import type { Deps } from "../deps.js";
+import { isBillingViewer } from "../billing/viewer.js";
 import type { IdentityResult, OidcPending } from "../auth/cognito.js";
 import { AttemptLimiter, PasswordAuthError, type PasswordAuthResult } from "../auth/password.js";
 import { SESSION_COOKIE } from "../auth/session.js";
@@ -160,6 +161,8 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
           ...deps.catalog.fallbackModels.map((m) => ({ alias: m.modelId, modelId: m.modelId, label: m.label, description: "Fallback only", costFactor: 0, available: false })),
         ],
       },
+      /** This administrator sees the billing view (usage by month, credits left). */
+      billing: isBillingViewer(config, s),
       limits: {
         maxMessageChars: config.MAX_MESSAGE_CHARS,
         contextLimitTokens: config.CONTEXT_LIMIT_TOKENS,

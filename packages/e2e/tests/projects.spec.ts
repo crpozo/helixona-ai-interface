@@ -15,7 +15,7 @@ test.describe("Projects", () => {
     await page.locator("#proj-title").fill("EOB review");
     await page.locator("#proj-title").press("Enter");
     await expect(page.getByRole("heading", { level: 1, name: "EOB review" })).toBeVisible();
-    await expect(page.locator(".project-list .project-select")).toContainText("EOB review");
+    await expect(page.locator(".project-list:not(.shared-project-list) .project-select")).toContainText("EOB review");
     await expect(page.locator("#proj-name")).toHaveValue("EOB review");
     const settings = page.locator("form:has(#proj-name)");
     await page.locator("#proj-description").fill("Denied claims and appeals");
@@ -58,13 +58,13 @@ test.describe("Projects", () => {
     await page.locator(".project-list").getByRole("button", { name: "Rename project: EOB review" }).click();
     await page.locator(".project-list .rename-form input").fill("EOB appeals");
     await page.locator(".project-list .rename-form").getByRole("button", { name: "Save" }).click();
-    await expect(page.locator(".project-list .project-select")).toContainText("EOB appeals");
+    await expect(page.locator(".project-list:not(.shared-project-list) .project-select")).toContainText("EOB appeals");
     await expect(page.getByRole("heading", { level: 1, name: "EOB appeals" })).toBeVisible();
 
     // Deleting the project keeps the chat, now outside any project.
     page.once("dialog", (d) => void d.accept());
     await page.getByRole("button", { name: "Delete project" }).click();
-    await expect(page.locator(".project-list .project-select")).toHaveCount(0);
+    await expect(page.locator(".project-list:not(.shared-project-list) .project-select")).toHaveCount(0);
     await expect(page.locator(".conv-list .conv-row")).toHaveCount(1);
     errs.expectNone();
   });

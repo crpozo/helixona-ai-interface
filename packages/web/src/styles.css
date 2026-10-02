@@ -950,6 +950,30 @@ label {
   margin: 6px 0 0;
   max-width: 60ch;
 }
+/* The billing view: credits left and the months. */
+.billing-remaining {
+  margin: 0.2rem 0;
+}
+.billing-remaining strong {
+  font-size: 1.7rem;
+  color: var(--primary);
+}
+.billing-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  align-items: flex-end;
+  margin: 0.6rem 0;
+}
+.billing-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+.billing-form input {
+  min-width: 11rem;
+}
 /* The activity list of an answer (what was done, step by step). */
 .steps {
   margin: 0 0 0.6rem;

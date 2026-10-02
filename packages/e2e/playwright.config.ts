@@ -53,6 +53,8 @@ export default defineConfig({
       WEB_DIST: path.join(root, "packages", "web", "dist"),
       SESSION_SECRET: "e2e-session-secret-e2e-session-secret-e2e-session-secret-0000",
       LOG_LEVEL: "warn",
+      // The administrator who sees the billing view (dev sign-in gives <username>@dev.local).
+      BILLING_VIEWER_EMAILS: "billing@dev.local",
     },
   },
 });

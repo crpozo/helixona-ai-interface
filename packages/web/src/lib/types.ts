@@ -18,6 +18,8 @@ export interface Me {
   session: { expiresAt: string; idleTimeoutSeconds: number };
   /** Workforce training: when `required` and not `complete`, the assistant is locked (administrators included). */
   training?: { required: boolean; complete: boolean; canSkip?: boolean; version: string };
+  /** This administrator sees the billing view (usage by month, credits left). */
+  billing?: boolean;
   catalog: {
     defaultAlias: string;
     effort: "low" | "medium" | "high" | "xhigh" | "max";
@@ -169,6 +171,30 @@ export interface AuditEvent {
   usage?: Usage;
   latencyMs?: number;
   meta?: Record<string, string | number | boolean>;
+}
+
+/** The billing view: usage by month and the credits left. */
+export interface MonthUsage {
+  month: string;
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedUsd: number;
+  byModel: Record<string, { turns: number; estimatedUsd: number }>;
+  byUser: Array<{ userId: string; turns: number; inputTokens: number; outputTokens: number; estimatedUsd: number }>;
+}
+export interface BillingCredits {
+  purchasedUsd: number;
+  asOf: string;
+  note: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+export interface BillingReport {
+  months: MonthUsage[];
+  credits: BillingCredits | null;
+  anthropic: { configured: boolean; months: Array<{ month: string; costUsd: number }>; sinceAnchorUsd: number | null; fetchedAt: string | null; error: string | null };
+  remaining: { usd: number; spentUsd: number; basis: "anthropic" | "estimate" } | null;
 }
 
 export interface UsageRow {

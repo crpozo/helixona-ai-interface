@@ -4,6 +4,7 @@ import { ApiError, adminCreateUser, adminDisableUser, adminEnableUser, adminList
 import { modelLabel } from "../lib/models";
 import { TrainingLog } from "./TrainingSections";
 import { FeedbackDelivery } from "./FeedbackDelivery";
+import { BillingSection } from "./BillingSection";
 
 interface Props {
   me: Me;
@@ -372,6 +373,8 @@ export function AdminPage({ me, onBack }: Props) {
           </>
         ) : null}
       </section>
+
+      {me.billing && <BillingSection me={me} userName={userName} />}
     </main>
   );
 }

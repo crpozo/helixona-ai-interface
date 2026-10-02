@@ -22,6 +22,8 @@ import type {
   ProjectVisibility,
   Role,
   UsageRow,
+  BillingCredits,
+  BillingReport,
 } from "./types";
 import { readSseStream } from "./sse";
 
@@ -434,6 +436,16 @@ export function adminResendFeedbackConfirmation(): Promise<{ ok: true }> {
 
 export function adminSendTestBugReport(): Promise<{ ok: true }> {
   return request("/api/admin/feedback/test", { method: "POST", body: {} });
+}
+
+// ---- Billing view ----
+
+export function adminBilling(): Promise<BillingReport> {
+  return request("/api/admin/billing");
+}
+
+export function adminSetCredits(input: { purchasedUsd: number; asOf: string; note: string }): Promise<BillingCredits> {
+  return request("/api/admin/billing/credits", { method: "PUT", body: input });
 }
 
 // ---- Import from Claude ----

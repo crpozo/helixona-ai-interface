@@ -429,3 +429,16 @@ including how many chats were kept as a backup). The data lands in the same tabl
 everything else. Staff should delete the export zips from their computer and downloads folder
 afterwards, as the policies ask for any file with PHI, and should look through the export before a
 team import: every chat in it, personal ones included, becomes visible to the whole team.
+
+## Usage by month and credits
+
+Administrators named in `BILLING_VIEWER_EMAILS` (set in the deployment; today the clinic's owner)
+see, on the Administration page, the usage of each month (turns, tokens and the assistant's own
+cost estimate, by user and by model, from the usage table, which keeps 400 days) and the credits
+left: the amount bought in the Claude Console and the day it counts from, which they record there,
+minus what was spent since. When the organization's Admin API key is stored in AWS Secrets Manager
+(`helixona-prod-anthropic-admin-key`; optional, filled in by hand like the API key, never through
+the repository or CI), the spending comes from Anthropic's cost report (billed amounts per day,
+read at most every 15 minutes); otherwise from the assistant's estimate. The view holds no PHI:
+counts and amounts only. Recording the credits is audited (`admin_billing_credits`: amount and
+date, never the note). The exact balance stays in the Claude Console, under Plans & billing.

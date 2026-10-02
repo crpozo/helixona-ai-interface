@@ -7,6 +7,7 @@ import { MemoryAttachmentStore, S3AttachmentStore } from "./attachments/store.js
 import { CognitoPasswordAuth } from "./auth/password.js";
 import { DevIdentityProvider } from "./auth/dev.js";
 import { MemoryFeedbackSender, SnsFeedbackSender } from "./feedback.js";
+import { AnthropicBilling, isConfiguredKey } from "./billing/anthropic.js";
 import { SessionService } from "./auth/session.js";
 import { dynamoRepos } from "./repos/dynamo.js";
 import { memoryRepos, MemoryUserDirectory } from "./repos/memory.js";
@@ -20,7 +21,7 @@ export async function createDeps(env: NodeJS.ProcessEnv = process.env): Promise<
   if (config.EFFORT) catalog.effort = config.EFFORT;
   const repos = config.STORE_MODE === "memory"
     ? memoryRepos()
-    : dynamoRepos(config.AWS_REGION!, { conversations: config.TABLE_CONVERSATIONS!, messages: config.TABLE_MESSAGES!, sessions: config.TABLE_SESSIONS!, audit: config.TABLE_AUDIT!, usage: config.TABLE_USAGE!, projects: config.TABLE_PROJECTS!, training: config.TABLE_TRAINING! });
+    : dynamoRepos(config.AWS_REGION!, { conversations: config.TABLE_CONVERSATIONS!, messages: config.TABLE_MESSAGES!, sessions: config.TABLE_SESSIONS!, audit: config.TABLE_AUDIT!, usage: config.TABLE_USAGE!, projects: config.TABLE_PROJECTS!, training: config.TABLE_TRAINING!, settings: config.TABLE_SETTINGS! });
   const sessions = new SessionService({ repo: repos.sessions, secret: config.SESSION_SECRET ?? randomBytes(32).toString("base64url"), idleSeconds: config.SESSION_IDLE_SECONDS, absoluteSeconds: config.SESSION_ABSOLUTE_SECONDS });
   const identity = config.AUTH_MODE === "dev"
     ? new DevIdentityProvider()
@@ -40,7 +41,9 @@ export async function createDeps(env: NodeJS.ProcessEnv = process.env): Promise<
   const feedback = config.FEEDBACK_TOPIC_ARN
     ? new SnsFeedbackSender(config.AWS_REGION!, config.FEEDBACK_TOPIC_ARN, config.FEEDBACK_EMAIL)
     : config.STORE_MODE === "memory" ? new MemoryFeedbackSender(config.FEEDBACK_EMAIL || "maintainer@example.test") : null;
-  return { config, log, catalog, repos, sessions, identity, directory, provider, router, systemPrompt, attachments, passwordAuth, feedback };
+  // The billed cost report for the billing view, when the organization's Admin API key is in Secrets Manager.
+  const billing = isConfiguredKey(config.ANTHROPIC_ADMIN_API_KEY) ? new AnthropicBilling({ apiKey: config.ANTHROPIC_ADMIN_API_KEY, log }) : null;
+  return { config, log, catalog, repos, sessions, identity, directory, provider, router, systemPrompt, attachments, passwordAuth, feedback, billing };
 }
 
 async function main() {

@@ -8,6 +8,8 @@ import type { AttachmentStore } from "./attachments/store.js";
 import type { PasswordAuth } from "./auth/password.js";
 import type { FeedbackSender } from "./feedback.js";
 
+import type { BillingSource } from "./billing/anthropic.js";
+
 export interface Deps {
   config: Config;
   log: SafeLogger;
@@ -25,5 +27,7 @@ export interface Deps {
   passwordAuth: PasswordAuth | null;
   /** Delivers bug reports (SNS email in production, memory in dev/tests); null = the form is off. */
   feedback: FeedbackSender | null;
+  /** The organization's billed cost report (Anthropic Admin API); null when no Admin API key is configured. */
+  billing?: BillingSource | null;
   now?: () => Date;
 }

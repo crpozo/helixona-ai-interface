@@ -1,9 +1,9 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
 import type { Conversation, Project, StoredMessage, UsageSummary } from "@helixona/core";
-import type { AuditEvent, AuditRepo, ConversationPatch, ConversationRepo, MessageRepo, ProjectPatch, ProjectRepo, Repos, Session, SessionRepo, TrainingRecord, TrainingRepo, UsageRepo, UsageRow } from "./types.js";
+import type { AuditEvent, AuditRepo, ConversationPatch, ConversationRepo, MessageRepo, ProjectPatch, ProjectRepo, Repos, Session, SessionRepo, TrainingRecord, TrainingRepo, UsageRepo, UsageRow, SettingsRepo } from "./types.js";
 
-export interface DynamoTables { conversations: string; messages: string; sessions: string; audit: string; usage: string; projects: string; training: string }
+export interface DynamoTables { conversations: string; messages: string; sessions: string; audit: string; usage: string; projects: string; training: string; settings: string }
 
 const epoch = (d: Date) => Math.floor(d.getTime() / 1000);
 const pad = (n: number) => String(n).padStart(6, "0");
@@ -171,6 +171,29 @@ export class DynamoUsageRepo implements UsageRepo {
     const r = await this.doc.send(new ScanCommand({ TableName: this.table, FilterExpression: "#d = :d", ExpressionAttributeNames: { "#d": "day" }, ExpressionAttributeValues: { ":d": day } }));
     return (r.Items ?? []) as unknown as UsageRow[];
   }
+  async listFrom(fromDay: string) {
+    // The billing view: every row from that day on (a small table, one row per user and day).
+    const { ScanCommand } = await import("@aws-sdk/lib-dynamodb");
+    const out: UsageRow[] = [];
+    let key: Record<string, unknown> | undefined;
+    do {
+      const r = await this.doc.send(new ScanCommand({ TableName: this.table, FilterExpression: "#d >= :from", ExpressionAttributeNames: { "#d": "day" }, ExpressionAttributeValues: { ":from": fromDay }, ExclusiveStartKey: key }));
+      out.push(...((r.Items ?? []) as unknown as UsageRow[]));
+      key = r.LastEvaluatedKey;
+    } while (key);
+    return out;
+  }
+}
+
+export class DynamoSettingsRepo implements SettingsRepo {
+  constructor(private readonly doc: DynamoDBDocumentClient, private readonly table: string) {}
+  async get<T>(name: string) {
+    const r = await this.doc.send(new GetCommand({ TableName: this.table, Key: { name } }));
+    return r.Item ? (r.Item.value as T) : null;
+  }
+  async put<T>(name: string, value: T) {
+    await this.doc.send(new PutCommand({ TableName: this.table, Item: { name, value, updatedAt: new Date().toISOString() } }));
+  }
 }
 
 export class DynamoTrainingRepo implements TrainingRepo {
@@ -203,5 +226,6 @@ export function dynamoRepos(region: string, tables: DynamoTables): Repos {
     usage: new DynamoUsageRepo(doc, tables.usage),
     projects: new DynamoProjectRepo(doc, tables.projects),
     training: new DynamoTrainingRepo(doc, tables.training),
+    settings: new DynamoSettingsRepo(doc, tables.settings),
   };
 }
