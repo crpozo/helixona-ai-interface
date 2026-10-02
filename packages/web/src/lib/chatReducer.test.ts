@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatReducer, initialChatState, type ChatState } from "./chatReducer";
+import { chatReducer, initialChatState, upsertStep, type ChatState } from "./chatReducer";
 import type { ChatSseEvent, Message } from "./types";
 
 function started(): ChatState {
@@ -21,6 +21,29 @@ describe("chatReducer", () => {
     expect(s.streaming).toBe(true);
     expect(assistant(s).status).toBe("pending");
     expect(assistant(s).model).toBe("anthropic.claude-opus-5");
+  });
+
+  it("keeps the steps of an answer: what was read, sent, reasoned and written, with their times", () => {
+    let s = started();
+    s = sse(s, { type: "step", data: { steps: [{ id: "sheet-1", text: "Read Report.xlsx: 8,500 rows × 17 columns", state: "done" }] } });
+    s = sse(s, { type: "files", data: { phase: "checking", files: [{ id: "f", name: "a.pdf", pages: null, pagesDone: 0, state: "checking" }] } });
+    s = sse(s, { type: "files", data: { phase: "read", files: [{ id: "f", name: "a.pdf", pages: 12, pagesDone: 12, state: "done" }] } });
+    s = sse(s, { type: "status", data: { stage: "waiting", model: "anthropic.claude-opus-5", inputTokens: 380_000 } });
+    expect(assistant(s).steps.map((x) => [x.id, x.state, x.text])).toEqual([
+      ["sheet-1", "done", "Read Report.xlsx: 8,500 rows × 17 columns"],
+      ["files", "done", "Read 1 file (12 pages)"],
+      ["send", "running", "Sending about 380k tokens to {model}"],
+    ]);
+    s = sse(s, { type: "status", data: { stage: "responding", model: "anthropic.claude-opus-5", inputTokens: 380_000 } });
+    expect(assistant(s).steps.slice(2).map((x) => [x.id, x.state])).toEqual([["send", "done"], ["reason", "running"]]);
+    expect(assistant(s).steps[2]!.ms).not.toBeNull();
+    s = sse(s, { type: "text_delta", data: { text: "Here" } });
+    expect(assistant(s).steps.slice(3).map((x) => [x.id, x.state, x.text])).toEqual([["reason", "done", "{model} is reasoning over the data"], ["write", "running", "Writing the answer"]]);
+    s = sse(s, { type: "done", data: { assistantMessageId: "a1", model: "anthropic.claude-opus-5", stopReason: "end_turn", usage: null, fallbackReason: null } });
+    expect(assistant(s).steps.every((x) => x.state === "done" && x.ms !== null)).toBe(true);
+    // A step reported again keeps its place and updates.
+    const once = upsertStep([], { id: "x", text: "Doing", state: "running" }, 1000);
+    expect(upsertStep(once, { id: "x", text: "Done it", state: "done" }, 3500)).toEqual([{ id: "x", text: "Done it", model: null, state: "done", startedAt: 1000, ms: 2500 }]);
   });
 
   it("status says what the server is waiting for while the answer is pending", () => {

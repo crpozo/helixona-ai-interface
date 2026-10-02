@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { CatalogModel } from "../lib/types";
 import { ApiError } from "../lib/api";
 import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, maxMbFor, readsPageByPage } from "../lib/files";
 import { Icon } from "./Icon";
+import { useFileDrop } from "../lib/useFileDrop";
 
 export interface StartAttachmentLimits {
   maxMb: number;
@@ -17,6 +19,8 @@ interface Props {
   /** Starts a conversation with its first message and files; resolves once it exists. */
   onStart: (text: string, alias: string, files: File[]) => Promise<void>;
   placeholder?: string;
+  /** Element that accepts dropped files (the whole screen around the box); defaults to the box itself. */
+  dropZone?: React.RefObject<HTMLElement | null>;
 }
 
 function errMsg(e: unknown): string {
@@ -28,7 +32,7 @@ function errMsg(e: unknown): string {
  * project. The first message (and any files picked here) creates the conversation with the chosen
  * model and sends it.
  */
-export function StartComposer({ models, defaultAlias, attachments = null, onStart, placeholder = "How can I help you today?" }: Props) {
+export function StartComposer({ models, defaultAlias, attachments = null, onStart, placeholder = "How can I help you today?", dropZone }: Props) {
   const available = models.filter((m) => m.available);
   const [text, setText] = useState("");
   const [alias, setAlias] = useState(() => (available.some((m) => m.alias === defaultAlias) ? defaultAlias : (available[0]?.alias ?? defaultAlias)));
@@ -37,6 +41,7 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const trimmed = text.trim();
   const canSend = !busy && (trimmed.length > 0 || files.length > 0);
 
@@ -72,6 +77,20 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
     if (fileRef.current) fileRef.current.value = "";
   };
 
+  // Files dropped anywhere on the zone (like dropping a document onto a Claude.ai chat).
+  const dragging = useFileDrop(dropZone ?? formRef, addFiles, !!attachments && !busy);
+  const overlay =
+    dragging && attachments ? (
+      <div className="drop-overlay" aria-hidden="true">
+        <div className="drop-card">
+          <strong>Drop to attach</strong>
+          <span>
+            {ATTACH_TYPES_TEXT} · up to {attachments.maxMb} MB per file · {attachments.maxPerMessage} files per message
+          </span>
+        </div>
+      </div>
+    ) : null;
+
   const submit = async () => {
     if (!canSend) return;
     setBusy(true);
@@ -89,12 +108,14 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
 
   return (
     <form
+      ref={formRef}
       className="composer composer-start"
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
       }}
     >
+      {overlay && (dropZone?.current ? createPortal(overlay, dropZone.current) : overlay)}
       {files.length > 0 && (
         <ul className="attach-list composer-pending" aria-label="Files to send">
           {files.map((f, i) => (

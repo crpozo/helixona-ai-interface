@@ -37,6 +37,42 @@ export interface ChatMessage {
   files: SseFiles | null;
   /** What the server is waiting for while the answer is pending, and since when (this session only). */
   wait: { stage: "waiting" | "responding"; inputTokens: number | null; since: number } | null;
+  /** What was done for this answer, step by step, with how long each took (this session only). */
+  steps: Step[];
+}
+
+export interface Step {
+  id: string;
+  /** What is being done; "{model}" stands for the model's name, which the interface fills in. */
+  text: string;
+  model: string | null;
+  state: "running" | "done";
+  startedAt: number;
+  /** Milliseconds it took, once done. */
+  ms: number | null;
+}
+
+/** Adds a step or updates the one with the same id; a step that finishes keeps the time it took. */
+export function upsertStep(steps: Step[], step: { id: string; text: string; model?: string | null; state: "running" | "done" }, now = Date.now()): Step[] {
+  const i = steps.findIndex((s) => s.id === step.id);
+  if (i < 0) return [...steps, { id: step.id, text: step.text, model: step.model ?? null, state: step.state, startedAt: now, ms: step.state === "done" ? 0 : null }];
+  const prev = steps[i]!;
+  const next: Step = { ...prev, text: step.text, model: step.model ?? prev.model, state: step.state, ms: step.state === "done" ? (prev.state === "done" ? prev.ms : now - prev.startedAt) : null };
+  return steps.map((s, k) => (k === i ? next : s));
+}
+
+export function finishSteps(steps: Step[], now = Date.now()): Step[] {
+  return steps.map((s) => (s.state === "running" ? { ...s, state: "done" as const, ms: now - s.startedAt } : s));
+}
+
+function filesStep(files: SseFiles): { id: string; text: string; state: "running" | "done" } {
+  const n = files.files.length;
+  const noun = n === 1 ? "file" : "files";
+  const pages = files.files.reduce((k, f) => k + (f.pages ?? 0), 0);
+  const done = files.files.reduce((k, f) => k + f.pagesDone, 0);
+  if (files.phase === "checking") return { id: "files", text: `Checking ${n} ${noun}`, state: "running" };
+  if (files.phase === "reading") return { id: "files", text: `Reading ${n} ${noun} page by page: ${done.toLocaleString("en-US")} of ${pages.toLocaleString("en-US")} pages`, state: "running" };
+  return { id: "files", text: `Read ${n} ${noun}${pages > 0 ? ` (${pages.toLocaleString("en-US")} pages)` : ""}`, state: "done" };
 }
 
 export interface ChatState {
@@ -108,6 +144,7 @@ export function fromServerMessage(m: Message): ChatMessage {
     authorName: m.authorName ?? null,
     files: null,
     wait: null,
+    steps: [],
   };
 }
 
@@ -139,26 +176,44 @@ function applySse(state: ChatState, event: ChatSseEvent): ChatState {
         ...m,
         text: m.text + event.data.text,
         status: m.status === "pending" ? "streaming" : m.status,
+        // The first text: whatever was running (reasoning, sending) is over; the answer is being written.
+        steps: m.status === "pending" && m.steps.length > 0 ? upsertStep(finishSteps(m.steps), { id: "write", text: "Writing the answer", state: "running" }) : m.steps,
       }));
     case "thinking_delta":
       return updateActive(state, (m) => ({ ...m, thinking: m.thinking + event.data.text }));
-    case "status":
-      return updateActive(state, (m) => ({ ...m, wait: { stage: event.data.stage, inputTokens: event.data.inputTokens, since: Date.now() } }));
+    case "status": {
+      const { stage, model, inputTokens } = event.data;
+      const big = (inputTokens ?? 0) >= 100_000;
+      return updateActive(state, (m) => {
+        let steps = m.steps;
+        if (stage === "waiting") steps = upsertStep(steps, { id: "send", text: big ? `Sending about ${Math.round(inputTokens! / 1000).toLocaleString("en-US")}k tokens to {model}` : "Sending the request to {model}", model, state: "running" });
+        else {
+          const sent = steps.find((s) => s.id === "send");
+          if (sent) steps = upsertStep(steps, { id: "send", text: sent.text, state: "done" });
+          steps = upsertStep(steps, { id: "reason", text: big ? "{model} is reasoning over the data" : "{model} is reasoning", model, state: "running" });
+        }
+        return { ...m, wait: { stage, inputTokens, since: Date.now() }, steps };
+      });
+    }
+    case "step":
+      return updateActive(state, (m) => ({ ...m, steps: event.data.steps.reduce((acc, s) => upsertStep(acc, s), m.steps) }));
     case "files":
       // A snapshot: the list replaces the previous one; an empty list clears it.
-      return updateActive(state, (m) => ({ ...m, files: event.data.files.length > 0 ? event.data : null }));
+      return updateActive(state, (m) => ({ ...m, files: event.data.files.length > 0 ? event.data : null, steps: event.data.files.length > 0 ? upsertStep(m.steps, filesStep(event.data)) : m.steps }));
     case "fallback":
       // El texto ya emitido se conserva; el nuevo modelo continúa.
       return updateActive(state, (m) => ({
         ...m,
         model: event.data.to,
         notices: [...m.notices, { kind: "fallback", model: event.data.to }],
+        steps: upsertStep(m.steps, { id: `switch-${event.data.to}`, text: "{model} continues the answer", model: event.data.to, state: "done" }),
       }));
     case "model_switched":
       return updateActive(state, (m) => ({
         ...m,
         model: event.data.to,
         notices: [...m.notices, { kind: "model_switched", model: event.data.to }],
+        steps: upsertStep(finishSteps(m.steps), { id: `switch-${event.data.to}`, text: "No answer in time; continuing with {model}", model: event.data.to, state: "done" }),
       }));
     case "refused":
       // Se descarta lo parcial y se muestra un mensaje neutro.
@@ -168,6 +223,7 @@ function applySse(state: ChatState, event: ChatSseEvent): ChatState {
         thinking: "",
         status: "refused",
         refusalCategory: event.data.category ?? null,
+        steps: finishSteps(m.steps),
       }));
     case "error":
       return updateActive(state, (m) => ({
@@ -176,6 +232,7 @@ function applySse(state: ChatState, event: ChatSseEvent): ChatState {
         status: event.data.partial ? "incomplete" : "error",
         // Si no hubo texto parcial, no hay nada que conservar.
         text: event.data.partial ? m.text : "",
+        steps: finishSteps(m.steps),
       }));
     case "done": {
       const { assistantMessageId, model, stopReason, fallbackReason } = event.data;
@@ -192,6 +249,7 @@ function applySse(state: ChatState, event: ChatSseEvent): ChatState {
           stopReason,
           status: terminal ? m.status : "done",
           notices,
+          steps: finishSteps(m.steps),
           // Si el servidor informa un fallback que no vimos como evento, lo reflejamos.
           ...(fallbackReason && !notices.some((n) => n.kind === "fallback" || n.kind === "model_switched")
             ? { notices: [...notices, ...noticeForFallback(fallbackReason, model)] }
@@ -233,6 +291,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         authorName: action.authorName ?? null,
         files: null,
     wait: null,
+    steps: [],
       };
       const assistant: ChatMessage = {
         id: action.assistantId,
@@ -251,6 +310,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         authorName: null,
         files: null,
     wait: null,
+    steps: [],
       };
       return {
         ...state,

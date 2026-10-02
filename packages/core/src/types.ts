@@ -76,6 +76,8 @@ export interface AttachmentMeta {
   key: string;
   /** Characters of the text the model receives when it is not the file itself: a spreadsheet read into rows (cut to fit). */
   modelChars?: number;
+  /** A spreadsheet: its data rows and columns, and how many rows the model receives. */
+  sheet?: { rows: number; columns: number; shown: number };
 }
 
 export interface StoredMessage {

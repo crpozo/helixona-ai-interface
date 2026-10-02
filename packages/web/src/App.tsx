@@ -87,6 +87,8 @@ export function App() {
   // A document opened from a card: shown beside the chat (or over it, on a phone).
   const [viewerDoc, setViewerDoc] = useState<OpenDocument | null>(null);
   const [viewerWide, setViewerWide] = useState(false);
+  // The start screen accepts dropped files anywhere, not only on the box.
+  const homeRef = useRef<HTMLDivElement>(null);
   const [chat, dispatch] = useReducer(chatReducer, initialChatState);
   const abortRef = useRef<AbortController | null>(null);
   const loadSeq = useRef(0);
@@ -594,12 +596,12 @@ export function App() {
                 </div>
               </DocumentViewerContext.Provider>
             ) : (
-              <div className="panel-center">
+              <div className="panel-center drop-zone" ref={homeRef}>
                 <div className="home-start">
                   <p className="eyebrow">{brand.productName}</p>
                   <h1>Hello, {me.user.name}</h1>
                   <p className="muted home-lead">What are you working on today?</p>
-                  <StartComposer models={me.catalog.models} defaultAlias={me.catalog.defaultAlias} attachments={me.limits.attachments?.enabled ? me.limits.attachments : null} placeholder="Write a message…" onStart={(text, alias, files) => startInProject(null, text, alias, files)} />
+                  <StartComposer models={me.catalog.models} defaultAlias={me.catalog.defaultAlias} attachments={me.limits.attachments?.enabled ? me.limits.attachments : null} placeholder="Write a message…" onStart={(text, alias, files) => startInProject(null, text, alias, files)} dropZone={homeRef} />
                   <p className="muted small home-hint">Patient information stays in this assistant; review every answer before you use it.</p>
                 </div>
               </div>

@@ -70,6 +70,7 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(project.name);
   const [titleError, setTitleError] = useState<string | null>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
   const titleDraftRef = useRef(project.name);
   const titleCommitting = useRef(false);
   // Instructions card, edited in place.
@@ -291,8 +292,8 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
       </header>
 
       <div className="project-grid">
-        <div className="project-main">
-          <StartComposer models={models} defaultAlias={defaultAlias} attachments={attachments} onStart={onStartConversation} />
+        <div className="project-main drop-zone" ref={mainRef}>
+          <StartComposer models={models} defaultAlias={defaultAlias} attachments={attachments} onStart={onStartConversation} dropZone={mainRef} />
 
           <section className="project-recents" aria-labelledby="proj-recents">
             <h2 id="proj-recents" className="section-label">

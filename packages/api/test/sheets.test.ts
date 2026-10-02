@@ -223,6 +223,8 @@ describe("Spreadsheets in a conversation", () => {
     // The size the model sees is kept with the file, and the rows are read once and kept next to it.
     const stored = (await repos.messages.list(conv.id))[0]!.attachments![0]!;
     expect(stored.modelChars).toBe(text.length);
+    expect(stored.sheet).toEqual({ rows: 12_000, columns: 4, shown: Number(/: ([\d,]+) rows;/.exec(text)![1]!.replace(/,/g, "")) - 1 });
+    expect(r.body).toMatch(/event: step\ndata: \{"steps":\[\{"id":"sheet-[0-9A-Z]+","text":"Read Report.csv: 12,000 rows × 4 columns\. The model sees the first [\d,]+ rows plus a summary of every column; the tabs it asks for are computed from all 12,000 rows","state":"done"\}\]\}/);
     expect(await store.head(sheetTextKey(stored))).toMatchObject({ contentType: "text/plain", size: Buffer.byteLength(text) });
     const reads: string[] = [];
     const get = store.get.bind(store);

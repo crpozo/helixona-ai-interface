@@ -2,7 +2,7 @@ import { PDFDocument } from "pdf-lib";
 import type { AttachmentMeta, BetaContentBlockParam } from "@helixona/core";
 import type { AttachmentStore } from "./store.js";
 import { ALLOWED_TYPES, MAX_PDF_PAGES, maxBytesFor, safeName } from "./policy.js";
-import { isSpreadsheet, readTables, SpreadsheetError, tablesForModel, XLSX_TYPE } from "./sheets.js";
+import { fitForModel, isSpreadsheet, readTables, SpreadsheetError, tablesForModel, XLSX_TYPE } from "./sheets.js";
 
 /** A problem with an uploaded file that the client can fix (maps to a 400). */
 export class AttachmentProblem extends Error {
@@ -130,8 +130,12 @@ export async function checkUpload(store: AttachmentStore, key: string, id: strin
     // Read now, once: a file that is not a workbook (an old .xls renamed, a damaged file) is a plain
     // error, and the rows the model will see are kept next to the file, with their size.
     try {
-      const text = await spreadsheetText(store, meta, sheetChars, await store.get(key));
-      return { ...meta, modelChars: text.length };
+      const tables = await readTables(contentType, await store.get(key));
+      const fit = fitForModel(name, tables, sheetChars);
+      await store.put(sheetTextKey(meta), Buffer.from(fit.text, "utf8"), "text/plain").catch(() => undefined);
+      const rows = tables.reduce((n, t) => n + Math.max(0, t.rows.length - 1) + t.truncatedRows, 0);
+      const columns = tables.reduce((n, t) => Math.max(n, t.rows[0]?.length ?? 0), 0);
+      return { ...meta, modelChars: fit.text.length, sheet: { rows, columns, shown: Math.max(0, fit.rows - tables.length) } };
     } catch (e) {
       const why = e instanceof SpreadsheetError ? e.message : "Save it again as .xlsx or CSV and attach that.";
       throw new AttachmentProblem("not_a_spreadsheet", `"${name}": ${why}`);

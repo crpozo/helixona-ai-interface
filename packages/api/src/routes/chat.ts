@@ -175,6 +175,18 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     };
 
     try {
+      // What was done with the new spreadsheets before the stream opened, as activity lines.
+      const sheets = newFiles.filter((f) => f.sheet);
+      if (sheets.length > 0) {
+        sse.send("step", {
+          steps: sheets.map((f) => {
+            const s = f.sheet!;
+            const shape = `${s.rows.toLocaleString("en-US")} rows × ${s.columns} columns`;
+            const partial = s.shown < s.rows ? `. The model sees the first ${s.shown.toLocaleString("en-US")} rows plus a summary of every column; the tabs it asks for are computed from all ${s.rows.toLocaleString("en-US")} rows` : "";
+            return { id: `sheet-${f.id}`, text: `Read ${f.name}: ${shape}${partial}`, state: "done" as const };
+          }),
+        });
+      }
       // ---- Files: count the pages of the new PDFs, decide what goes whole and what is read, read ----
       const progress = new Map<string, FileProgress>();
       const sendFiles = (state: "checking" | "reading" | "read") => sse.send("files", { phase: state, files: [...progress.values()] });

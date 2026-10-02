@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from "react";
-import type { ChatMessage, Notice } from "../lib/chatReducer";
+import type { ChatMessage, Notice, Step } from "../lib/chatReducer";
 import type { CatalogModel } from "../lib/types";
 import { modelLabel } from "../lib/models";
 import { Markdown } from "./Markdown";
@@ -28,6 +28,47 @@ function noticeText(n: Notice, models: CatalogModel[]): string {
     case "stopped":
       return "Stopped by you";
   }
+}
+
+/** "0.4 s", "12 s", "1:05": how long a step took or has been running. */
+function duration(ms: number): string {
+  if (ms < 10_000) return `${(ms / 1000).toFixed(1)} s`;
+  if (ms < 60_000) return `${Math.round(ms / 1000)} s`;
+  return clock(Math.round(ms / 1000));
+}
+
+function stepText(s: Step, models: CatalogModel[]): string {
+  return s.text.replace("{model}", s.model ? modelLabel(models, s.model) : "the model");
+}
+
+/**
+ * What was done for this answer, step by step, like the activity list in Claude: open while the
+ * answer is pending, with the running step and its clock in the summary line; collapsed to one
+ * line with the total once the text arrives.
+ */
+function Steps({ steps, models, live }: { steps: Step[]; models: CatalogModel[]; live: boolean }) {
+  const running = [...steps].reverse().find((s) => s.state === "running") ?? null;
+  const elapsedS = useElapsed(running?.startedAt ?? null);
+  const [open, setOpen] = useState(live);
+  useEffect(() => setOpen(live), [live]);
+  const total = steps.reduce((n, s) => n + (s.ms ?? 0), 0) + (running ? elapsedS * 1000 : 0);
+  // Between two steps (the files are read, the request is about to go out) the answer is still pending.
+  const summary = running ? `${stepText(running, models)}… ${clock(elapsedS)}` : live ? "Thinking…" : `${steps.length === 1 ? "1 step" : `${steps.length} steps`} · ${duration(total)}`;
+  return (
+    <details className="steps" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary>
+        <span className={running || live ? "dot" : "step-dot"} aria-hidden="true" /> {summary}
+      </summary>
+      <ol className="step-list">
+        {steps.map((s) => (
+          <li key={s.id} className={`step ${s.state}`}>
+            <span className="step-text">{stepText(s, models)}</span>
+            <span className="step-time">{s.state === "done" ? duration(s.ms ?? 0) : clock(elapsedS)}</span>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
 }
 
 /** Seconds since `since`, ticking once a second while shown. */
@@ -153,6 +194,8 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
         </header>
       )}
 
+      {!isUser && m.steps.length > 0 && <Steps steps={m.steps} models={models} live={m.status === "pending"} />}
+
       {!isUser && m.files && <FilesProgress files={m.files} active={m.status === "pending" || m.status === "streaming"} />}
 
       {!isUser && m.thinking && (
@@ -193,7 +236,7 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
             {m.refusalCategory ? ` (${m.refusalCategory})` : ""}.
           </p>
         ) : thinkingWhileWaiting ? (
-          <WaitIndicator wait={m.wait} model={m.model} models={models} />
+          m.steps.length > 0 ? null : <WaitIndicator wait={m.wait} model={m.model} models={models} />
         ) : m.text ? (
           <Markdown text={m.text} documentReady={finished} fallbackTitle={exportTitle} />
         ) : null}

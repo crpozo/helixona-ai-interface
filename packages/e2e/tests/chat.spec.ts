@@ -13,11 +13,29 @@ test.describe("Conversations", () => {
     const errs = watchErrors(page);
     await page.goto("/", { waitUntil: "load" });
     await expect(page.locator(".home-start h1")).toContainText("Hello");
+    // A file dragged from the desktop onto the start screen is attached to the first message.
+    const dropped = await page.evaluateHandle(() => {
+      const dt = new DataTransfer();
+      dt.items.add(new File(["Patient,Amount\nAna,$10.00\n"], "Checks.csv", { type: "text/csv" }));
+      return dt;
+    });
+    await page.dispatchEvent(".panel-center", "dragenter", { dataTransfer: dropped });
+    await expect(page.locator(".drop-overlay")).toContainText("Drop to attach");
+    await page.dispatchEvent(".panel-center", "drop", { dataTransfer: dropped });
+    await expect(page.locator(".composer-start .attach-chip")).toContainText("Checks.csv");
+    await page.getByRole("button", { name: "Remove Checks.csv" }).click();
+    await expect(page.locator(".composer-start .attach-chip")).toHaveCount(0);
     await page.getByPlaceholder("Write a message…").fill("Summarize the HIPAA safeguards");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.locator(".msg-user")).toHaveCount(1);
     await expect(page.locator(".msg-assistant")).toHaveCount(1);
     await expect(page.locator(".msg-assistant").first()).toContainText("Simulated reply");
+    // What was done for the answer, step by step, collapsed to one line once the text arrived.
+    const steps = page.locator(".msg-assistant").first().locator(".steps");
+    await expect(steps.locator("summary")).toContainText("steps ·");
+    await steps.locator("summary").click();
+    await expect(steps.locator(".step-text").first()).toContainText(/Sending the request to /);
+    await expect(steps.locator(".step-text").last()).toContainText("Writing the answer");
     await expect(page.locator(".msg-assistant").first()).toContainText("Received: \"Summarize the HIPAA safeguards\"");
     await expect(page.locator(".composer-stop")).toHaveCount(0);
     // Markdown: a list and a link marked as external.

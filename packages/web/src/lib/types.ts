@@ -131,6 +131,8 @@ export interface AttachmentMeta {
   contentType: string;
   size: number;
   pages: number | null;
+  /** A spreadsheet: its data rows and columns, and how many rows the model receives. */
+  sheet?: { rows: number; columns: number; shown: number };
 }
 
 export interface AttachmentLimits {
@@ -329,9 +331,15 @@ export interface SseStatus {
   inputTokens: number | null;
 }
 
+/** Activity lines from the server: what it did or is doing for this answer (shown instead of "Thinking…"). */
+export interface SseStep {
+  steps: Array<{ id: string; text: string; state: "running" | "done" }>;
+}
+
 export type ChatSseEvent =
   | { type: "message_start"; data: SseMessageStart }
   | { type: "status"; data: SseStatus }
+  | { type: "step"; data: SseStep }
   | { type: "text_delta"; data: SseTextDelta }
   | { type: "thinking_delta"; data: SseTextDelta }
   | { type: "fallback"; data: SseFallback }
