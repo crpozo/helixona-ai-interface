@@ -3,6 +3,7 @@ import type { AttachmentLimits, AttachmentMeta } from "../lib/types";
 import { ApiError, createAttachment, uploadFile } from "../lib/api";
 import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, maxMbFor, readsPageByPage } from "../lib/files";
 import { useFileDrop } from "../lib/useFileDrop";
+import { expandZips } from "../lib/zipFiles";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -65,11 +66,14 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
   const update = (localId: string, patch: Partial<Pending>) =>
     setPending((prev) => prev.map((p) => (p.localId === localId ? { ...p, ...patch } : p)));
 
-  const addFiles = (files: FileList | null) => {
-    if (!files || !attachments) return;
+  const addFiles = async (picked: FileList | null) => {
+    if (!picked || !attachments) return;
+    // A ZIP is opened here and its files attached one by one.
+    const { files, notes } = await expandZips(Array.from(picked));
     const room = Math.max(0, attachments.maxPerMessage - pending.length);
-    setLimitNote(files.length > room ? `Up to ${attachments.maxPerMessage} files per message: ${files.length - room} ${files.length - room === 1 ? "file was" : "files were"} not added.` : null);
-    for (const file of Array.from(files).slice(0, room)) {
+    if (files.length > room) notes.push(`Up to ${attachments.maxPerMessage} files per message: ${files.length - room} ${files.length - room === 1 ? "file was" : "files were"} not added.`);
+    setLimitNote(notes.length > 0 ? notes.join(" ") : null);
+    for (const file of files.slice(0, room)) {
       const localId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const abort = new AbortController();
       const contentType = attachmentType(file);
@@ -100,7 +104,7 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
   };
 
   // Drag a document onto the chat, or paste one, to attach it (same as Claude.ai).
-  const dragging = useFileDrop(dropZone ?? formRef, addFiles, !!attachments && !disabled);
+  const dragging = useFileDrop(dropZone ?? formRef, (files) => void addFiles(files), !!attachments && !disabled);
 
   const remove = (localId: string) => {
     setLimitNote(null);
@@ -184,7 +188,7 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
         onPaste={(e) => {
           if (attachments && e.clipboardData.files.length > 0) {
             e.preventDefault();
-            addFiles(e.clipboardData.files);
+            void addFiles(e.clipboardData.files);
           }
         }}
         onKeyDown={(e) => {
@@ -198,7 +202,7 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
         <div className="composer-left">
           {attachments && (
             <>
-              <input ref={fileRef} type="file" accept={ATTACH_ACCEPT} multiple hidden onChange={(e) => addFiles(e.target.files)} />
+              <input ref={fileRef} type="file" accept={ATTACH_ACCEPT} multiple hidden onChange={(e) => void addFiles(e.target.files)} />
               <button
                 type="button"
                 className="icon-btn composer-attach"

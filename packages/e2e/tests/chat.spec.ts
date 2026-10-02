@@ -25,6 +25,19 @@ test.describe("Conversations", () => {
     await expect(page.locator(".composer-start .attach-chip")).toContainText("Checks.csv");
     await page.getByRole("button", { name: "Remove Checks.csv" }).click();
     await expect(page.locator(".composer-start .attach-chip")).toHaveCount(0);
+    // A ZIP is opened in the browser: its supported files are attached, the rest is named.
+    const archive = new JSZip();
+    archive.file("EOBs/EOB 1.pdf", "%PDF-1.4");
+    archive.file("Checks.csv", "Patient,Amount\nAna,$10.00\n");
+    archive.file("notes.docx", "no");
+    await page.locator(".composer-start input[type=file]").setInputFiles({ name: "EOBs.zip", mimeType: "application/zip", buffer: Buffer.from(await archive.generateAsync({ type: "uint8array" })) });
+    await expect(page.locator(".composer-start .attach-chip")).toHaveCount(2);
+    await expect(page.locator(".composer-start .attach-chip").first()).toContainText("Checks.csv");
+    await expect(page.locator(".composer-start .attach-chip").nth(1)).toContainText("EOB 1.pdf");
+    await expect(page.locator(".composer-start [role=alert]")).toContainText("EOBs.zip: 2 files attached; 1 file of other types");
+    await page.getByRole("button", { name: "Remove Checks.csv" }).click();
+    await page.getByRole("button", { name: "Remove EOB 1.pdf" }).click();
+    await expect(page.locator(".composer-start .attach-chip")).toHaveCount(0);
     await page.getByPlaceholder("Write a message…").fill("Summarize the HIPAA safeguards");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.locator(".msg-user")).toHaveCount(1);

@@ -305,7 +305,10 @@ Chart prep often means ten or more files per patient, some of them hundreds of p
 carry up to 20 files, each up to 100 MB and 1,000 pages (PDF, Excel, CSV, TXT or MD; Excel files up to
 10 MB, text files up to 5 MB).
 Project knowledge files keep their own limits (20 MB and 600 pages per file, 18 MB per project),
-because they are sent whole with every message in the project.
+because they are sent whole with every message in the project. A ZIP picked or dropped into the
+chat is opened in the browser, and the PDF, Excel, CSV and text files inside it are attached one by
+one under the same limits; the ZIP itself is never uploaded, and other file types, nested ZIPs and
+anything beyond 200 files or 600 MB are left out and named to the person.
 
 - **Sent whole** when they fit one request: up to 15 MB and 100 pages per file, 19 MB and 150 pages
   per message together with the project's files. The model sees the pages as they are.

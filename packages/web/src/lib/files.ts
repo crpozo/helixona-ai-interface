@@ -10,9 +10,9 @@ const EXT_TYPES: Record<string, string> = {
   md: "text/markdown",
 };
 
-/** What the file pickers offer. */
-export const ATTACH_ACCEPT = `.pdf,.xlsx,.csv,.txt,.md,application/pdf,${XLSX_TYPE},text/csv,text/plain,text/markdown`;
-export const ATTACH_TYPES_TEXT = "PDF, Excel, CSV, TXT or MD";
+/** What the file pickers offer: the types the server reads, and a ZIP of them (opened in the browser). */
+export const ATTACH_ACCEPT = `.pdf,.xlsx,.csv,.txt,.md,.zip,application/pdf,${XLSX_TYPE},text/csv,text/plain,text/markdown,application/zip,application/x-zip-compressed`;
+export const ATTACH_TYPES_TEXT = "PDF, Excel, CSV, TXT or MD, or a ZIP of them";
 
 /** Size cap for a type, as on the server: PDFs up to the configured limit, Excel 10 MB, text files 5 MB. */
 export function maxMbFor(contentType: string, maxMb: number): number {

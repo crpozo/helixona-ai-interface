@@ -5,6 +5,7 @@ import { ApiError } from "../lib/api";
 import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, maxMbFor, readsPageByPage } from "../lib/files";
 import { Icon } from "./Icon";
 import { useFileDrop } from "../lib/useFileDrop";
+import { expandZips } from "../lib/zipFiles";
 
 export interface StartAttachmentLimits {
   maxMb: number;
@@ -52,11 +53,12 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
     el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
   }, [text]);
 
-  const addFiles = (list: FileList | null) => {
+  const addFiles = async (list: FileList | null) => {
     if (!list || !attachments) return;
+    // A ZIP is opened here and its files attached one by one.
+    const { files: picked, notes } = await expandZips(Array.from(list));
     const room = Math.max(0, attachments.maxPerMessage - files.length);
-    const picked = Array.from(list);
-    const problems: string[] = [];
+    const problems: string[] = [...notes];
     const accepted: File[] = [];
     for (const file of picked.slice(0, room)) {
       const type = attachmentType(file);
@@ -78,7 +80,7 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
   };
 
   // Files dropped anywhere on the zone (like dropping a document onto a Claude.ai chat).
-  const dragging = useFileDrop(dropZone ?? formRef, addFiles, !!attachments && !busy);
+  const dragging = useFileDrop(dropZone ?? formRef, (list) => void addFiles(list), !!attachments && !busy);
   const overlay =
     dragging && attachments ? (
       <div className="drop-overlay" aria-hidden="true">
@@ -144,7 +146,7 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
         onPaste={(e) => {
           if (attachments && e.clipboardData.files.length > 0) {
             e.preventDefault();
-            addFiles(e.clipboardData.files);
+            void addFiles(e.clipboardData.files);
           }
         }}
         onKeyDown={(e) => {
@@ -167,7 +169,7 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
         <div className="composer-left">
           {attachments && (
             <>
-              <input ref={fileRef} type="file" accept={ATTACH_ACCEPT} multiple hidden onChange={(e) => addFiles(e.target.files)} />
+              <input ref={fileRef} type="file" accept={ATTACH_ACCEPT} multiple hidden onChange={(e) => void addFiles(e.target.files)} />
               <button
                 type="button"
                 className="icon-btn composer-attach"
