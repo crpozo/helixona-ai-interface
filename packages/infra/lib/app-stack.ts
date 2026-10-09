@@ -221,7 +221,8 @@ export class AppStack extends cdk.Stack {
         READER_FILE_CONCURRENCY: '2',
         // Leaves room outside the JavaScript heap for file buffers.
         NODE_OPTIONS: '--max-old-space-size=2560',
-        DAILY_QUOTA_USD: '10',
+        // Per person and day, estimated at catalog prices; a question over a large file on Opus costs about $1 to $2.
+        DAILY_QUOTA_USD: '75',
         RETENTION_DAYS: String(cfg.retentionDays),
         LLM_TIMEOUT_MS: '600000',
         LOG_LEVEL: 'info',
