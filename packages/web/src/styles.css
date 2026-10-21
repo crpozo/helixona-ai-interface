@@ -669,8 +669,8 @@ label {
   background: transparent;
   border-radius: var(--radius);
   font: inherit;
-  font-size: 0.92rem;
-  color: inherit;
+  font-size: 0.95rem;
+  color: var(--text);
   text-align: left;
   cursor: pointer;
 }
@@ -684,6 +684,43 @@ label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  line-height: 1.3;
+}
+/* Where a found chat lives, under its title. */
+.conv-sub {
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+/* The search box above the chats. */
+.side-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.1rem 0 0;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.side-search:focus-within {
+  border-color: var(--brand-primary);
+}
+.side-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  outline: none;
+}
+.side-search input::-webkit-search-cancel-button {
+  cursor: pointer;
 }
 .conv-actions {
   display: flex;

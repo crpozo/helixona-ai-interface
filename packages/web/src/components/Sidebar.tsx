@@ -4,6 +4,7 @@ import { BugReport } from "./BugReport";
 import { useState } from "react";
 import type { Conversation, Me, Project } from "../lib/types";
 import { modelLabel } from "../lib/models";
+import { matchesQuery } from "../lib/search";
 
 interface Props {
   me: Me;
@@ -51,6 +52,11 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [projectDraft, setProjectDraft] = useState("");
+  const [query, setQuery] = useState("");
+  const searching = query.trim().length > 0;
+  // Search: every chat (in a project or not) and every project whose title has all the words, as one flat list.
+  const found = searching ? conversations.filter((c) => matchesQuery(c.title, query)) : [];
+  const foundProjects = searching ? projects.filter((p) => matchesQuery(p.name, query)) : [];
   const isAdmin = me.user.roles.includes("admin");
   const mine = projects.filter((p) => p.visibility === "private");
   const shared = projects.filter((p) => p.visibility !== "private");
@@ -265,7 +271,53 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
         <BugReport />
       </nav>
 
-      <div className="sidebar-scroll">
+      <div className="side-search">
+        <Icon name="search" size={15} className="conv-icon" />
+        <label htmlFor="side-search" className="visually-hidden">
+          Search chats
+        </label>
+        <input id="side-search" type="search" placeholder="Search chats" value={query} onChange={(e) => setQuery(e.target.value)} autoComplete="off" />
+      </div>
+
+      {searching && (
+        <nav className="conv-list search-results sidebar-scroll" aria-label="Search results">
+          <div className="section-head">
+            <span className="section-title">
+              {found.length + foundProjects.length === 0 ? "No matches" : `${found.length + foundProjects.length} ${found.length + foundProjects.length === 1 ? "match" : "matches"}`}
+            </span>
+          </div>
+          <ul>
+            {foundProjects.map((p) => (
+              <li key={`p-${p.id}`} className={p.id === projectViewId ? "active" : ""}>
+                <div className="conv-row">
+                  <button type="button" className="conv-select" onClick={() => onOpenProject(p.id)} title={p.name}>
+                    <Icon name="folder" size={15} className="conv-icon" />
+                    <span className="conv-title">{p.name}</span>
+                  </button>
+                </div>
+              </li>
+            ))}
+            {found.map((c) => {
+              const inProject = projects.find((p) => p.id === c.projectId);
+              return (
+                <li key={c.id} className={c.id === selectedId ? "active" : ""}>
+                  <div className="conv-row">
+                    <button type="button" className="conv-select" aria-current={c.id === selectedId ? "true" : undefined} onClick={() => onSelect(c.id)} title={inProject ? `${c.title} · ${inProject.name}` : c.title}>
+                      <Icon name="chat" size={15} className="conv-icon" />
+                      <span className="conv-title">
+                        {c.title}
+                        {inProject && <span className="conv-sub">{inProject.name}</span>}
+                      </span>
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )}
+
+      <div className="sidebar-scroll" hidden={searching}>
         <nav className="project-list" aria-label="Projects">
           <div className="section-head">
             <span className="section-title">Projects</span>
