@@ -106,12 +106,14 @@ test.describe("Conversations", () => {
     await expect(page.locator(".conv-list .conv-title").first()).toHaveText("Renamed chat");
     await expect(page.locator(".chat-title")).toHaveText("Renamed chat");
     // Search finds it by any of its words, and says when nothing matches.
+    await page.getByRole("button", { name: "Search chats" }).click();
     await page.getByRole("searchbox", { name: "Search chats" }).fill("renamed");
     await expect(page.locator(".search-results .conv-title")).toHaveText("Renamed chat");
     await page.getByRole("searchbox", { name: "Search chats" }).fill("nothing like this");
     await expect(page.locator(".search-results .section-title")).toHaveText("No matches");
-    await page.getByRole("searchbox", { name: "Search chats" }).fill("");
+    await page.getByRole("searchbox", { name: "Search chats" }).press("Escape");
     await expect(page.locator(".search-results")).toHaveCount(0);
+    await expect(page.getByRole("searchbox", { name: "Search chats" })).toHaveCount(0);
 
     // Everything survives a reload, and the URL brings the same conversation back.
     await expect(page).toHaveURL(/\/c\/[0-9A-Z]{26}$/);

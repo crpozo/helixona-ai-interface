@@ -49,11 +49,14 @@ export function projectTag(p: Project): string {
 export function Sidebar({ me, conversations, projects, selectedId, projectViewId, open, onClose, onSelect, onNew, onNewInProject, onDelete, onRename, onRenameProject, onOpenProject, onNewProject, onLogout, onAdmin, onDocs, onTraining, onImport }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [projectDraft, setProjectDraft] = useState("");
   const [query, setQuery] = useState("");
-  const searching = query.trim().length > 0;
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searching = searchOpen && query.trim().length > 0;
+  const closeSearch = () => { setSearchOpen(false); setQuery(""); };
+  /** Chats shown under a project before "View all" (the project page lists them all). */
+  const SHOWN_PER_PROJECT = 4;
   // Search: every chat (in a project or not) and every project whose title has all the words, as one flat list.
   const found = searching ? conversations.filter((c) => matchesQuery(c.title, query)) : [];
   const foundProjects = searching ? projects.filter((p) => matchesQuery(p.name, query)) : [];
@@ -143,7 +146,7 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
             onClick={() => onSelect(c.id)}
             title={`${c.title} · ${modelLabel(me.catalog.models, c.modelId)}${inSharedProject && c.createdByName ? ` · started by ${c.createdByName}` : ""}`}
           >
-            <Icon name="chat" size={15} className="conv-icon" />
+            <span className="conv-dot" aria-hidden="true" />
             <span className="conv-title">{c.title}</span>
           </button>
           <div className="conv-actions">
@@ -169,7 +172,6 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
 
   const projectGroup = (p: Project) => {
     const chats = conversations.filter((c) => c.projectId === p.id);
-    const isCollapsed = collapsed[p.id] ?? false;
     const inShared = p.visibility === "shared";
     const kind = p.visibility === "clinic" ? "Shared with the clinic" : p.visibility === "shared" ? `Shared with ${p.members.length + 1} people` : "Private";
     return (
@@ -209,16 +211,6 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
         <div className="project-row">
           <button
             type="button"
-            className="icon-btn chevron"
-            onClick={() => setCollapsed((prev) => ({ ...prev, [p.id]: !isCollapsed }))}
-            aria-expanded={!isCollapsed}
-            aria-label={isCollapsed ? `Show chats in ${p.name}` : `Hide chats in ${p.name}`}
-            title={isCollapsed ? "Show chats" : "Hide chats"}
-          >
-            <Icon name="chevron" size={14} className={isCollapsed ? "" : "rotated"} />
-          </button>
-          <button
-            type="button"
             className="conv-select project-select"
             aria-current={p.id === projectViewId ? "true" : undefined}
             onClick={() => onOpenProject(p.id)}
@@ -226,7 +218,6 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
           >
             <Icon name="folder" size={15} className="conv-icon" />
             <span className="conv-title">{p.name}</span>
-            {p.visibility !== "private" && <span className="side-tag">{projectTag(p)}</span>}
           </button>
           {p.canEdit && (
             <button type="button" className="icon-btn row-action" onClick={() => startProjectRename(p)} aria-label={`Rename project: ${p.name}`} title="Rename">
@@ -238,12 +229,17 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
           </button>
         </div>
         )}
-        {!isCollapsed && (
-          <ul className="project-chats" aria-label={`Chats in ${p.name}`}>
-            {chats.length === 0 && <li className="muted small project-empty">No chats yet</li>}
-            {chats.map((c) => conversationItem(c, inShared))}
-          </ul>
-        )}
+        <ul className="project-chats" aria-label={`Chats in ${p.name}`}>
+          {chats.length === 0 && <li className="muted small project-empty">No chats yet</li>}
+          {chats.slice(0, SHOWN_PER_PROJECT).map((c) => conversationItem(c, inShared))}
+          {chats.length > SHOWN_PER_PROJECT && (
+            <li>
+              <button type="button" className="conv-select view-all" onClick={() => onOpenProject(p.id)}>
+                View all ({chats.length})
+              </button>
+            </li>
+          )}
+        </ul>
       </li>
     );
   };
@@ -252,17 +248,40 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
     <aside id="sidebar" className={`sidebar${open ? " open" : ""}`} aria-label="Conversations">
       <div className="sidebar-head">
         <Logo />
-        <button type="button" className="icon-btn only-mobile" onClick={onClose} aria-label="Close panel">
-          <Icon name="close" />
-        </button>
+        <span className="sidebar-head-actions">
+          <button type="button" className={`icon-btn${searchOpen ? " active" : ""}`} onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))} aria-label="Search chats" aria-expanded={searchOpen} title="Search chats">
+            <Icon name="search" size={17} />
+          </button>
+          <button type="button" className="icon-btn only-mobile" onClick={onClose} aria-label="Close panel">
+            <Icon name="close" />
+          </button>
+        </span>
       </div>
+      {searchOpen && (
+        <div className="side-search">
+          <Icon name="search" size={15} className="conv-icon" />
+          <label htmlFor="side-search" className="visually-hidden">
+            Search chats
+          </label>
+          <input
+            id="side-search"
+            type="search"
+            placeholder="Search chats and projects"
+            value={query}
+            autoFocus
+            autoComplete="off"
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") closeSearch();
+            }}
+          />
+        </div>
+      )}
 
       <nav className="side-nav" aria-label="Main">
         <button type="button" className="side-link side-link-new" onClick={onNew}>
-          <span className="side-link-plus">
-            <Icon name="plus" size={15} />
-          </span>
-          <span>New conversation</span>
+          <Icon name="plus" size={16} />
+          <span>New chat</span>
         </button>
         {link("/training", "Training", "cap", onTraining)}
         {link("/documentation", "Documentation", "book", onDocs)}
@@ -270,14 +289,6 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
         {link("/import", "Import from Claude", "download", onImport)}
         <BugReport />
       </nav>
-
-      <div className="side-search">
-        <Icon name="search" size={15} className="conv-icon" />
-        <label htmlFor="side-search" className="visually-hidden">
-          Search chats
-        </label>
-        <input id="side-search" type="search" placeholder="Search chats" value={query} onChange={(e) => setQuery(e.target.value)} autoComplete="off" />
-      </div>
 
       {searching && (
         <nav className="conv-list search-results sidebar-scroll" aria-label="Search results">
@@ -303,7 +314,7 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
                 <li key={c.id} className={c.id === selectedId ? "active" : ""}>
                   <div className="conv-row">
                     <button type="button" className="conv-select" aria-current={c.id === selectedId ? "true" : undefined} onClick={() => onSelect(c.id)} title={inProject ? `${c.title} · ${inProject.name}` : c.title}>
-                      <Icon name="chat" size={15} className="conv-icon" />
+                      <span className="conv-dot" aria-hidden="true" />
                       <span className="conv-title">
                         {c.title}
                         {inProject && <span className="conv-sub">{inProject.name}</span>}

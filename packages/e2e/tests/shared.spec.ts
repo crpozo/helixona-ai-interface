@@ -39,7 +39,6 @@ test.describe("Shared projects", () => {
     await expect(members.getByRole("button", { name: `Add ${member}` })).toHaveCount(0);
     await members.getByRole("button", { name: "Done" }).click();
     await expect(page.locator(".project-head .badge")).toHaveText("Shared · 2 people");
-    await expect(page.locator(".shared-project-list .side-tag")).toHaveText("2 people");
 
     // The owner starts a chat in it.
     await page.getByPlaceholder("How can I help you today?").fill("Owner's first question");
