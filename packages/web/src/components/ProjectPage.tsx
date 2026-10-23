@@ -416,7 +416,7 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
             )}
             {project.knowledge.length === 0 && uploads.length === 0 && (
               <p className="muted small">
-                Files the assistant reads in every conversation of this project.{canUpload ? ` Drag them here or use Add files. PDF up to ${maxMb} MB and 600 pages per file.` : ""}
+                Files the assistant reads in every conversation of this project.{canUpload ? ` Drag them here or use Add files. PDF up to ${maxMb} MB and 1,000 pages per file; a long one is read page by page the first time a chat needs it, then shared by every chat.` : ""}
               </p>
             )}
             <ul className="attach-list knowledge-list">

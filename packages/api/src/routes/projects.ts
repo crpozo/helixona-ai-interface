@@ -1,10 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { estimateAttachmentTokens, ulid, type Project, type ProjectMember, type ProjectVisibility } from "@helixona/core";
+import { ulid, type Project, type ProjectMember, type ProjectVisibility } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import type { Session } from "../repos/types.js";
 import { apiError, audit, requireAuth } from "../app.js";
-import { ALLOWED_TYPES, MAX_KNOWLEDGE_FILE_MB, MAX_KNOWLEDGE_PDF_PAGES, MAX_PROJECT_FILES, MAX_PROJECT_KNOWLEDGE_BYTES, MAX_PROJECT_KNOWLEDGE_TOKENS, maxBytesFor, projectKnowledgeKey, safeName, sheetCharBudget } from "../attachments/policy.js";
+import { ALLOWED_TYPES, MAX_KNOWLEDGE_FILE_MB, MAX_KNOWLEDGE_PDF_PAGES, MAX_PROJECT_FILES, MAX_PROJECT_KNOWLEDGE_TOKENS, maxBytesFor, projectKnowledgeKey, safeName, sheetCharBudget } from "../attachments/policy.js";
+import { knowledgeTokens } from "../attachments/planner.js";
 import { AttachmentProblem, inspectUpload } from "../attachments/documents.js";
 
 /**
@@ -89,10 +90,10 @@ async function rehomeConversations(deps: Deps, p: Project, to: ProjectVisibility
 
 export function registerProjectRoutes(app: FastifyInstance, deps: Deps): void {
   const now = deps.now ?? (() => new Date());
-  // Project files go whole into every request of every conversation in the project, so they keep the
-  // request-sized caps even when chat attachments may be larger (those are read page by page).
+  // Project files travel with every message of every conversation in the project. A PDF that does not
+  // fit a request whole is read page by page once (the first time a chat needs it) and its transcription
+  // is shared by all of them; what bounds a project is the token budget of its files together.
   const knowledgeMaxMb = Math.min(deps.config.MAX_ATTACHMENT_MB, MAX_KNOWLEDGE_FILE_MB);
-  const knowledgeBytesMessage = `A project's files can add up to ${Math.round(MAX_PROJECT_KNOWLEDGE_BYTES / 1048576)} MB (they go with every message). Remove a file or attach large documents to a conversation instead.`;
 
   const load = async (req: FastifyRequest, reply: FastifyReply, level: "read" | "edit" | "manage"): Promise<Project | null> => {
     const { id } = req.params as { id: string };
@@ -212,7 +213,6 @@ export function registerProjectRoutes(app: FastifyInstance, deps: Deps): void {
     if (!ALLOWED_TYPES[contentType] || ALLOWED_TYPES[contentType]!.kind === "zip") return apiError(reply, 400, "unsupported_type", "Only PDF, Excel, CSV, plain text and Markdown files can be project files (a ZIP goes in a chat)");
     const maxBytes = maxBytesFor(contentType, knowledgeMaxMb);
     if (size > maxBytes) return apiError(reply, 400, "file_too_large", `Project files of this type are limited to ${Math.round(maxBytes / 1048576)} MB`);
-    if (p.knowledge.reduce((n, k) => n + k.size, 0) + size > MAX_PROJECT_KNOWLEDGE_BYTES) return apiError(reply, 400, "knowledge_too_large", knowledgeBytesMessage);
     const attachmentId = ulid();
     const name = safeName(body.data.name);
     const upload = await deps.attachments.presignUpload(projectKnowledgeKey(p.id, attachmentId, name), contentType, 900);
@@ -235,14 +235,9 @@ export function registerProjectRoutes(app: FastifyInstance, deps: Deps): void {
       throw e;
     }
     const knowledge = [...p.knowledge, verified.meta];
-    const tokens = knowledge.reduce((n, k) => n + estimateAttachmentTokens(k), 0);
-    if (knowledge.reduce((n, k) => n + k.size, 0) > MAX_PROJECT_KNOWLEDGE_BYTES) {
+    if (knowledgeTokens(knowledge) > MAX_PROJECT_KNOWLEDGE_TOKENS) {
       await deps.attachments.deletePrefix(`projects/${p.id}/${attachmentId}/`).catch(() => undefined);
-      return apiError(reply, 400, "knowledge_too_large", knowledgeBytesMessage);
-    }
-    if (tokens > MAX_PROJECT_KNOWLEDGE_TOKENS) {
-      await deps.attachments.deletePrefix(`projects/${p.id}/${attachmentId}/`).catch(() => undefined);
-      return apiError(reply, 400, "knowledge_too_large", "The project's files would exceed what fits in one conversation. Remove a file or split the document.");
+      return apiError(reply, 400, "knowledge_too_large", "The project's files together would exceed what fits in one conversation (about 650 pages read page by page, or 130 pages sent whole). Remove a file, or attach the largest documents to a conversation in the project instead.");
     }
     const updated = await deps.repos.projects.update(p.id, { knowledge, updatedAt: now().toISOString() });
     if (!updated) return apiError(reply, 404, "not_found", "Project not found");

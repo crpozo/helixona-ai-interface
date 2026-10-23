@@ -3,8 +3,8 @@ import { z } from "zod";
 import { currentModelId, estimateAttachmentTokens, estimateTokens, modelByAlias, ulid, withoutRounds, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type ToolRound, type TurnEvent, type UsageSummary } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import { attachmentKey, INLINE, MAX_PDF_PAGES, READ, sheetCharBudget } from "../attachments/policy.js";
-import { AttachmentProblem, checkUpload, contentBlock, inspectPdf, loadDocumentBlocks, readingBlock, type PdfInfo } from "../attachments/documents.js";
-import { planDelivery } from "../attachments/planner.js";
+import { AttachmentProblem, checkUpload, contentBlock, inspectPdf, readingBlock, type PdfInfo } from "../attachments/documents.js";
+import { knowledgeTokens, planDelivery } from "../attachments/planner.js";
 import { DocumentReader, Semaphore, type FileReading } from "../attachments/reader.js";
 import { isZipType, ZipTools } from "../attachments/zips.js";
 import { locateConversation } from "./conversations.js";
@@ -137,7 +137,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     const projectUsable = project !== null;
     const knowledge = projectUsable && deps.attachments ? project.knowledge : [];
     const systemExtra = projectUsable && project.instructions.trim() ? `# Project: ${project.name}\n\n${project.instructions.trim()}` : undefined;
-    const projectTokens = projectUsable && conv.messageCount === 0 ? knowledge.reduce((n, k) => n + estimateAttachmentTokens(k), 0) : 0;
+    const projectTokens = projectUsable && conv.messageCount === 0 ? knowledgeTokens(knowledge) : 0;
     const userText = text || (newFiles.length === 1 ? "Please review the attached document." : "Please review the attached documents.");
 
     // One turn at a time per conversation: in a shared project two people may write at once, and the
@@ -232,13 +232,10 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
       }
 
       const historyFiles = rawHistory.filter((m) => m.role === "user").flatMap((m) => m.attachments ?? []);
-      const reserved = {
-        bytes: knowledge.reduce((n, k) => n + k.size, 0),
-        pages: knowledge.reduce((n, k) => n + (k.contentType === "application/pdf" ? (k.pages ?? 0) : 0), 0),
-      };
-      if (reserved.bytes > INLINE.budgetBytes) return fail("project_too_large", "This project's files are too large to send together. Remove a file from the project, then try again.");
-      const plan = planDelivery([...historyFiles, ...newFiles], reserved);
-      const toRead = [...historyFiles, ...newFiles].filter((f) => plan.get(f.id) === "read");
+      // Project files come first and are always planned the same way, so every conversation shares them;
+      // one that does not fit whole is read page by page once and its transcription kept under the project.
+      const plan = planDelivery([...knowledge, ...historyFiles, ...newFiles]);
+      const toRead = [...knowledge, ...historyFiles, ...newFiles].filter((f) => plan.get(f.id) === "read");
 
       // Transcriptions made in an earlier turn (or an earlier try) are reused as they are.
       const readings = new Map<string, FileReading>();
@@ -368,7 +365,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
       }
       const userContent: BetaContentBlockParam[] = [...(store ? await blocksFor(newFiles, true) : []), { type: "text", text: userText }];
       if (knowledge.length > 0 && store) {
-        const docs = await loadDocumentBlocks(store, knowledge, true, sheetChars);
+        const docs = await blocksFor(knowledge, true);
         const first = history[0];
         if (first && first.role === "user") history[0] = { ...first, content: [...docs, ...(first.content as BetaContentBlockParam[])] };
         else userContent.unshift(...docs);

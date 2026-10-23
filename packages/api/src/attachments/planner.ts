@@ -1,4 +1,5 @@
-import { INLINE } from "./policy.js";
+import { estimateAttachmentTokens, type AttachmentMeta } from "@helixona/core";
+import { INLINE, READ } from "./policy.js";
 
 export type Delivery = "inline" | "read";
 
@@ -40,6 +41,20 @@ export function planDelivery(files: PlannedFile[], reserved: { bytes: number; pa
     }
   }
   return plan;
+}
+
+/**
+ * Tokens a project's files take in every request: whole files at their request size, files that
+ * will be read page by page at the size of their transcription. Project files come first in the
+ * plan, so this decision is the same one the chat route makes.
+ */
+export function knowledgeTokens(knowledge: AttachmentMeta[]): number {
+  const plan = planDelivery(knowledge);
+  return knowledge.reduce((n, k) => {
+    const pages = k.pages ?? Math.max(1, Math.ceil(k.size / 100_000));
+    if (plan.get(k.id) === "read") return n + pages * READ.tokensPerPage;
+    return n + (k.contentType === "application/pdf" ? pages * INLINE.tokensPerPage : estimateAttachmentTokens(k));
+  }, 0);
 }
 
 /**

@@ -91,10 +91,13 @@ export function projectKnowledgeKey(projectId: string, attachmentId: string, nam
 export const MAX_PROJECT_FILES = 20;
 /** Project knowledge is sent with every turn of every conversation in the project: keep it well inside the context. */
 export const MAX_PROJECT_KNOWLEDGE_TOKENS = 400_000;
-/** Project files always go whole, so they keep the request-sized caps. */
-export const MAX_KNOWLEDGE_FILE_MB = 20;
-export const MAX_KNOWLEDGE_PDF_PAGES = 600;
-export const MAX_PROJECT_KNOWLEDGE_BYTES = 18 * MiB;
+/**
+ * Project files take the same caps as attachments: one that does not fit a request whole is read page
+ * by page once, and its transcription goes to every conversation in the project. What bounds a project
+ * is the token budget above, since its files travel with every message.
+ */
+export const MAX_KNOWLEDGE_FILE_MB = 100;
+export const MAX_KNOWLEDGE_PDF_PAGES = MAX_PDF_PAGES;
 
 export function maxBytesFor(contentType: string, maxAttachmentMb: number): number {
   const t = ALLOWED_TYPES[contentType];

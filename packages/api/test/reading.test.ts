@@ -340,19 +340,43 @@ describe("Large attachments in a conversation", () => {
     await app.close();
   });
 
-  it("keeps project files within what one request can carry", async () => {
-    const { app, repos } = await makeApp();
+  it("a long project file is read page by page once, by the first chat that needs it, and shared by the next", async () => {
+    const { provider, calls } = recording(fakeProvider());
+    const { app, store } = await makeApp(() => provider);
     const cookie = await login(app);
-    const p = (await app.inject({ method: "POST", url: "/api/projects", headers: { ...H, cookie }, payload: { name: "Reference" } })).json();
-    const big = await app.inject({ method: "POST", url: `/api/projects/${p.id}/knowledge`, headers: { ...H, cookie }, payload: { name: "Manual.pdf", size: 25 * MiB, contentType: "application/pdf" } });
-    expect(big.statusCode).toBe(400);
-    expect(big.json().error.message).toContain("20 MB");
-    await repos.projects.update(p.id, { knowledge: [{ id: "01ARZ3NDEKTSV4RRFFQ69G5FAV", name: "Old.pdf", contentType: "application/pdf", size: 17 * MiB, pages: 40, key: `projects/${p.id}/01ARZ3NDEKTSV4RRFFQ69G5FAV/Old.pdf` }] });
-    const over = await app.inject({ method: "POST", url: `/api/projects/${p.id}/knowledge`, headers: { ...H, cookie }, payload: { name: "More.pdf", size: 2 * MiB, contentType: "application/pdf" } });
-    expect(over.statusCode).toBe(400);
-    expect(over.json().error.code).toBe("knowledge_too_large");
+    const p = (await app.inject({ method: "POST", url: "/api/projects", headers: { ...H, cookie }, payload: { name: "Anthem records" } })).json();
+    const bytes = await samplePdf(120, "Record request");
+    const k = (await app.inject({ method: "POST", url: `/api/projects/${p.id}/knowledge`, headers: { ...H, cookie }, payload: { name: "Submission.pdf", size: bytes.length, contentType: "application/pdf" } })).json();
+    expect((await app.inject({ method: "PUT", url: k.upload.url, headers: { "content-type": "application/pdf", "x-requested-with": "helixona" }, payload: bytes })).statusCode).toBe(200);
+    const registered = await app.inject({ method: "POST", url: `/api/projects/${p.id}/knowledge/${k.id}`, headers: { ...H, cookie }, payload: { name: k.name } });
+    expect(registered.statusCode).toBe(200);
+    expect(registered.json().knowledge[0]).toMatchObject({ pages: 120 });
+
+    // The first conversation reads the 120 pages (more than the 100 a request may carry whole) and shows progress.
+    const c1 = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "opus", projectId: p.id } })).json();
+    const r1 = await app.inject({ method: "POST", url: `/api/conversations/${c1.id}/messages`, headers: { ...H, cookie }, payload: { text: "What did Anthem ask for?" } });
+    const ev1 = parseSse(r1.body);
+    expect(ev1.some((e) => e.event === "files" && e.data.phase === "reading")).toBe(true);
+    expect(ev1.at(-1)!.event).toBe("done");
+    expect(calls.filter((c) => range(c) !== null).length).toBeGreaterThan(10);
+    expect([...store.objects.keys()].some((key) => key.startsWith(`projects/${p.id}/${k.id}/reading-v1/`) && key.endsWith("full.md"))).toBe(true);
+    const answer = calls.find((c) => range(c) === null)!;
+    const first = answer.messages[0]!.content as Array<{ type: string; title?: string; context?: string }>;
+    expect(first[0]).toMatchObject({ type: "document", title: "Submission.pdf" });
+    expect(first[0]!.context).toContain("Transcription of a 120-page PDF");
+
+    // A second conversation in the project gets the transcription from storage: nothing is read again.
+    calls.length = 0;
+    const c2 = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "opus", projectId: p.id } })).json();
+    const r2 = await app.inject({ method: "POST", url: `/api/conversations/${c2.id}/messages`, headers: { ...H, cookie }, payload: { text: "Summarize it" } });
+    expect(parseSse(r2.body).some((e) => e.event === "files")).toBe(false);
+    expect(calls.filter((c) => range(c) !== null)).toHaveLength(0);
+
+    // The project's files together stay within a conversation's budget.
+    const too = await app.inject({ method: "POST", url: `/api/projects/${p.id}/knowledge`, headers: { ...H, cookie }, payload: { name: "Huge.pdf", size: 90 * MiB, contentType: "application/pdf" } });
+    expect(too.statusCode).toBe(201);
     const me = (await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json();
-    expect(me.limits.attachments).toMatchObject({ maxMb: 100, maxPerMessage: 20, knowledgeMaxMb: 20 });
+    expect(me.limits.attachments).toMatchObject({ maxMb: 100, maxPerMessage: 20, knowledgeMaxMb: 100 });
     await app.close();
   });
 });
