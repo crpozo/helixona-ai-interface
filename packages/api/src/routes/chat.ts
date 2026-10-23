@@ -1,11 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { currentModelId, estimateAttachmentTokens, estimateTokens, modelByAlias, ulid, withoutRounds, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type ToolRound, type TurnEvent, type UsageSummary } from "@helixona/core";
+import { currentModelId, estimateAttachmentTokens, estimateTokens, ulid, withoutRounds, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type ToolRound, type TurnEvent, type UsageSummary } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import { attachmentKey, INLINE, MAX_PDF_PAGES, READ, sheetCharBudget } from "../attachments/policy.js";
 import { AttachmentProblem, checkUpload, contentBlock, inspectPdf, readingBlock, type PdfInfo } from "../attachments/documents.js";
-import { knowledgeTokens, planDelivery } from "../attachments/planner.js";
-import { DocumentReader, Semaphore, type FileReading } from "../attachments/reader.js";
+import { knowledgeTokens, planDelivery, planKnowledge } from "../attachments/planner.js";
+import { CombinedTools } from "../attachments/library.js";
+import { Semaphore, type FileReading } from "../attachments/reader.js";
 import { isZipType, ZipTools } from "../attachments/zips.js";
 import { locateConversation } from "./conversations.js";
 import { requireTraining } from "./training.js";
@@ -72,21 +73,8 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
   // summary, and the browser computes references over every row. One file never fills the conversation.
   const sheetChars = Math.min(deps.config.SHEET_MODEL_CHARS, sheetCharBudget(deps.config.CONTEXT_LIMIT_TOKENS));
   const limiter = new TurnRateLimiter(deps.config.RATE_LIMIT_TURNS_PER_HOUR);
-  // Large PDFs are transcribed by a second model, a few pages per request (see attachments/reader.ts).
-  const readerEntry = modelByAlias(deps.catalog, deps.config.READER_MODEL_ALIAS) ?? modelByAlias(deps.catalog, deps.catalog.defaultAlias) ?? deps.catalog.models[0]!;
-  const reader = deps.attachments
-    ? new DocumentReader({
-        store: deps.attachments,
-        provider: deps.provider,
-        catalog: deps.catalog,
-        log: deps.log,
-        modelId: readerEntry.modelId,
-        effort: deps.config.READER_EFFORT,
-        chunkConcurrency: deps.config.READER_CONCURRENCY,
-        fileConcurrency: deps.config.READER_FILE_CONCURRENCY,
-        retryDelaysMs: deps.config.NODE_ENV === "test" ? [10, 10, 10] : undefined,
-      })
-    : null;
+  // Large PDFs are transcribed by a second model, a few pages per request (see attachments/reader.ts; set up in app.ts).
+  const reader = deps.reader ?? null;
   // Counting the pages of new PDFs downloads them: a few at a time, across the server.
   const inspections = new Semaphore(3);
 
@@ -135,9 +123,14 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     // Project context: instructions become a second cached system block; knowledge files are placed at the
     // very start of the conversation so the cached prefix is shared by every conversation in the project.
     const projectUsable = project !== null;
-    const knowledge = projectUsable && deps.attachments ? project.knowledge : [];
+    const allKnowledge = projectUsable && deps.attachments ? project.knowledge : [];
+    // Files that travel with every message, and the library (on request, through tools).
+    const modes = planKnowledge(allKnowledge);
+    const knowledge = allKnowledge.filter((k) => modes.get(k.id) === "whole");
+    const libraryFiles = allKnowledge.filter((k) => modes.get(k.id) === "library");
+    if (projectUsable && libraryFiles.length > 0) deps.library?.ensureAll(project); // a reading interrupted by a restart resumes
     const systemExtra = projectUsable && project.instructions.trim() ? `# Project: ${project.name}\n\n${project.instructions.trim()}` : undefined;
-    const projectTokens = projectUsable && conv.messageCount === 0 ? knowledgeTokens(knowledge) : 0;
+    const projectTokens = projectUsable && conv.messageCount === 0 ? knowledgeTokens(allKnowledge) : 0;
     const userText = text || (newFiles.length === 1 ? "Please review the attached document." : "Please review the attached documents.");
 
     // One turn at a time per conversation: in a shared project two people may write at once, and the
@@ -364,8 +357,17 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
         history.push({ ...m, content: [...blocks, ...(m.content as BetaContentBlockParam[])] });
       }
       const userContent: BetaContentBlockParam[] = [...(store ? await blocksFor(newFiles, true) : []), { type: "text", text: userText }];
-      if (knowledge.length > 0 && store) {
-        const docs = await blocksFor(knowledge, true);
+      if ((knowledge.length > 0 || libraryFiles.length > 0) && store) {
+        const docs = await blocksFor(knowledge, knowledge.length > 0 && libraryFiles.length === 0);
+        if (libraryFiles.length > 0 && deps.library && project) {
+          docs.push({
+            type: "document",
+            title: "Project library",
+            context: "The project's files that are not in this conversation. Read them on request with the tools: search_project_files to find which file and page mention something, list_project_files for the list, read_project_file for a file or a range of its pages. Cite the file and page of what you use; never describe a file you have not read.",
+            source: { type: "text", media_type: "text/plain", data: deps.library.manifest(project, libraryFiles) },
+            cache_control: { type: "ephemeral", ttl: "1h" },
+          } as BetaContentBlockParam);
+        }
         const first = history[0];
         if (first && first.role === "user") history[0] = { ...first, content: [...docs, ...(first.content as BetaContentBlockParam[])] };
         else userContent.unshift(...docs);
@@ -377,7 +379,11 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
 
       // ZIPs in the conversation: the model reads inside them with tools, run here between rounds.
       const zips = [...historyFiles, ...newFiles].filter((f) => isZipType(f.contentType));
-      const zipTools = zips.length > 0 && store ? new ZipTools({ store, log: deps.log, zips, sheetChars }) : null;
+      const toolSets = [
+        ...(zips.length > 0 && store ? [new ZipTools({ store, log: deps.log, zips, sheetChars })] : []),
+        ...(libraryFiles.length > 0 && deps.library && project ? [deps.library.tools(project)] : []),
+      ];
+      const zipTools = toolSets.length > 0 ? new CombinedTools(toolSets) : null;
 
       // ---- The answer ----
       phase = "model";

@@ -1,4 +1,8 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import { modelByAlias } from "@helixona/core";
+import { DocumentReader } from "./attachments/reader.js";
+import { ProjectLibrary } from "./attachments/library.js";
+import { sheetCharBudget } from "./attachments/policy.js";
 import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import { randomBytes } from "node:crypto";
@@ -110,6 +114,26 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   });
 
   app.get("/api/health", async () => ({ ok: true, version: process.env["APP_VERSION"] ?? "dev" }));
+
+  // Large PDFs are transcribed by a second model, a few pages per request; project files beyond what
+  // travels with every message are read this way in the background and offered to the model on request.
+  if (deps.attachments && !deps.reader) {
+    const readerEntry = modelByAlias(deps.catalog, deps.config.READER_MODEL_ALIAS) ?? modelByAlias(deps.catalog, deps.catalog.defaultAlias) ?? deps.catalog.models[0]!;
+    deps.reader = new DocumentReader({
+      store: deps.attachments,
+      provider: deps.provider,
+      catalog: deps.catalog,
+      log: deps.log,
+      modelId: readerEntry.modelId,
+      effort: deps.config.READER_EFFORT,
+      chunkConcurrency: deps.config.READER_CONCURRENCY,
+      fileConcurrency: deps.config.READER_FILE_CONCURRENCY,
+      retryDelaysMs: deps.config.NODE_ENV === "test" ? [10, 10, 10] : undefined,
+    });
+  }
+  if (deps.attachments && deps.reader && !deps.library) {
+    deps.library = new ProjectLibrary({ store: deps.attachments, reader: deps.reader, repos: deps.repos, log: deps.log, sheetChars: Math.min(deps.config.SHEET_MODEL_CHARS, sheetCharBudget(deps.config.CONTEXT_LIMIT_TOKENS)), ...(deps.now ? { now: deps.now } : {}) });
+  }
 
   registerAuthRoutes(app, deps, secure);
   registerConversationRoutes(app, deps);

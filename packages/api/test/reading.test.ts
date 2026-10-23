@@ -340,39 +340,61 @@ describe("Large attachments in a conversation", () => {
     await app.close();
   });
 
-  it("a long project file is read page by page once, by the first chat that needs it, and shared by the next", async () => {
+  it("a long project file joins the library: read page by page in the background, then opened by the model on request", async () => {
     const { provider, calls } = recording(fakeProvider());
-    const { app, store } = await makeApp(() => provider);
+    const { app, store, deps } = await makeApp(() => provider);
     const cookie = await login(app);
     const p = (await app.inject({ method: "POST", url: "/api/projects", headers: { ...H, cookie }, payload: { name: "Anthem records" } })).json();
-    const bytes = await samplePdf(120, "Record request");
-    const k = (await app.inject({ method: "POST", url: `/api/projects/${p.id}/knowledge`, headers: { ...H, cookie }, payload: { name: "Submission.pdf", size: bytes.length, contentType: "application/pdf" } })).json();
-    expect((await app.inject({ method: "PUT", url: k.upload.url, headers: { "content-type": "application/pdf", "x-requested-with": "helixona" }, payload: bytes })).statusCode).toBe(200);
-    const registered = await app.inject({ method: "POST", url: `/api/projects/${p.id}/knowledge/${k.id}`, headers: { ...H, cookie }, payload: { name: k.name } });
-    expect(registered.statusCode).toBe(200);
-    expect(registered.json().knowledge[0]).toMatchObject({ pages: 120 });
+    const addFile = async (name: string, bytes: Buffer) => {
+      const k = (await app.inject({ method: "POST", url: `/api/projects/${p.id}/knowledge`, headers: { ...H, cookie }, payload: { name, size: bytes.length, contentType: "application/pdf" } })).json();
+      expect((await app.inject({ method: "PUT", url: k.upload.url, headers: { "content-type": "application/pdf", "x-requested-with": "helixona" }, payload: bytes })).statusCode).toBe(200);
+      const r = await app.inject({ method: "POST", url: `/api/projects/${p.id}/knowledge/${k.id}`, headers: { ...H, cookie }, payload: { name: k.name } });
+      expect(r.statusCode).toBe(200);
+      return { id: k.id as string, view: r.json() as { knowledge: Array<Record<string, unknown>> } };
+    };
+    // A small file travels with every message; the 120-page one (more than a request carries whole) goes to the library.
+    const small = await addFile("Agreement.pdf", await samplePdf(2, "Agreement"));
+    expect(small.view.knowledge[0]).toMatchObject({ mode: "whole", pages: 2 });
+    const big = await addFile("Submission.pdf", await samplePdf(120, "Record request"));
+    expect(big.view.knowledge[1]).toMatchObject({ mode: "library", pages: 120, reading: { state: "pending" } });
+    await deps.library!.idle();
+    const after = (await app.inject({ method: "GET", url: `/api/projects/${p.id}`, headers: { cookie } })).json();
+    expect(after.knowledge[1]).toMatchObject({ mode: "library", reading: { state: "done", pages: 120, pagesDone: 120 } });
+    expect(calls.filter((c) => range(c) !== null).length).toBeGreaterThan(10);
+    expect([...store.objects.keys()].some((key) => key.startsWith(`projects/${p.id}/${big.id}/reading-v1/`) && key.endsWith("full.md"))).toBe(true);
+    // The reading was charged to the person who added the file.
+    const usage = await deps.repos.usage.listFrom("2000-01-01");
+    expect(usage.some((u) => u.turns === 0 || u.inputTokens > 0)).toBe(true);
 
-    // The first conversation reads the 120 pages (more than the 100 a request may carry whole) and shows progress.
+    // A conversation in the project: the small file goes whole, the library as a list, and the model reads from it with a tool.
+    calls.length = 0;
     const c1 = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "opus", projectId: p.id } })).json();
     const r1 = await app.inject({ method: "POST", url: `/api/conversations/${c1.id}/messages`, headers: { ...H, cookie }, payload: { text: "What did Anthem ask for?" } });
     const ev1 = parseSse(r1.body);
-    expect(ev1.some((e) => e.event === "files" && e.data.phase === "reading")).toBe(true);
+    expect(ev1.some((e) => e.event === "files")).toBe(false);
     expect(ev1.at(-1)!.event).toBe("done");
-    expect(calls.filter((c) => range(c) !== null).length).toBeGreaterThan(10);
-    expect([...store.objects.keys()].some((key) => key.startsWith(`projects/${p.id}/${k.id}/reading-v1/`) && key.endsWith("full.md"))).toBe(true);
-    const answer = calls.find((c) => range(c) === null)!;
-    const first = answer.messages[0]!.content as Array<{ type: string; title?: string; context?: string }>;
-    expect(first[0]).toMatchObject({ type: "document", title: "Submission.pdf" });
-    expect(first[0]!.context).toContain("Transcription of a 120-page PDF");
+    const steps = ev1.filter((e) => e.event === "step").flatMap((e) => (e.data.steps as Array<{ text: string; state: string }>).map((s) => `${s.state}: ${s.text}`));
+    expect(steps).toEqual(["running: Reading Submission.pdf", "done: Read Submission.pdf"]);
+    const answer = ev1.filter((e) => e.event === "text_delta").map((e) => e.data.text).join("");
+    expect(answer).toContain("(p. 1)");
+    const first = calls[0]!.messages[0]!.content as Array<{ type: string; title?: string; source?: { data?: string } }>;
+    expect(first.map((b) => b.title)).toEqual(["Agreement.pdf", "Project library", undefined]);
+    expect(first[1]!.source!.data).toContain("Submission.pdf · 120 pages · ready");
+    expect(calls[0]!.tools?.map((t) => (t as { name: string }).name)).toEqual(["list_project_files", "search_project_files", "read_project_file"]);
 
-    // A second conversation in the project gets the transcription from storage: nothing is read again.
-    calls.length = 0;
-    const c2 = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "opus", projectId: p.id } })).json();
-    const r2 = await app.inject({ method: "POST", url: `/api/conversations/${c2.id}/messages`, headers: { ...H, cookie }, payload: { text: "Summarize it" } });
-    expect(parseSse(r2.body).some((e) => e.event === "files")).toBe(false);
-    expect(calls.filter((c) => range(c) !== null)).toHaveLength(0);
+    // Search and a page range, straight through the tools.
+    const tools = deps.library!.tools(await deps.repos.projects.get(p.id) as never);
+    const found = await tools.execute({ id: "s", name: "search_project_files", input: { query: "Hemoglobin" } }, new AbortController().signal);
+    expect(found.summary).toMatch(/Searched the project's files for "Hemoglobin": \d+ matches in 1 file/);
+    const pages = await tools.execute({ id: "r", name: "read_project_file", input: { name: "Submission.pdf", from_page: 9, to_page: 10 } }, new AbortController().signal);
+    const text = (pages.content as Array<{ text: string }>)[0]!.text;
+    expect(text).toContain("(p. 9)");
+    expect(text).toContain("(p. 10)");
+    expect(text).not.toContain("(p. 11)");
+    const have = await tools.execute({ id: "w", name: "read_project_file", input: { name: "Agreement.pdf" } }, new AbortController().signal);
+    expect(have.summary).toBe("Agreement.pdf is already in the conversation");
 
-    // The project's files together stay within a conversation's budget.
+    // Many files are fine: the cap is 200 per project, and a 90 MB file is accepted.
     const too = await app.inject({ method: "POST", url: `/api/projects/${p.id}/knowledge`, headers: { ...H, cookie }, payload: { name: "Huge.pdf", size: 90 * MiB, contentType: "application/pdf" } });
     expect(too.statusCode).toBe(201);
     const me = (await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json();

@@ -198,6 +198,10 @@ export function updateProject(id: string, patch: { name?: string; description?: 
   return request<Project>(`/api/projects/${encodeURIComponent(id)}`, { method: "PATCH", body: patch });
 }
 
+export function getProject(id: string): Promise<Project> {
+  return request<Project>(`/api/projects/${encodeURIComponent(id)}`);
+}
+
 export function deleteProject(id: string): Promise<void> {
   return request<void>(`/api/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

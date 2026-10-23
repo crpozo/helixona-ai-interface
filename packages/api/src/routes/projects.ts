@@ -4,8 +4,8 @@ import { ulid, type Project, type ProjectMember, type ProjectVisibility } from "
 import type { Deps } from "../deps.js";
 import type { Session } from "../repos/types.js";
 import { apiError, audit, requireAuth } from "../app.js";
-import { ALLOWED_TYPES, MAX_KNOWLEDGE_FILE_MB, MAX_KNOWLEDGE_PDF_PAGES, MAX_PROJECT_FILES, MAX_PROJECT_KNOWLEDGE_TOKENS, maxBytesFor, projectKnowledgeKey, safeName, sheetCharBudget } from "../attachments/policy.js";
-import { knowledgeTokens } from "../attachments/planner.js";
+import { ALLOWED_TYPES, MAX_KNOWLEDGE_FILE_MB, MAX_KNOWLEDGE_PDF_PAGES, MAX_PROJECT_FILES, maxBytesFor, projectKnowledgeKey, safeName, sheetCharBudget } from "../attachments/policy.js";
+import { planKnowledge } from "../attachments/planner.js";
 import { AttachmentProblem, inspectUpload } from "../attachments/documents.js";
 
 /**
@@ -42,7 +42,8 @@ export async function sharedProjectsFor(deps: Deps, userId: string): Promise<Pro
   return (await deps.repos.projects.list()).filter((p) => p.visibility === "shared" && isMember(p, userId));
 }
 
-function publicProject(p: Project, userId: string, roles: string[]) {
+function publicProject(p: Project, userId: string, roles: string[], status?: (k: Project["knowledge"][number]) => Project["knowledge"][number]["reading"]) {
+  const modes = planKnowledge(p.knowledge);
   return {
     id: p.id,
     ownerId: p.ownerId,
@@ -52,7 +53,8 @@ function publicProject(p: Project, userId: string, roles: string[]) {
     instructions: p.instructions,
     visibility: p.visibility,
     members: p.members,
-    knowledge: p.knowledge.map(({ key: _k, ...meta }) => meta),
+    // Each file says whether it travels with every message or is read on request, and how far its reading got.
+    knowledge: p.knowledge.map(({ key: _k, uploadedBy: _u, ...meta }) => ({ ...meta, mode: modes.get(meta.id) ?? "whole", ...(status ? { reading: status({ ...meta, key: _k }) } : {}) })),
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     canEdit: canEditProject(p, userId, roles),
@@ -113,7 +115,11 @@ export function registerProjectRoutes(app: FastifyInstance, deps: Deps): void {
     }
     return p;
   };
-  const view = (p: Project, req: FastifyRequest) => publicProject(p, req.session!.userId, req.session!.roles);
+  const view = (p: Project, req: FastifyRequest) => {
+    // Viewing a project resumes any reading a restart interrupted.
+    if (deps.library) deps.library.ensureAll(p);
+    return publicProject(p, req.session!.userId, req.session!.roles, deps.library ? (k) => deps.library!.status(k) : undefined);
+  };
 
   app.get("/api/projects", { preHandler: requireAuth() }, async (req) => {
     const all = await deps.repos.projects.list();
@@ -234,13 +240,14 @@ export function registerProjectRoutes(app: FastifyInstance, deps: Deps): void {
       if (e instanceof AttachmentProblem) return apiError(reply, 400, e.code, e.message);
       throw e;
     }
-    const knowledge = [...p.knowledge, verified.meta];
-    if (knowledgeTokens(knowledge) > MAX_PROJECT_KNOWLEDGE_TOKENS) {
-      await deps.attachments.deletePrefix(`projects/${p.id}/${attachmentId}/`).catch(() => undefined);
-      return apiError(reply, 400, "knowledge_too_large", "The project's files together would exceed what fits in one conversation (about 650 pages read page by page, or 130 pages sent whole). Remove a file, or attach the largest documents to a conversation in the project instead.");
-    }
+    // A file beyond what travels with every message joins the library: a PDF there is read page by page now, in the background.
+    const meta = { ...verified.meta, uploadedBy: req.session!.userId };
+    const knowledge = [...p.knowledge, meta];
+    const mode = planKnowledge(knowledge).get(meta.id);
+    if (mode === "library" && meta.contentType === "application/pdf") meta.reading = { state: "pending", pages: meta.pages, pagesDone: 0 };
     const updated = await deps.repos.projects.update(p.id, { knowledge, updatedAt: now().toISOString() });
     if (!updated) return apiError(reply, 404, "not_found", "Project not found");
+    if (deps.library) deps.library.ensureAll(updated);
     await audit(deps, req, { action: "project_knowledge_add", meta: { projectId: p.id, attachmentId, contentType: verified.meta.contentType, size: verified.meta.size } });
     return view(updated, req);
   });

@@ -355,7 +355,7 @@ export class DocumentReader {
   }
 
   /** A saved transcription, or null. A storage error counts as "not saved": the pages are read again. */
-  private async getText(key: string): Promise<string | null> {
+  async getText(key: string): Promise<string | null> {
     try {
       const head = await this.cfg.store.head(key);
       if (!head) return null;

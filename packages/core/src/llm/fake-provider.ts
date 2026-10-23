@@ -81,9 +81,9 @@ export class FakeProvider implements LlmProvider {
           yield { type: "content_block_delta", index: content.length, delta: { type: "text_delta", text: remark } } as BetaRawMessageStreamEvent;
           yield { type: "content_block_stop", index: content.length } as BetaRawMessageStreamEvent;
           content.push({ type: "text", text: remark, citations: null } as BetaTextBlock);
-          const call = { type: "tool_use", id: `toolu_fake_${params.messages.length}`, name: "read_zip_files", input: zipCall } as unknown as BetaContentBlock;
+          const call = { type: "tool_use", id: `toolu_fake_${params.messages.length}`, name: zipCall.tool, input: zipCall.input } as unknown as BetaContentBlock;
           yield { type: "content_block_start", index: content.length, content_block: { ...(call as object), input: {} } } as unknown as BetaRawMessageStreamEvent;
-          yield { type: "content_block_delta", index: content.length, delta: { type: "input_json_delta", partial_json: JSON.stringify(zipCall) } } as unknown as BetaRawMessageStreamEvent;
+          yield { type: "content_block_delta", index: content.length, delta: { type: "input_json_delta", partial_json: JSON.stringify(zipCall.input) } } as unknown as BetaRawMessageStreamEvent;
           yield { type: "content_block_stop", index: content.length } as BetaRawMessageStreamEvent;
           content.push(call);
           const u = usage(Math.ceil(JSON.stringify(params.messages).length / 4), 20);
@@ -172,15 +172,30 @@ export class FakeProvider implements LlmProvider {
 
 function abortError(): Error { const e = new Error("aborted"); e.name = "AbortError"; return e; }
 
-/** The `read_zip_files` call to make: the first readable file in a ZIP's list, when the tools are on offer. */
-function zipToolCall(params: StreamParams, blocks: Array<Record<string, unknown>>): { attachment: string; paths: string[] } | null {
-  if (!(params.tools ?? []).some((t) => (t as { name?: string }).name === "read_zip_files")) return null;
-  const doc = blocks.find((b) => b.type === "document" && /\.zip$/i.test(String(b.title ?? "")));
-  if (!doc) return null;
-  const data = String((doc.source as { data?: string } | undefined)?.data ?? "");
-  for (const line of data.split("\n")) {
-    const m = line.match(/^(.+?) · \d/);
-    if (m && /\.(csv|txt|md|json|pdf)$/i.test(m[1]!)) return { attachment: String(doc.title), paths: [m[1]!] };
+/**
+ * The tool call to make when file tools are on offer: `read_zip_files` for the first readable file in a
+ * ZIP's list, or `read_project_file` for the first file of a project library's list.
+ */
+function zipToolCall(params: StreamParams, blocks: Array<Record<string, unknown>>): { tool: string; input: Record<string, unknown> } | null {
+  const tools = new Set((params.tools ?? []).map((t) => (t as { name?: string }).name));
+  const lines = (doc: Record<string, unknown>) => String((doc.source as { data?: string } | undefined)?.data ?? "").split("\n");
+  if (tools.has("read_zip_files")) {
+    const doc = blocks.find((b) => b.type === "document" && /\.zip$/i.test(String(b.title ?? "")));
+    if (doc) {
+      for (const line of lines(doc)) {
+        const m = line.match(/^(.+?) · \d/);
+        if (m && /\.(csv|txt|md|json|pdf)$/i.test(m[1]!)) return { tool: "read_zip_files", input: { attachment: String(doc.title), paths: [m[1]!] } };
+      }
+    }
+  }
+  if (tools.has("read_project_file")) {
+    const doc = blocks.find((b) => b.type === "document" && b.title === "Project library");
+    if (doc) {
+      for (const line of lines(doc)) {
+        const m = line.match(/^(.+?) · .*ready/);
+        if (m) return { tool: "read_project_file", input: { name: m[1]! } };
+      }
+    }
   }
   return null;
 }

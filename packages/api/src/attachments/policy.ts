@@ -88,9 +88,14 @@ export function projectKnowledgeKey(projectId: string, attachmentId: string, nam
   return `projects/${projectId}/${attachmentId}/${safeName(name)}`;
 }
 
-export const MAX_PROJECT_FILES = 20;
-/** Project knowledge is sent with every turn of every conversation in the project: keep it well inside the context. */
-export const MAX_PROJECT_KNOWLEDGE_TOKENS = 400_000;
+export const MAX_PROJECT_FILES = 200;
+/**
+ * Project files travel with every message of every conversation in the project up to this many
+ * tokens (in the order they were added). The rest form the project's library: read page by page in
+ * the background once, and handed to the model on request through tools. So a project never refuses
+ * a file for being large, or for being one of many.
+ */
+export const MAX_PROJECT_KNOWLEDGE_TOKENS = 200_000;
 /**
  * Project files take the same caps as attachments: one that does not fit a request whole is read page
  * by page once, and its transcription goes to every conversation in the project. What bounds a project

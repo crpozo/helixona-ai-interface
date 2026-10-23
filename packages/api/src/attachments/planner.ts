@@ -1,5 +1,5 @@
 import { estimateAttachmentTokens, type AttachmentMeta } from "@helixona/core";
-import { INLINE, READ } from "./policy.js";
+import { INLINE, MAX_PROJECT_KNOWLEDGE_TOKENS, READ } from "./policy.js";
 
 export type Delivery = "inline" | "read";
 
@@ -43,18 +43,39 @@ export function planDelivery(files: PlannedFile[], reserved: { bytes: number; pa
   return plan;
 }
 
+export type KnowledgeMode = "whole" | "library";
+
+/** Tokens one project file takes when it travels with every message (a PDF whole: its pages as images and text). */
+function wholeTokens(k: AttachmentMeta): number {
+  const pages = k.pages ?? Math.max(1, Math.ceil(k.size / 100_000));
+  return k.contentType === "application/pdf" ? pages * INLINE.tokensPerPage : estimateAttachmentTokens(k);
+}
+
 /**
- * Tokens a project's files take in every request: whole files at their request size, files that
- * will be read page by page at the size of their transcription. Project files come first in the
- * plan, so this decision is the same one the chat route makes.
+ * Which project files travel with every message ("whole") and which form the library ("library"):
+ * in the order they were added, a file goes whole while it fits one request and the files so far
+ * stay within MAX_PROJECT_KNOWLEDGE_TOKENS; PDFs too large for a request, and everything after the
+ * budget is spent, go to the library. Deterministic, so every conversation in the project sees the
+ * same split and shares the cached prefix.
  */
+export function planKnowledge(knowledge: AttachmentMeta[]): Map<string, KnowledgeMode> {
+  const inline = planDelivery(knowledge);
+  const out = new Map<string, KnowledgeMode>();
+  let tokens = 0;
+  for (const k of knowledge) {
+    const t = wholeTokens(k);
+    if (inline.get(k.id) === "inline" && tokens + t <= MAX_PROJECT_KNOWLEDGE_TOKENS) {
+      out.set(k.id, "whole");
+      tokens += t;
+    } else out.set(k.id, "library");
+  }
+  return out;
+}
+
+/** Tokens a project's files add to every request: the whole ones, plus a line per library file. */
 export function knowledgeTokens(knowledge: AttachmentMeta[]): number {
-  const plan = planDelivery(knowledge);
-  return knowledge.reduce((n, k) => {
-    const pages = k.pages ?? Math.max(1, Math.ceil(k.size / 100_000));
-    if (plan.get(k.id) === "read") return n + pages * READ.tokensPerPage;
-    return n + (k.contentType === "application/pdf" ? pages * INLINE.tokensPerPage : estimateAttachmentTokens(k));
-  }, 0);
+  const plan = planKnowledge(knowledge);
+  return knowledge.reduce((n, k) => n + (plan.get(k.id) === "whole" ? wholeTokens(k) : 40), 0);
 }
 
 /**

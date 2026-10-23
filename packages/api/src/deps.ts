@@ -9,6 +9,8 @@ import type { PasswordAuth } from "./auth/password.js";
 import type { FeedbackSender } from "./feedback.js";
 
 import type { BillingSource } from "./billing/anthropic.js";
+import type { DocumentReader } from "./attachments/reader.js";
+import type { ProjectLibrary } from "./attachments/library.js";
 
 export interface Deps {
   config: Config;
@@ -29,5 +31,9 @@ export interface Deps {
   feedback: FeedbackSender | null;
   /** The organization's billed cost report (Anthropic Admin API); null when no Admin API key is configured. */
   billing?: BillingSource | null;
+  /** Reads large PDFs page by page (set up by buildApp when attachments are on). */
+  reader?: DocumentReader | null;
+  /** Project files read in the background and handed to the model on request (set up by buildApp). */
+  library?: ProjectLibrary | null;
   now?: () => Date;
 }

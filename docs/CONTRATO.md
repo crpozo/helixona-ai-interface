@@ -61,7 +61,8 @@ interface Message {
   fallbackReason: "refusal" | "availability" | null;
   stopReason: string | null;
   usage: Usage | null; createdAt: string;
-  attachments?: AttachmentMeta[];      // archivos del turno de usuario (metadatos; un ZIP trae `zip: { files, readable, bytes }`)
+  attachments?: AttachmentMeta[];      // archivos del turno de usuario (metadatos; un ZIP trae `zip: { files, readable, bytes }`).
+                                       // Un archivo de proyecto trae `mode: "whole" | "library"` y, si es de biblioteca, `reading: { state, pages, pagesDone }`
   tools?: { steps: { text: string; ms: number }[] }; // respuesta que usó herramientas: su lista de actividad
 }
 interface Usage { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; estimatedUsd: number }

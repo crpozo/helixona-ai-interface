@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AttachmentMeta, CatalogModel, Conversation, Project, ProjectVisibility } from "../lib/types";
-import { ApiError, createProjectKnowledge, deleteProjectKnowledge, registerProjectKnowledge, updateProject, uploadFile } from "../lib/api";
+import { ApiError, createProjectKnowledge, deleteProjectKnowledge, getProject, registerProjectKnowledge, updateProject, uploadFile } from "../lib/api";
 import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, isZipType, maxMbFor } from "../lib/files";
 import { modelLabel } from "../lib/models";
 import { useFileDrop } from "../lib/useFileDrop";
@@ -55,6 +55,22 @@ export function visibilityLabel(p: Project): string {
   if (p.visibility === "clinic") return "Shared with the clinic";
   if (p.visibility === "shared") return `Shared · ${p.members.length + 1} ${p.members.length + 1 === 1 ? "person" : "people"}`;
   return "Private";
+}
+
+/** What a project file's chip says about how the assistant gets it. */
+export function fileState(k: AttachmentMeta): string {
+  if (k.mode !== "library") return "In every chat";
+  const r = k.reading;
+  if (k.contentType !== "application/pdf" || r?.state === "done") return "On request";
+  if (r?.state === "failed") return "Could not be read";
+  return r?.pages ? `Reading ${Math.min(r.pagesDone ?? 0, r.pages).toLocaleString("en-US")} of ${r.pages.toLocaleString("en-US")} pages` : "Reading…";
+}
+
+function fileTitle(k: AttachmentMeta): string {
+  if (k.mode !== "library") return `${k.name}: travels with every message of this project`;
+  if (k.reading?.state === "failed") return `${k.name}: could not be read page by page. Remove it and add it again, or attach it in a chat.`;
+  if (k.reading?.state === "pending") return `${k.name}: being read page by page in the background; the assistant can open it once this finishes`;
+  return `${k.name}: in the project's library; the assistant opens it when a question needs it`;
 }
 
 export function ProjectPage({ project, conversations, models, defaultAlias, maxMb, uploadsEnabled, attachments = null, meId, onBack, onOpenConversation, onStartConversation, onUpdated, onDelete }: Props) {
@@ -112,6 +128,17 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
   }, [project.name]);
 
   const dirty = name !== project.name || description !== project.description || visibility !== project.visibility;
+
+  // While a library file is being read in the background, the page follows its progress.
+  const readingInProgress = project.knowledge.some((k) => k.reading?.state === "pending");
+  useEffect(() => {
+    if (!readingInProgress) return;
+    const t = setInterval(() => {
+      getProject(project.id).then(onUpdated).catch(() => undefined);
+    }, 4000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readingInProgress, project.id]);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,7 +213,7 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
         continue;
       }
       if (isZipType(contentType)) {
-        setFileError(`"${file.name}": a ZIP cannot be a project file, because project files are sent whole with every message. Attach it in a chat instead.`);
+        setFileError(`"${file.name}": a ZIP cannot be a project file. Add the files inside it one by one, or attach the ZIP in a chat.`);
         continue;
       }
       const cap = maxMbFor(contentType, maxMb);
@@ -416,17 +443,18 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
             )}
             {project.knowledge.length === 0 && uploads.length === 0 && (
               <p className="muted small">
-                Files the assistant reads in every conversation of this project.{canUpload ? ` Drag them here or use Add files. PDF up to ${maxMb} MB and 1,000 pages per file; a long one is read page by page the first time a chat needs it, then shared by every chat.` : ""}
+                Files for every conversation of this project.{canUpload ? ` Drag them here or use Add files: PDF, Excel, CSV, TXT or MD, up to ${maxMb} MB and 1,000 pages each, as many as the case needs. The first files travel with every message; the rest form the project's library, read page by page once and opened by the assistant when a question needs them.` : ""}
               </p>
             )}
             <ul className="attach-list knowledge-list">
               {project.knowledge.map((k) => (
-                <li key={k.id} className="attach-chip" title={k.name}>
+                <li key={k.id} className={`attach-chip${k.reading?.state === "failed" ? " error" : ""}`} title={fileTitle(k)}>
                   <span className="attach-icon" aria-hidden="true">📄</span>
                   <span className="attach-name">{k.name}</span>
                   <span className="attach-meta">
                     {k.pages ? `${k.pages} p · ` : ""}
                     {formatSize(k.size)}
+                    {k.mode === "library" && <span className="attach-mode">{fileState(k)}</span>}
                   </span>
                   {canEdit && (
                     <button type="button" className="attach-remove" onClick={() => void removeFile(k)} aria-label={`Remove ${k.name}`}>

@@ -80,6 +80,10 @@ export interface AttachmentMeta {
   sheet?: { rows: number; columns: number; shown: number };
   /** A ZIP archive: the files it holds, how many of them the tools can read, and their size unpacked. */
   zip?: { files: number; readable: number; bytes: number };
+  /** A project file read page by page in the background (too large to travel with every message): how far it got. */
+  reading?: { state: "pending" | "done" | "failed"; pages: number | null; pagesDone?: number; failedPages?: string[] };
+  /** Who added a project file (the reading is charged to them). */
+  uploadedBy?: string;
 }
 
 /**

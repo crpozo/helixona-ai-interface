@@ -304,13 +304,16 @@ deleted, and never kept on the desktop, in email or in a personal drive.
 Chart prep often means ten or more files per patient, some of them hundreds of pages. A message can
 carry up to 20 files, each up to 100 MB and 1,000 pages (PDF, Excel, CSV, TXT or MD; Excel files up to
 10 MB, text files up to 5 MB).
-Project knowledge files take the same per-file caps; because they travel with every message in
-the project, the project's files together are bounded by a token budget (about 650 pages read page
-by page, or 130 pages sent whole). A project PDF too large to send whole is read page by page the
-first time a conversation in the project needs it, by the person who sent that message, and the
-transcription is kept under the project (`projects/<project>/<file>/reading-v1/`) for every other
-conversation. A ZIP (up to 100 MB) is one attachment: the assistant reads inside it in parts, as
-described under "ZIP archives" below.
+Project files take the same per-file caps, up to 200 files per project. In the order they were
+added, files travel with every message of the project while they fit one request and stay within
+about 200,000 tokens together; the rest form the project's **library**. A library PDF is read page
+by page in the background right after it is added (the project page shows the progress; the cost
+is charged to the person who added it, under `project_file_read` in the audit log), and the
+transcription is kept under the project (`projects/<project>/<file>/reading-v1/`). The model
+receives the list of library files with every message and three tools to search, list and read
+them on request, so a project can hold a whole record request without a size wall and without
+filling the conversation. A ZIP (up to 100 MB) is one attachment: the assistant reads inside it in
+parts, as described under "ZIP archives" below.
 
 - **Sent whole** when they fit one request: up to 15 MB and 100 pages per file, 19 MB and 150 pages
   per message together with the project's files. The model sees the pages as they are.
