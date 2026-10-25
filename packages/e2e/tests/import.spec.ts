@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 import JSZip from "jszip";
-import { devLogin, skipTraining, uniqueUser, watchErrors } from "./helpers";
+import { devLogin, skipTraining, uniqueUser, watchErrors, openSettings } from "./helpers";
 
 test.describe("Import from Claude", () => {
   test.beforeEach(async ({ context }) => {
-    await devLogin(context, uniqueUser("e2e-import"), "staff");
+    await devLogin(context, uniqueUser("e2e-import"), "admin");
     await skipTraining(context);
   });
 
@@ -23,7 +23,7 @@ test.describe("Import from Claude", () => {
     const buffer = Buffer.from(await zip.generateAsync({ type: "uint8array" }));
 
     await page.goto("/", { waitUntil: "load" });
-    await page.getByRole("link", { name: "Import from Claude" }).click();
+    await openSettings(page, "Import from Claude");
     await expect(page).toHaveURL(/\/import$/);
     await expect(page.getByRole("heading", { name: "Import from Claude" })).toBeVisible();
     await page.locator(".import-drop input[type=file]").setInputFiles({ name: "data-2026-03-01.zip", mimeType: "application/zip", buffer });
@@ -48,7 +48,7 @@ test.describe("Import from Claude", () => {
     await expect(page.locator(".msg-assistant").nth(1)).toContainText("Received: \"And the iron?\"");
 
     // Importing the same export again duplicates nothing.
-    await page.getByRole("link", { name: "Import from Claude" }).click();
+    await openSettings(page, "Import from Claude");
     await page.locator(".import-drop input[type=file]").setInputFiles({ name: "data-2026-03-01.zip", mimeType: "application/zip", buffer });
     await page.getByRole("button", { name: "Import", exact: true }).click();
     await expect(page.locator(".import-done")).toContainText("0 chats imported, 2 already here (skipped); 0 projects with 0 documents (1 already here)");
@@ -67,7 +67,7 @@ test.describe("Import from Claude", () => {
     const buffer = Buffer.from(await zip.generateAsync({ type: "uint8array" }));
 
     await page.goto("/", { waitUntil: "load" });
-    await page.getByRole("link", { name: "Import from Claude" }).click();
+    await openSettings(page, "Import from Claude");
     await page.locator(".import-drop input[type=file]").setInputFiles({ name: "data-2026-04-02.zip", mimeType: "application/zip", buffer });
     await expect(page.locator(".import-summary")).toContainText("1 chats with 2 messages");
     const keep = page.getByRole("checkbox", { name: /Keep the imported chats as a backup/ });

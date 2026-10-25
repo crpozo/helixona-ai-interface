@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import JSZip from "jszip";
 import { expect, test } from "@playwright/test";
-import { devLogin, samplePdf, skipTraining, uniqueUser, watchErrors } from "./helpers";
+import { devLogin, samplePdf, skipTraining, uniqueUser, watchErrors, openSettings } from "./helpers";
 
 /** A small archive: a CSV the fake model reads, a PDF, and a type the tools cannot read. */
 function sampleZip(): JSZip {
@@ -118,7 +118,7 @@ test.describe("Conversations", () => {
     await page.getByRole("searchbox", { name: "Search chats" }).press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
     // The documentation opens beside the sidebar, which stays.
-    await page.getByRole("link", { name: "Documentation" }).click();
+    await openSettings(page, "Documentation");
     await expect(page).toHaveURL(/\/documentation$/);
     await expect(page.locator("#sidebar")).toBeVisible();
     await page.locator(".conv-list .conv-select").first().click();

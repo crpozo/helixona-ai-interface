@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ANSWER_KEY, devLogin, uniqueUser, watchErrors } from "./helpers";
+import { ANSWER_KEY, devLogin, uniqueUser, watchErrors, openSettings } from "./helpers";
 
 test.describe("Workforce training", () => {
   test("a new user is gated, takes the course module by module and is let in when done", async ({ page, context }) => {
@@ -47,7 +47,7 @@ test.describe("Workforce training", () => {
     await expect(page.locator(".home-start")).toBeVisible();
     await expect(page.locator(".training-gate")).toHaveCount(0);
     // Coming back shows the completion, with every module open for review.
-    await page.getByRole("link", { name: "Training" }).click();
+    await openSettings(page, "Training");
     await expect(page.locator(".course-step.current")).toContainText("Training complete");
     await expect(page.locator(".course-step.done")).toHaveCount(9);
     errs.expectNone();

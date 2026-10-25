@@ -474,7 +474,38 @@ label {
 .shell {
   display: grid;
   grid-template-columns: var(--sidebar-w, 272px) 6px 1fr;
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
+  overflow: hidden;
+}
+.main {
+  overflow: hidden;
+}
+/* Scrollbars like macOS: thin, rounded, on a transparent track, only where there is something to scroll. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(244, 241, 234, 0.22) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(244, 241, 234, 0.22);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(244, 241, 234, 0.4);
+  background-clip: content-box;
+  border: 2px solid transparent;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 .shell.sidebar-hidden {
   grid-template-columns: 0 0 1fr;
@@ -1792,6 +1823,30 @@ td {
   font-size: 0.82rem;
   font-weight: 500;
   color: var(--muted);
+}
+/* A section's title folds it away and brings it back. */
+.section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: -0.45rem;
+  padding: 0.15rem 0.45rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.section-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.section-toggle .icon {
+  transition: transform 0.15s ease;
+}
+.section-toggle .rotated {
+  transform: rotate(90deg);
 }
 .project-list {
   flex: none;

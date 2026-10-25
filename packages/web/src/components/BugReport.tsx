@@ -9,8 +9,20 @@ const MAX = 2000;
  * "Report a bug" in the sidebar: a row that opens a small text box; the description goes by email
  * to the person who runs the assistant. Nothing is stored in the app beyond an audit entry.
  */
-export function BugReport() {
-  const [open, setOpen] = useState(false);
+interface Props {
+  /** Controlled from the settings menu: no row of its own; `onClose` when the box closes. */
+  open?: boolean;
+  onClose?: () => void;
+}
+
+export function BugReport({ open: controlled, onClose }: Props = {}) {
+  const [own, setOwn] = useState(false);
+  const open = controlled ?? own;
+  const setOpen = (v: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof v === "function" ? v(open) : v;
+    if (controlled === undefined) setOwn(next);
+    else if (!next) onClose?.();
+  };
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -47,10 +59,12 @@ export function BugReport() {
 
   return (
     <div className={`bug-report${open ? " open" : ""}`}>
-      <button type="button" className="side-link" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-controls="bug-report-form">
-        <Icon name="bug" />
-        <span>Report a bug</span>
-      </button>
+      {controlled === undefined && (
+        <button type="button" className="side-link" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-controls="bug-report-form">
+          <Icon name="bug" />
+          <span>Report a bug</span>
+        </button>
+      )}
       {open && (
         <form
           id="bug-report-form"

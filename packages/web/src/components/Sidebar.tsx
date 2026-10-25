@@ -59,7 +59,24 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
   const [searchOpen, setSearchOpen] = useState(false);
   // Projects whose whole chat list is shown in the sidebar ("View all").
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // Sections folded away (Projects, Shared projects, Chats), remembered in this browser.
+  const [folded, setFolded] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem("hx.sidebar.folded") ?? "{}") as Record<string, boolean>; } catch { return {}; }
+  });
+  const toggleSection = (key: string) =>
+    setFolded((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try { localStorage.setItem("hx.sidebar.folded", JSON.stringify(next)); } catch { /* private window */ }
+      return next;
+    });
+  const sectionTitle = (key: string, label: string) => (
+    <button type="button" className="section-toggle" onClick={() => toggleSection(key)} aria-expanded={!folded[key]} aria-controls={`section-${key}`}>
+      <Icon name="chevron" size={13} className={folded[key] ? "" : "rotated"} />
+      <span className="section-title">{label}</span>
+    </button>
+  );
   const { tip, bind } = useTip();
+  const [bugOpen, setBugOpen] = useState(false);
   /** Chats shown under a project before "View all". */
   const SHOWN_PER_PROJECT = 4;
   const isAdmin = me.user.roles.includes("admin");
@@ -270,46 +287,47 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
           <Icon name="plus" size={16} />
           <span>New chat</span>
         </button>
-        {link("/training", "Training", "cap", onTraining)}
-        {link("/documentation", "Documentation", "book", onDocs)}
         {isAdmin && link("/admin", "Administration", "sliders", onAdmin)}
-        {link("/import", "Import from Claude", "download", onImport)}
-        <BugReport />
       </nav>
 
       <div className="sidebar-scroll">
         <nav className="project-list" aria-label="Projects">
           <div className="section-head">
-            <span className="section-title">Projects</span>
+            {sectionTitle("projects", "Projects")}
             <button type="button" className="icon-btn" onClick={() => onNewProject("private")} aria-label="New project" title="New project">
               <Icon name="plus" size={15} />
             </button>
           </div>
-          {mine.length === 0 && <p className="muted small side-empty">No projects yet. A project gives every conversation in it the same instructions and files.</p>}
-          <ul>{mine.map(projectGroup)}</ul>
+          <div id="section-projects" hidden={!!folded["projects"]}>
+            {mine.length === 0 && <p className="muted small side-empty">No projects yet. A project gives every conversation in it the same instructions and files.</p>}
+            <ul>{mine.map(projectGroup)}</ul>
+          </div>
         </nav>
 
         <nav className="project-list shared-project-list" aria-label="Shared projects">
           <div className="section-head">
-            <span className="section-title">Shared projects</span>
+            {sectionTitle("shared", "Shared projects")}
             <button type="button" className="icon-btn" onClick={() => onNewProject("shared")} aria-label="New shared project" title="New shared project">
               <Icon name="plus" size={15} />
             </button>
           </div>
-          {shared.length === 0 && <p className="muted small side-empty">No shared projects yet. In a shared project, the people you choose see and continue the same chats.</p>}
-          <ul>{shared.map(projectGroup)}</ul>
+          <div id="section-shared" hidden={!!folded["shared"]}>
+            {shared.length === 0 && <p className="muted small side-empty">No shared projects yet. In a shared project, the people you choose see and continue the same chats.</p>}
+            <ul>{shared.map(projectGroup)}</ul>
+          </div>
         </nav>
 
         <nav className="conv-list" aria-label="Conversation list">
-          <div className="section-head">
-            <span className="section-title">Chats</span>
+          <div className="section-head">{sectionTitle("chats", "Chats")}</div>
+          <div id="section-chats" hidden={!!folded["chats"]}>
+            {loose.length === 0 && <p className="muted small side-empty">{conversations.length === 0 ? "You don't have any conversations yet." : "All your conversations are in projects."}</p>}
+            <ul>{loose.map((c) => conversationItem(c))}</ul>
           </div>
-          {loose.length === 0 && <p className="muted small side-empty">{conversations.length === 0 ? "You don't have any conversations yet." : "All your conversations are in projects."}</p>}
-          <ul>{loose.map((c) => conversationItem(c))}</ul>
         </nav>
       </div>
 
       <div className="sidebar-foot">
+        {bugOpen && <BugReport open onClose={() => setBugOpen(false)} />}
         <div className="user-row" title={me.user.email}>
           <span className="avatar" aria-hidden="true">
             {initials(me.user.name)}
@@ -318,9 +336,18 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
             <span className="user-name">{me.user.name}</span>
             <span className="muted small">{isAdmin ? "Administrator" : "Staff"}</span>
           </span>
-          <button type="button" className="icon-btn" onClick={onLogout} aria-label="Sign out" title="Sign out">
-            <Icon name="logout" size={17} />
-          </button>
+          <RowMenu
+            name="settings"
+            label="Settings"
+            icon="gear"
+            items={[
+              { label: "Training", icon: "cap", onSelect: onTraining },
+              { label: "Documentation", icon: "book", onSelect: onDocs },
+              ...(isAdmin ? [{ label: "Import from Claude", icon: "download" as const, onSelect: onImport }] : []),
+              { label: "Report a bug", icon: "bug", onSelect: () => setBugOpen(true) },
+              { label: "Sign out", icon: "logout", onSelect: onLogout },
+            ]}
+          />
         </div>
       </div>
       {tip}

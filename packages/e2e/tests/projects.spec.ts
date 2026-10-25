@@ -53,6 +53,12 @@ test.describe("Projects", () => {
     await page.getByRole("button", { name: "New chat in EOB review" }).click();
     await expect(page.getByPlaceholder("How can I help you today?")).toBeVisible();
 
+    // The section folds away and comes back.
+    await page.locator(".section-toggle[aria-controls='section-projects']").click();
+    await expect(page.locator("#section-projects")).toBeHidden();
+    await page.locator(".section-toggle[aria-controls='section-projects']").click();
+    await expect(page.locator("#section-projects")).toBeVisible();
+
     // Renaming from the sidebar row changes the page too.
     await page.locator(".project-row").first().hover();
     await page.locator(".project-list").getByRole("button", { name: "Options for EOB review" }).click();

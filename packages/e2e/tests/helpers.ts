@@ -78,3 +78,9 @@ export async function noHorizontalOverflow(page: Page): Promise<void> {
   const [scrollWidth, innerWidth] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
   expect(scrollWidth, `horizontal overflow on ${page.url()}`).toBeLessThanOrEqual(innerWidth!);
 }
+
+/** Opens an entry of the settings menu at the foot of the sidebar (Training, Documentation, Import from Claude, Report a bug). */
+export async function openSettings(page: Page, item: string): Promise<void> {
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("menuitem", { name: item }).click();
+}

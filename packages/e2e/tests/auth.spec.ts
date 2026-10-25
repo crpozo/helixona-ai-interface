@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { devLogin, skipTraining, uniqueUser, watchErrors } from "./helpers";
+import { devLogin, skipTraining, uniqueUser, watchErrors, openSettings } from "./helpers";
 
 test.describe("Sign-in and session", () => {
   test("private routes send a visitor to the sign-in page; the documentation stays public", async ({ page }) => {
@@ -28,7 +28,7 @@ test.describe("Sign-in and session", () => {
     await page.goto("/", { waitUntil: "load" });
     await expect(page.locator(".training-gate")).toBeVisible();
     await expect(page.locator(".training-gate h1")).toContainText("One step before you start");
-    await page.getByRole("button", { name: "Sign out" }).click();
+    await openSettings(page, "Sign out");
     await expect(page).toHaveURL(/\/login$/);
     await page.goto("/", { waitUntil: "load" });
     await expect(page).toHaveURL(/\/login$/);

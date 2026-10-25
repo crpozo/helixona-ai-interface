@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { devLogin, skipTraining, uniqueUser, watchErrors } from "./helpers";
+import { devLogin, skipTraining, uniqueUser, watchErrors, openSettings } from "./helpers";
 
 test.describe("Report a bug", () => {
   test("the sidebar opens a small text box and the report is sent", async ({ page, context }) => {
@@ -8,7 +8,7 @@ test.describe("Report a bug", () => {
     await skipTraining(context);
     await page.goto("/", { waitUntil: "load" });
     await expect(page.locator("#bug-report-form")).toHaveCount(0);
-    await page.getByRole("button", { name: "Report a bug" }).click();
+    await openSettings(page, "Report a bug");
     const box = page.locator("#bug-report-text");
     await expect(box).toBeFocused();
     const send = page.locator("#bug-report-form").getByRole("button", { name: "Send" });
@@ -20,7 +20,7 @@ test.describe("Report a bug", () => {
     await expect(page.locator(".bug-report-sent")).toHaveText("Sent. Thank you!");
     // Cancel closes the box without sending.
     await expect(page.locator("#bug-report-form")).toHaveCount(0, { timeout: 8000 });
-    await page.getByRole("button", { name: "Report a bug" }).click();
+    await openSettings(page, "Report a bug");
     await page.locator("#bug-report-form").getByRole("button", { name: "Cancel" }).click();
     await expect(page.locator("#bug-report-form")).toHaveCount(0);
     errs.expectNone();
