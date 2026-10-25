@@ -1,0 +1,30 @@
+# Manual probe: fetches the public page shell and its files and prints status lines and headers.
+# No secrets, no environment, no sign-in; nothing from a conversation is ever printed.
+name: Probe site
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Site to probe
+        default: https://ai.helixona.com
+        required: true
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Page shell
+        run: |
+          set -x
+          U="${{ inputs.url }}"
+          curl -sS -D - -o /tmp/index.html "$U/" | head -40
+          echo "--- index.html ---"; cat /tmp/index.html; echo
+          curl -sS -D - -o /dev/null "$U/admin" | head -30
+          curl -sS -D - -o /dev/null "$U/api/health" | head -30
+          curl -sS "$U/api/health"; echo
+      - name: Files named by the shell
+        run: |
+          U="${{ inputs.url }}"
+          for f in $(grep -oE '(src|href)="/[^"]+"' /tmp/index.html | sed -E 's/^(src|href)="//; s/"$//'); do
+            echo "=== $f"; curl -sS -D - -o /tmp/f -r 0-200 "$U$f" | head -25; echo "--- first bytes:"; head -c 200 /tmp/f; echo
+          done
