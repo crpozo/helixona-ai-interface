@@ -28,6 +28,8 @@ export interface ToolContext {
   remainingTokens: number;
   /** Characters of text the tool may return in all (about 3.5 per token). */
   maxChars: number;
+  /** A long-running tool reports what it is doing; the line in the activity list follows it. */
+  progress?: (text: string) => void;
 }
 
 /** A tool call the model made. */
@@ -43,6 +45,8 @@ export interface ToolOutput {
   isError?: boolean;
   /** What was done, in words for the person ("Read 3 files from EOBs.zip: a, b, c"). */
   summary: string;
+  /** What the tool itself spent on models (a review that fans out over files), counted into the turn. */
+  usage?: UsageSummary;
 }
 
 /** Tools the model may use during a turn. They run here, on the server, between rounds. */
@@ -213,6 +217,8 @@ export class ModelRouter {
       let toolsExhausted = false;
       const contextLimit = this.opts.contextLimitTokens ?? 900_000;
       const usage: UsageSummary = { ...EMPTY_USAGE };
+      // What the tools spent on their own model calls (priced by them), added to the turn's cost.
+      const toolUsage: UsageSummary = { ...EMPTY_USAGE };
       let currentModel = model;
       let refusalFallback = false;
       let round = 0;
@@ -295,17 +301,24 @@ export class ModelRouter {
               toolsExhausted = true;
               log.warn("tool_budget_exhausted", { model: currentModel, inputTokens: roundContext, attempt: round });
             }
-            const ctx: ToolContext = { remainingTokens: share, maxChars: Math.floor(share * CHARS_PER_TOKEN) };
             input.emit({ type: "step", steps: calls.map((c) => ({ id: c.id, text: tools.describe({ id: c.id, name: c.name, input: c.input }), state: "running" as const })) });
             const results = await Promise.all(
               calls.map(async (c): Promise<BetaToolResultBlockParam> => {
                 const call: ToolCall = { id: c.id, name: c.name, input: c.input };
+                const ctx: ToolContext = { remainingTokens: share, maxChars: Math.floor(share * CHARS_PER_TOKEN), progress: (text) => input.emit({ type: "step", steps: [{ id: c.id, text, state: "running" }] }) };
                 const t0 = this.now().getTime();
                 let out: ToolOutput;
                 try {
                   out = noRoom
                     ? { content: [{ type: "text", text: "The conversation is nearly full: no more can be read in this turn. Answer now with what you have read, say exactly what you did not get to, and suggest a new conversation (or a narrower question) for the rest." }], isError: true, summary: `${tools.describe(call)}: no room left in the conversation` }
                     : await Promise.race([tools.execute(call, controller.signal, ctx), untilAborted(controller.signal)]);
+                  if (out.usage) {
+                    toolUsage.inputTokens += out.usage.inputTokens;
+                    toolUsage.outputTokens += out.usage.outputTokens;
+                    toolUsage.cacheReadTokens += out.usage.cacheReadTokens;
+                    toolUsage.cacheWriteTokens += out.usage.cacheWriteTokens;
+                    toolUsage.estimatedUsd += out.usage.estimatedUsd;
+                  }
                 } catch (e) {
                   if (controller.signal.aborted) throw e;
                   log.warn("tool_error", { action: c.name, errorClass: e instanceof Error ? e.name : "unknown", attempt: round });
@@ -343,7 +356,11 @@ export class ModelRouter {
           const iterFallback = (final.usage?.iterations ?? []).some((i) => (i as { type: string }).type === "fallback_message");
           const hadFallback = refusalFallback || iterFallback || servedModel !== model;
           const fallbackReason: PinReason | null = hadFallback ? "refusal" : availabilitySwitch;
-          usage.estimatedUsd = estimateUsd(this.opts.catalog, servedModel, usage);
+          usage.estimatedUsd = estimateUsd(this.opts.catalog, servedModel, usage) + toolUsage.estimatedUsd;
+          usage.inputTokens += toolUsage.inputTokens;
+          usage.outputTokens += toolUsage.outputTokens;
+          usage.cacheReadTokens += toolUsage.cacheReadTokens;
+          usage.cacheWriteTokens += toolUsage.cacheWriteTokens;
           const contextTokens = (final.usage?.input_tokens ?? 0) + (final.usage?.cache_read_input_tokens ?? 0) + (final.usage?.cache_creation_input_tokens ?? 0) + (final.usage?.output_tokens ?? 0);
           this.breaker.recordSuccess(model);
 

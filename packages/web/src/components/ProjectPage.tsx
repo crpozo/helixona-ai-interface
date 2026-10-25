@@ -63,6 +63,7 @@ export function fileState(k: AttachmentMeta): string {
   const r = k.reading;
   if (k.contentType !== "application/pdf" || r?.state === "done") return "On request";
   if (r?.state === "failed") return "Could not be read";
+  if (r?.phase === "summarizing") return "Preparing summary…";
   return r?.pages ? `Reading ${Math.min(r.pagesDone ?? 0, r.pages).toLocaleString("en-US")} of ${r.pages.toLocaleString("en-US")} pages` : "Reading…";
 }
 

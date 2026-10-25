@@ -364,7 +364,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
             type: "document",
             title: "Project library",
             context: "The project's files that are not in this conversation. Read them on request with the tools: search_project_files to find which file and page mention something, list_project_files for the list, read_project_file for a file or a range of its pages. Cite the file and page of what you use; never describe a file you have not read.",
-            source: { type: "text", media_type: "text/plain", data: deps.library.manifest(project, libraryFiles) },
+            source: { type: "text", media_type: "text/plain", data: await deps.library.manifest(project, libraryFiles) },
             cache_control: { type: "ephemeral", ttl: "1h" },
           } as BetaContentBlockParam);
         }

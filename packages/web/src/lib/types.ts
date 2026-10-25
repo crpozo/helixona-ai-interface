@@ -142,7 +142,7 @@ export interface AttachmentMeta {
   /** A project file: whether it travels with every message or is read on request from the project's library. */
   mode?: "whole" | "library";
   /** A library PDF read page by page in the background: how far it got. */
-  reading?: { state: "pending" | "done" | "failed"; pages: number | null; pagesDone?: number; failedPages?: string[] };
+  reading?: { state: "pending" | "done" | "failed"; pages: number | null; pagesDone?: number; failedPages?: string[]; phase?: "reading" | "summarizing"; digest?: boolean };
 }
 
 export interface AttachmentLimits {

@@ -380,7 +380,7 @@ describe("Large attachments in a conversation", () => {
     const first = calls[0]!.messages[0]!.content as Array<{ type: string; title?: string; source?: { data?: string } }>;
     expect(first.map((b) => b.title)).toEqual(["Agreement.pdf", "Project library", undefined]);
     expect(first[1]!.source!.data).toContain("Submission.pdf · 120 pages · ready");
-    expect(calls[0]!.tools?.map((t) => (t as { name: string }).name)).toEqual(["list_project_files", "search_project_files", "read_project_file"]);
+    expect(calls[0]!.tools?.map((t) => (t as { name: string }).name)).toEqual(["list_project_files", "search_project_files", "read_project_file", "review_project_files"]);
 
     // Search and a page range, straight through the tools.
     const tools = deps.library!.tools(await deps.repos.projects.get(p.id) as never);
@@ -393,6 +393,27 @@ describe("Large attachments in a conversation", () => {
     expect(text).not.toContain("(p. 11)");
     const have = await tools.execute({ id: "w", name: "read_project_file", input: { name: "Agreement.pdf" } }, new AbortController().signal);
     expect(have.summary).toBe("Agreement.pdf is already in the conversation");
+
+    // The file was digested after its reading: the list carries a paragraph per file, and the full notes come on request.
+    expect(after.knowledge[1].reading.digest).toBe(true);
+    expect(first[1]!.source!.data).toMatch(/Submission\.pdf · 120 pages · ready\n {4}\S/);
+    const digest = await tools.execute({ id: "d", name: "read_project_file", input: { name: "Submission.pdf", digest: true } }, new AbortController().signal);
+    expect((digest.content as Array<{ text: string }>)[0]!.text).toContain("=== Digest of Submission.pdf (120 pages) ===");
+    expect((digest.content as Array<{ text: string }>)[0]!.text).toContain("## pp. 1–40");
+
+    // A review reads every piece against a question, in parallel, reports progress and what it cost.
+    const seen: string[] = [];
+    const review = await tools.execute({ id: "v", name: "review_project_files", input: { question: "Every hemoglobin value with its date" } }, new AbortController().signal, { remainingTokens: 200_000, maxChars: 700_000, progress: (t) => seen.push(t) });
+    expect(review.isError).toBeFalsy();
+    expect(review.summary).toBe('Reviewed 1 file (120 pages) for "Every hemoglobin value with its date"');
+    const findings = (review.content as Array<{ text: string }>)[0]!.text;
+    expect(findings).toContain("Reviewed 1 file, 120 pages in 3 parts for: Every hemoglobin value with its date");
+    expect(findings).toContain("### Submission.pdf (pp. 1–40)");
+    expect(findings).toContain("### Submission.pdf (pp. 81–120)");
+    expect(seen[0]).toContain("0 of 3 parts done");
+    expect(seen.at(-1)).toContain("3 of 3 parts done");
+    expect(review.usage!.inputTokens).toBeGreaterThan(0);
+    expect(review.usage!.estimatedUsd).toBeGreaterThan(0);
 
     // Many files are fine: the cap is 200 per project, and a 90 MB file is accepted.
     const too = await app.inject({ method: "POST", url: `/api/projects/${p.id}/knowledge`, headers: { ...H, cookie }, payload: { name: "Huge.pdf", size: 90 * MiB, contentType: "application/pdf" } });

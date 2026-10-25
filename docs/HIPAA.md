@@ -309,10 +309,17 @@ added, files travel with every message of the project while they fit one request
 about 200,000 tokens together; the rest form the project's **library**. A library PDF is read page
 by page in the background right after it is added (the project page shows the progress; the cost
 is charged to the person who added it, under `project_file_read` in the audit log), and the
-transcription is kept under the project (`projects/<project>/<file>/reading-v1/`). The model
-receives the list of library files with every message and three tools to search, list and read
-them on request, so a project can hold a whole record request without a size wall and without
-filling the conversation. A ZIP (up to 100 MB) is one attachment: the assistant reads inside it in
+transcription is kept under the project (`projects/<project>/<file>/reading-v1/`). Right after the
+reading, the same worker model writes a digest of the file (a paragraph, then notes per range of
+40 pages), kept next to the transcription. The model receives the list of library files with every
+message, each with its digest paragraph, and four tools: list, search, read (a file, a range of
+pages or the digest) and **review**, which reads every page of the library against a question in
+parallel pieces of 40 pages and returns the merged findings with file and page cited. A broad
+request ("analyze the records") is answered through the review, so a project can hold a whole
+record request without a size wall and without filling the conversation. Every tool call gets a
+budget from the room left in the conversation, and results older than the last three rounds of a
+turn shrink to a line. The review's model calls are counted in the turn's cost and the person's
+daily quota; digests, like readings, are charged to whoever added the file. A ZIP (up to 100 MB) is one attachment: the assistant reads inside it in
 parts, as described under "ZIP archives" below.
 
 - **Sent whole** when they fit one request: up to 15 MB and 100 pages per file, 19 MB and 150 pages

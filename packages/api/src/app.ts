@@ -132,7 +132,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
     });
   }
   if (deps.attachments && deps.reader && !deps.library) {
-    deps.library = new ProjectLibrary({ store: deps.attachments, reader: deps.reader, repos: deps.repos, log: deps.log, sheetChars: Math.min(deps.config.SHEET_MODEL_CHARS, sheetCharBudget(deps.config.CONTEXT_LIMIT_TOKENS)), ...(deps.now ? { now: deps.now } : {}) });
+    deps.library = new ProjectLibrary({ store: deps.attachments, reader: deps.reader, provider: deps.provider, catalog: deps.catalog, effort: deps.config.READER_EFFORT, repos: deps.repos, log: deps.log, sheetChars: Math.min(deps.config.SHEET_MODEL_CHARS, sheetCharBudget(deps.config.CONTEXT_LIMIT_TOKENS)), ...(deps.now ? { now: deps.now } : {}), ...(deps.config.NODE_ENV === "test" ? { retryDelaysMs: [10, 10, 10] } : {}) });
   }
 
   registerAuthRoutes(app, deps, secure);
