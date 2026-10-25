@@ -36,7 +36,7 @@ export const LIBRARY = {
   /** Bumped when the digest instructions change, so older digests are redone. */
   digestVersion: "v1",
   /** A review estimated above this many dollars is proposed to the person first, with cheaper alternatives. */
-  confirmAboveUsd: 1,
+  confirmAboveUsd: 10,
   /** Rough tokens a transcribed page costs the reviewer, and what one piece answers with. */
   tokensPerPage: 650,
   outputTokensPerPiece: 900,
