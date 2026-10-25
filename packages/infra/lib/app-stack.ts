@@ -312,6 +312,9 @@ export class AppStack extends cdk.Stack {
       },
     });
     this.targetGroup.addTarget(this.service);
+    // During a rolling deploy old and new containers answer side by side: a page shell from the new one
+    // must get its files from the new one too, so each browser sticks to one container for a while.
+    this.targetGroup.enableCookieStickiness(cdk.Duration.hours(1));
 
     if (props.albHttpsSecurityGroup) this.loadBalancer.addSecurityGroup(props.albHttpsSecurityGroup);
 

@@ -12,6 +12,9 @@ if (import.meta.env.MODE === "demo") {
   installMockApi();
 }
 
+// The bundle loaded: forget any reloads the page shell made while a rollout was in progress.
+try { sessionStorage.removeItem("hx.asset.retry"); } catch { /* private window */ }
+
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
 
