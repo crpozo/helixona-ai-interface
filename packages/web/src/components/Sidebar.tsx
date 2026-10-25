@@ -165,7 +165,6 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
             onClick={() => onSelect(c.id)}
             {...bind(`${c.title}${inSharedProject && c.createdByName ? ` · started by ${c.createdByName}` : ""}`)}
           >
-            <span className="conv-dot" aria-hidden="true" />
             <span className="conv-title">{c.title}</span>
           </button>
           <div className="conv-actions">

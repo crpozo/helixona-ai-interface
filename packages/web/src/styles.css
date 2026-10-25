@@ -70,8 +70,14 @@ p {
 }
 
 :focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm, 6px);
+}
+/* Form controls show the ring on a plain click; a quiet border is enough for the model selector. */
+.model-switch:focus,
+.model-switch:focus-visible {
+  outline: none;
 }
 
 .visually-hidden {
@@ -670,7 +676,7 @@ label {
   background: var(--surface-2);
 }
 .sidebar li.active .conv-title {
-  color: var(--brand-primary);
+  color: var(--text);
 }
 .project-row {
   display: flex;
@@ -699,7 +705,7 @@ label {
   background: var(--surface-2);
 }
 .project-group.active > .project-row .conv-title {
-  color: var(--brand-primary);
+  color: var(--text);
 }
 .project-chats {
   margin: 0 0 0.3rem 0.95rem;
@@ -715,18 +721,6 @@ label {
 }
 .view-all:hover {
   color: var(--text);
-}
-/* A small hollow dot marks a chat, like Claude; the project keeps its folder icon. */
-.conv-dot {
-  width: 7px;
-  height: 7px;
-  border: 1.5px solid var(--muted);
-  border-radius: 50%;
-  flex: none;
-  opacity: 0.8;
-}
-.sidebar li.active .conv-dot {
-  border-color: var(--brand-primary);
 }
 .project-empty {
   padding: 0.25rem 0.5rem 0.35rem;
@@ -1863,7 +1857,6 @@ td {
 }
 .project-list li.active:not(.project-group) {
   background: var(--surface-2);
-  box-shadow: inset 3px 0 0 var(--brand-primary);
 }
 .model-switch {
   width: auto;

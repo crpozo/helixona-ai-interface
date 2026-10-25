@@ -74,6 +74,25 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
   useEffect(() => {
     if (followRef.current) scrollToBottom();
   }, [count, lastText, lastFiles, state.streaming, scrollToBottom]);
+  // Anything else that grows the list (the steps and timer of a pending answer, an image that
+  // finished loading, a card that expanded) keeps the bottom in view while following.
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (followRef.current) scrollToBottom();
+    });
+    for (const child of Array.from(el.children)) ro.observe(child);
+    const mo = new MutationObserver((records) => {
+      for (const r of records) for (const n of Array.from(r.addedNodes)) if (n instanceof Element) ro.observe(n);
+      if (followRef.current) scrollToBottom();
+    });
+    mo.observe(el, { childList: true });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
+  }, [conversation.id, loading, scrollToBottom]);
 
   // Spreadsheets attached in this conversation, for workbooks that copy their rows ({{file: …}}). The
   // lookup keeps one identity per conversation, so memoized messages do not re-render.
