@@ -110,22 +110,15 @@ test.describe("Administration", () => {
     await expect(months.locator("tbody tr").first().locator("td").nth(1)).not.toHaveText("0");
     // The detail of the month names the user.
     await expect(page.locator(".usage-by-user tbody")).toContainText("billing");
-    // Billing: budget and credits.
+    // Billing: the month against the spend limit, as in the Claude Console.
     await page.getByRole("tab", { name: "Billing" }).click();
-    await expect(page.getByText("No credits recorded yet")).toBeVisible();
-    // A monthly budget: the month so far against it.
-    await expect(page.getByText("No monthly budget set yet")).toBeVisible();
-    await page.getByLabel("Monthly budget (USD)").fill("1000");
-    await page.getByRole("button", { name: "Save budget" }).click();
+    await expect(page.getByText("No monthly spend limit recorded yet")).toBeVisible();
+    await page.getByLabel("Monthly spend limit (USD)").fill("1000");
+    await page.getByRole("button", { name: "Save limit" }).click();
     await expect(page.locator(".billing-budget .billing-remaining")).toContainText(/\$0\.\d\d of \$1,000\.00 used in .* · \$(1,000\.00|99\d\.\d\d) left/);
     await expect(page.locator(".budget-bar")).toHaveAttribute("aria-valuenow", "0");
-    await page.getByLabel("Credits purchased (USD)").fill("500");
-    await page.getByLabel("As of").fill("2026-01-01");
-    await page.getByLabel("Note").fill("Bought in the console");
-    await page.getByRole("button", { name: "Save credits" }).click();
-    // The fake turn costs a fraction of a cent, so the credits are (nearly) whole.
-    await expect(page.locator(".billing-credits .billing-remaining")).toContainText(/\$(499\.\d\d|500\.00) left/);
-    await expect(page.getByText(/Bought \$500\.00 as of 2026-01-01 \(Bought in the console\); spent since then \$0\.00 according to this assistant's own estimate/)).toBeVisible();
+    await expect(page.locator(".budget-pct")).toHaveText("0% used");
+    await expect(page.getByRole("link", { name: /Billing: balance, auto-reload, spend limit/ })).toHaveAttribute("href", "https://console.anthropic.com/settings/billing");
     errs.expectNone();
   });
 });

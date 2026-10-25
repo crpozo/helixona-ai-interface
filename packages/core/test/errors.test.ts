@@ -12,7 +12,13 @@ describe("classifyError", () => {
     expect(c.kind).toBe("billing");
     expect(c.fallback).toBe(false);
     expect(c.alarm).toBe(true);
-    expect(userMessageFor(c, false)).toMatch(/run out of credit/);
+    expect(userMessageFor(c, false, "Carlos")).toMatch(/no credit left.*contact Carlos to add credit/);
+  });
+  it("the organization's monthly spend limit in the Console is billing, and the message says where to raise it", () => {
+    const c = classifyError(apiError(400, "You have reached your specified API usage limits. You will regain access on Nov 1, 2026 at 00:00 UTC."));
+    expect(c.kind).toBe("billing");
+    expect(c.detail).toBe("spend_limit");
+    expect(userMessageFor(c, false, "Carlos")).toMatch(/no credit left for this month.*contact Carlos to increase it/);
   });
   it("a 400 naming the model is a configuration problem with a long breaker, and the message says what the provider said", () => {
     const c = classifyError(apiError(400, "The requested model is not supported"));

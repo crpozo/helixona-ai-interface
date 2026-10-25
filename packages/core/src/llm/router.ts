@@ -20,6 +20,8 @@ export interface ModelRouterOptions {
   availabilityPinMinutes?: number;
   /** The conversation may not grow past this many tokens; tool results are cut to fit (default 900k). */
   contextLimitTokens?: number;
+  /** Who to contact when the provider account needs attention; named in the messages ("the administrator" when unset). */
+  adminContact?: string;
   now?: () => Date;
 }
 
@@ -405,7 +407,7 @@ export class ModelRouter {
         }
         const code = cls.kind === "availability" || cls.kind === "config" || cls.kind === "billing" ? "model_unavailable" : cls.kind === "bug" ? "bad_request" : "internal";
         const backupPaused = candidates.slice(ci + 1).some((id) => this.breaker.isOpen(id));
-        const message = code === "model_unavailable" ? userMessageFor(cls, backupPaused) : round > 1 && cls.kind === "bug" ? "The request grew too large while the files were being read. Ask a narrower question, or name the files or pages to look at, and try again." : "The request could not be completed";
+        const message = code === "model_unavailable" ? userMessageFor(cls, backupPaused, this.opts.adminContact) : round > 1 && cls.kind === "bug" ? "The request grew too large while the files were being read. Ask a narrower question, or name the files or pages to look at, and try again." : "The request could not be completed";
         input.emit({ type: "error", code, message, retryable: code === "model_unavailable" || code === "internal" || round > 1, partial: emittedChars > 0 });
         return this.failure(startModel, cls, latencyMs, emittedChars > 0);
       }

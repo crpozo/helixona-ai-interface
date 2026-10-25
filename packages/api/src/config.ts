@@ -49,6 +49,8 @@ const Env = z.object({
   /** Lets a user skip the online training by attesting they already know it; the log shows the attestation. */
   TRAINING_ALLOW_SKIP: z.enum(["true", "false"]).default("true"),
   FIRST_EVENT_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
+  /** Who staff should contact when the provider account needs attention (credit, spend limit); named in the error messages. */
+  ADMIN_CONTACT: z.string().trim().min(1).default("Carlos"),
   LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(600000),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   MAX_MESSAGE_CHARS: z.coerce.number().int().positive().default(20000),

@@ -15,9 +15,11 @@ import {
 export type ErrorKind = "availability" | "config" | "billing" | "bug" | "auth" | "aborted" | "unknown";
 export interface ClassifiedError { kind: ErrorKind; errorClass: string; status: number | null; fallback: boolean; alarm: boolean; breakerMs: number; detail?: ErrorDetail }
 /** What the provider's message said, reduced to a code (the message itself is never stored). */
-export type ErrorDetail = "organization_disabled" | "model_not_found" | "no_access" | "retention" | "billing" | "rate_limit" | "overloaded";
+export type ErrorDetail = "spend_limit" | "organization_disabled" | "model_not_found" | "no_access" | "retention" | "billing" | "rate_limit" | "overloaded";
 
 export function detailOf(status: number | null, message: string): ErrorDetail | undefined {
+  // The organization's own monthly cap in the Claude Console: "You have reached your specified API usage limits".
+  if (/usage limits?|spend(ing)? limit|monthly limit/i.test(message)) return "spend_limit";
   if (/credit balance|purchase credits|billing|payment/i.test(message)) return "billing";
   if (/organization (has been|is) disabled|account (has been|is) disabled/i.test(message)) return "organization_disabled";
   if (/not found|does not exist|invalid model|unknown model/i.test(message)) return "model_not_found";
@@ -31,7 +33,7 @@ export function detailOf(status: number | null, message: string): ErrorDetail | 
 const MODEL_OR_RETENTION = /(model|modelo|retention|retenci|not enabled|access|inference profile|not supported|unsupported|does not exist|invalid model)/i;
 // The provider account itself is out of credit or its billing is blocked: every model fails the same way,
 // so there is no point in a fallback or a per-model breaker; the people who run the account must act.
-const BILLING = /(credit balance|purchase credits|billing|plans? & billing|payment)/i;
+const BILLING = /(credit balance|purchase credits|billing|plans? & billing|payment|usage limits?|spend(ing)? limit|monthly limit)/i;
 
 export class FirstEventTimeoutError extends Error {
   constructor(ms: number) { super(`no first event within ${ms} ms`); this.name = "FirstEventTimeoutError"; }
@@ -76,10 +78,12 @@ function safeMessage(err: unknown): string {
 }
 
 /** What to tell the person, by the kind of failure; never the provider's own text. */
-export function userMessageFor(error: ClassifiedError, backupPaused: boolean): string {
+export function userMessageFor(error: ClassifiedError, backupPaused: boolean, adminContact?: string): string {
+  const who = adminContact ?? "the administrator";
   switch (error.kind) {
     case "billing":
-      return "The assistant's provider account has run out of credit or its billing is blocked. An administrator needs to add credit before anyone can continue.";
+      if (error.detail === "spend_limit") return `The assistant has no credit left for this month: the account's monthly spend limit has been reached. Please contact ${who} to increase it. Nothing is lost; once it is raised, click Retry.`;
+      return `The assistant has no credit left: the AI account's balance is used up. Please contact ${who} to add credit. Nothing is lost; once it is added, click Retry.`;
     case "config": {
       const why =
         error.detail === "organization_disabled"
@@ -91,7 +95,7 @@ export function userMessageFor(error: ClassifiedError, backupPaused: boolean): s
               : error.detail === "retention"
                 ? "the provider rejected the data-retention setting"
                 : "a configuration problem";
-      return `The model is not available right now: ${why}. Administrators have been alerted.`;
+      return `The model is not available right now: ${why}. Please contact ${who}.`;
     }
     case "availability":
       if (error.status === 429) return backupPaused ? "The provider is rate-limiting requests right now and the backup model is paused after recent failures. Wait a minute and try again." : "The provider is rate-limiting requests right now. Wait a minute and try again.";
