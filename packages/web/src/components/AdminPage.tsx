@@ -491,6 +491,8 @@ function ModelErrors({ me, userName }: { me: Me; userName: (id: string) => strin
       cancelled = true;
     };
   }, [day]);
+  const detailLabel = (d: unknown) =>
+    d === "organization_disabled" ? "organization disabled at the provider" : d === "model_not_found" ? "model not recognized" : d === "no_access" ? "API key has no access to the model" : d === "retention" ? "data-retention setting rejected" : d === "billing" ? "credit exhausted" : d === "rate_limit" ? "rate limit" : d === "overloaded" ? "provider overloaded" : String(d);
   const kindLabel = (k: unknown) =>
     k === "billing" ? "Provider account out of credit" : k === "config" ? "Configuration" : k === "availability" ? "Provider unavailable or rate-limited" : k === "auth" ? "API key rejected" : k === "bug" ? "Request rejected" : k === "aborted" ? "Cancelled" : String(k ?? "unknown");
   return (
@@ -531,7 +533,9 @@ function ModelErrors({ me, userName }: { me: Me; userName: (id: string) => strin
                   <td>{userName(i.userId)}</td>
                   <td>{i.model ? modelLabel(me.catalog.models, i.model) : "–"}</td>
                   <td>{kindLabel(i.meta?.kind)}</td>
-                  <td className="muted">{String(i.meta?.errorClass ?? "")}</td>
+                  <td className="muted">
+                    {[i.meta?.detail ? detailLabel(i.meta.detail) : null, i.meta?.status != null ? `HTTP ${String(i.meta.status)}` : null, String(i.meta?.errorClass ?? "")].filter(Boolean).join(" · ")}
+                  </td>
                 </tr>
               ))}
             </tbody>

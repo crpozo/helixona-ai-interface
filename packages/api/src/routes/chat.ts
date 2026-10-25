@@ -444,7 +444,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
       } else if (result.stopReason === "refusal") {
         await audit(deps, req, { action: "turn", conversationId: id, model: result.requestedModel, refusalCategory: result.refusalCategory, stopReason: "refusal", latencyMs });
       } else {
-        await audit(deps, req, { action: "turn_error", conversationId: id, model: result.requestedModel, latencyMs, meta: { errorClass: result.error?.errorClass ?? "unknown", kind: result.error?.kind ?? "unknown", partial: result.partial } });
+        await audit(deps, req, { action: "turn_error", conversationId: id, model: result.requestedModel, latencyMs, meta: { errorClass: result.error?.errorClass ?? "unknown", kind: result.error?.kind ?? "unknown", partial: result.partial, ...(result.error?.status != null ? { status: result.error.status } : {}), ...(result.error?.detail ? { detail: result.error.detail } : {}) } });
       }
     } catch (e) {
       if (phase === "files" && (ac.signal.aborted || isAbort(e))) {

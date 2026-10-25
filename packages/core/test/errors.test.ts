@@ -14,11 +14,23 @@ describe("classifyError", () => {
     expect(c.alarm).toBe(true);
     expect(userMessageFor(c, false)).toMatch(/run out of credit/);
   });
-  it("a 400 naming the model is a configuration problem with a long breaker", () => {
+  it("a 400 naming the model is a configuration problem with a long breaker, and the message says what the provider said", () => {
     const c = classifyError(apiError(400, "The requested model is not supported"));
     expect(c.kind).toBe("config");
     expect(c.breakerMs).toBe(60 * 60_000);
-    expect(userMessageFor(c, false)).toMatch(/configuration/);
+    expect(c.detail).toBe("no_access");
+    expect(userMessageFor(c, false)).toMatch(/no access to the model/);
+  });
+  it("a disabled organization is named as such", () => {
+    const c = classifyError(apiError(403, "This organization has been disabled."));
+    expect(c.kind).toBe("config");
+    expect(c.detail).toBe("organization_disabled");
+    expect(userMessageFor(c, false)).toMatch(/account as disabled/);
+  });
+  it("an unknown model is named as such", () => {
+    const c = classifyError(apiError(404, "model: claude-x not found"));
+    expect(c.detail).toBe("model_not_found");
+    expect(userMessageFor(c, false)).toMatch(/does not recognize the model/);
   });
   it("a rate limit says so, and says when the backup is paused", () => {
     const c = classifyError(apiError(429, "Rate limit exceeded"));

@@ -13,7 +13,20 @@ import {
  * - aborted: cancelado por el cliente o por el timeout de primer evento propio.
  */
 export type ErrorKind = "availability" | "config" | "billing" | "bug" | "auth" | "aborted" | "unknown";
-export interface ClassifiedError { kind: ErrorKind; errorClass: string; status: number | null; fallback: boolean; alarm: boolean; breakerMs: number }
+export interface ClassifiedError { kind: ErrorKind; errorClass: string; status: number | null; fallback: boolean; alarm: boolean; breakerMs: number; detail?: ErrorDetail }
+/** What the provider's message said, reduced to a code (the message itself is never stored). */
+export type ErrorDetail = "organization_disabled" | "model_not_found" | "no_access" | "retention" | "billing" | "rate_limit" | "overloaded";
+
+export function detailOf(status: number | null, message: string): ErrorDetail | undefined {
+  if (/credit balance|purchase credits|billing|payment/i.test(message)) return "billing";
+  if (/organization (has been|is) disabled|account (has been|is) disabled/i.test(message)) return "organization_disabled";
+  if (/not found|does not exist|invalid model|unknown model/i.test(message)) return "model_not_found";
+  if (/retention|retenci/i.test(message)) return "retention";
+  if (/permission|access|not enabled|not allowed|not supported|unsupported/i.test(message)) return "no_access";
+  if (status === 429) return "rate_limit";
+  if (status === 529 || /overloaded/i.test(message)) return "overloaded";
+  return undefined;
+}
 
 const MODEL_OR_RETENTION = /(model|modelo|retention|retenci|not enabled|access|inference profile|not supported|unsupported|does not exist|invalid model)/i;
 // The provider account itself is out of credit or its billing is blocked: every model fails the same way,
@@ -25,8 +38,10 @@ export class FirstEventTimeoutError extends Error {
 }
 
 export function classifyError(err: unknown): ClassifiedError {
-  const base = (kind: ErrorKind, errorClass: string, status: number | null, fallback: boolean, alarm: boolean, breakerMs: number): ClassifiedError =>
-    ({ kind, errorClass, status, fallback, alarm, breakerMs });
+  const base = (kind: ErrorKind, errorClass: string, status: number | null, fallback: boolean, alarm: boolean, breakerMs: number): ClassifiedError => {
+    const detail = detailOf(status, safeMessage(err));
+    return { kind, errorClass, status, fallback, alarm, breakerMs, ...(detail ? { detail } : {}) };
+  };
 
   if (err instanceof FirstEventTimeoutError) return base("availability", "FirstEventTimeoutError", null, true, false, 5 * 60_000);
   if (err instanceof APIUserAbortError) return base("aborted", "APIUserAbortError", null, false, false, 0);
@@ -65,8 +80,19 @@ export function userMessageFor(error: ClassifiedError, backupPaused: boolean): s
   switch (error.kind) {
     case "billing":
       return "The assistant's provider account has run out of credit or its billing is blocked. An administrator needs to add credit before anyone can continue.";
-    case "config":
-      return "The model is not available right now because of a configuration problem. Administrators have been alerted.";
+    case "config": {
+      const why =
+        error.detail === "organization_disabled"
+          ? "the provider reports the organization's account as disabled"
+          : error.detail === "model_not_found"
+            ? "the provider does not recognize the model"
+            : error.detail === "no_access"
+              ? "the provider says this API key has no access to the model"
+              : error.detail === "retention"
+                ? "the provider rejected the data-retention setting"
+                : "a configuration problem";
+      return `The model is not available right now: ${why}. Administrators have been alerted.`;
+    }
     case "availability":
       if (error.status === 429) return backupPaused ? "The provider is rate-limiting requests right now and the backup model is paused after recent failures. Wait a minute and try again." : "The provider is rate-limiting requests right now. Wait a minute and try again.";
       return backupPaused ? "The model's provider is overloaded or not answering, and the backup model is paused after recent failures. Try again in a moment." : "The model's provider is overloaded or not answering. Try again in a moment.";
