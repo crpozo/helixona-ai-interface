@@ -90,10 +90,13 @@ export function registerAdminRoutes(app: FastifyInstance, deps: Deps): void {
   });
 
   app.get("/api/admin/audit", { preHandler: admin }, async (req, reply) => {
-    const q = z.object({ day: Day.default(today(now)) }).safeParse(req.query);
+    // `action` narrows the day to one kind of entry (turn_error, login…); `limit` keeps the newest N.
+    const q = z.object({ day: Day.default(today(now)), action: z.string().trim().max(60).optional(), limit: z.coerce.number().int().min(1).max(5000).optional() }).safeParse(req.query);
     if (!q.success) return apiError(reply, 400, "bad_request", "Invalid request");
-    const items = await deps.repos.audit.listByDay(q.data.day);
-    await audit(deps, req, { action: "admin_audit_read", meta: { day: q.data.day } });
+    let items = await deps.repos.audit.listByDay(q.data.day);
+    if (q.data.action) items = items.filter((i) => i.action === q.data.action);
+    if (q.data.limit && items.length > q.data.limit) items = items.slice(-q.data.limit);
+    await audit(deps, req, { action: "admin_audit_read", meta: { day: q.data.day, ...(q.data.action ? { filter: q.data.action } : {}) } });
     return { items };
   });
 

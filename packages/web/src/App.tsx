@@ -473,9 +473,16 @@ export function App() {
     const t = window.setInterval(() => void refreshConversations(), 15_000);
     return () => window.clearInterval(t);
   }, [auth.status, selected, selectedShared, chat.streaming, refreshConversations]);
+  // One fetch per reported count: if the server's count and the messages on screen disagree for any
+  // other reason, refetching would not change that, and the effect must not loop on it.
+  const reloadedFor = useRef<{ id: string; count: number } | null>(null);
   useEffect(() => {
     if (!selected || !selectedShared || chat.streaming || loadingConv) return;
-    if (chat.conversationId === selected.id && selected.messageCount > chat.messages.length) void reloadMessages(selected.id);
+    if (chat.conversationId !== selected.id || selected.messageCount <= chat.messages.length) return;
+    const done = reloadedFor.current;
+    if (done && done.id === selected.id && done.count === selected.messageCount) return;
+    reloadedFor.current = { id: selected.id, count: selected.messageCount };
+    void reloadMessages(selected.id);
   }, [selected, selectedShared, chat.streaming, chat.conversationId, chat.messages.length, loadingConv, reloadMessages]);
 
   const stop = () => abortStream();
