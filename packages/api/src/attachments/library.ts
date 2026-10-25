@@ -35,6 +35,13 @@ export const LIBRARY = {
   reviewMaxChars: 240_000,
   /** Bumped when the digest instructions change, so older digests are redone. */
   digestVersion: "v1",
+  /** A review estimated above this many dollars is proposed to the person first, with cheaper alternatives. */
+  confirmAboveUsd: 1,
+  /** Rough tokens a transcribed page costs the reviewer, and what one piece answers with. */
+  tokensPerPage: 650,
+  outputTokensPerPiece: 900,
+  /** Seconds one piece takes, to estimate the wait. */
+  secondsPerPiece: 20,
 } as const;
 
 /** Instructions for the worker model that digests a piece of a file (a few pages) for the project's list. */
@@ -66,6 +73,8 @@ export interface LibraryOptions {
   now?: () => Date;
   /** Waits between retries when the model is busy (shortened in tests). */
   retryDelaysMs?: number[];
+  /** Overrides LIBRARY.confirmAboveUsd (tests). */
+  reviewConfirmUsd?: number;
 }
 
 /** A piece of a file: a range of pages of a transcription, or a slice of a text. */
@@ -119,6 +128,18 @@ export class ProjectLibrary {
   /** The worker model's id (digests and reviews are priced and audited under it). */
   get workerModel(): string {
     return this.opts.reader.modelId;
+  }
+
+  /** What a review of these files would cost and take, before running it. */
+  estimateReview(files: AttachmentMeta[]): { pages: number; pieces: number; usd: number; minutes: number } {
+    const pages = files.reduce((n, k) => n + (this.status(k)?.pages ?? k.pages ?? Math.max(1, Math.ceil(k.size / 3000))), 0);
+    const pieces = files.reduce((n, k) => n + Math.max(1, Math.ceil((this.status(k)?.pages ?? k.pages ?? 1) / LIBRARY.pagesPerRead)), 0);
+    const usd = estimateUsd(this.opts.catalog, this.workerModel, { inputTokens: pages * LIBRARY.tokensPerPage, outputTokens: pieces * LIBRARY.outputTokensPerPiece, cacheReadTokens: 0, cacheWriteTokens: 0 });
+    return { pages, pieces, usd, minutes: Math.max(1, Math.ceil((pieces / LIBRARY.concurrency) * LIBRARY.secondsPerPiece / 60)) };
+  }
+
+  get confirmAboveUsd(): number {
+    return this.opts.reviewConfirmUsd ?? LIBRARY.confirmAboveUsd;
   }
 
   /**
@@ -376,7 +397,7 @@ ${merged.join("\n\n")}`.slice(0, maxChars), usage, pieces: work.length, pages, f
 const NameField = z.string().min(1).max(200);
 const ListInput = z.object({ pattern: z.string().max(200).optional() }).strict();
 const ReadInput = z.object({ name: NameField, from_page: z.number().int().min(1).optional(), to_page: z.number().int().min(1).optional(), offset: z.number().int().min(0).optional(), max_chars: z.number().int().min(1000).max(LIBRARY.maxCharsPerRead).optional(), digest: z.boolean().optional() }).strict();
-const ReviewInput = z.object({ question: z.string().min(3).max(2000), files: z.array(NameField).max(200).optional() }).strict();
+const ReviewInput = z.object({ question: z.string().min(3).max(2000), files: z.array(NameField).max(200).optional(), confirmed: z.boolean().optional() }).strict();
 const SearchInput = z.object({ query: z.string().min(1).max(200), regex: z.boolean().optional(), max_results: z.number().int().min(1).max(LIBRARY.searchMaxResults).optional() }).strict();
 
 export const LIBRARY_TOOLS: BetaTool[] = [
@@ -418,12 +439,13 @@ export const LIBRARY_TOOLS: BetaTool[] = [
   },
   {
     name: "review_project_files",
-    description: `Reads every page of the project's library files (or of the files named) against a question or task, in parallel, and returns the merged findings with file and page citations. This is the way to answer a broad request over a large project ("analyze everything", "find every X across the records", "prepare the full review"): one call per distinct question, then write the answer from the findings. It takes a minute or more for thousands of pages and reads up to ${LIBRARY.reviewMaxPages.toLocaleString("en-US")} pages per call; beyond that, name the files. Phrase the question as the extraction you need ("every date of service, CPT code and amount billed, with the claim number" rather than "analyze").`,
+    description: `Reads every page of the project's library files (or of the files named) against a question or task, in parallel, and returns the merged findings with file and page citations. This is the way to answer a broad request over a large project ("analyze everything", "find every X across the records", "prepare the full review"): one call per distinct question, then write the answer from the findings. It takes a minute or more for thousands of pages and reads up to ${LIBRARY.reviewMaxPages.toLocaleString("en-US")} pages per call; beyond that, name the files. Phrase the question as the extraction you need ("every date of service, CPT code and amount billed, with the claim number" rather than "analyze"). A review that would cost more than about $${LIBRARY.confirmAboveUsd} is not run at once: the tool returns its estimate and you must put the choice to the person (run it, or answer more specific questions it suggests) and call again with confirmed: true only after they agree.`,
     input_schema: {
       type: "object",
       properties: {
         question: { type: "string", minLength: 3, maxLength: 2000, description: "What to look for or extract, precisely" },
         files: { type: "array", items: { type: "string" }, maxItems: 200, description: "File names to review; all library files when omitted" },
+        confirmed: { type: "boolean", description: "True only after the person agreed to the estimated cost and time of this review" },
       },
       required: ["question"],
       additionalProperties: false,
@@ -572,11 +594,20 @@ export class LibraryTools {
     if (files.length === 0) return { content: [{ type: "text", text: `No file is ready to review yet: ${notReady.map((k) => this.notReady(k)).join(" ")}` }], isError: true, summary: "Review: no file ready yet" };
     const pages = files.reduce((n, k) => n + (this.lib.status(k)?.pages ?? k.pages ?? 0), 0);
     if (pages > LIBRARY.reviewMaxPages) return { content: [{ type: "text", text: `These files have ${pages.toLocaleString("en-US")} pages; one review covers up to ${LIBRARY.reviewMaxPages.toLocaleString("en-US")}. Name the files for this question (list_project_files shows them), in two or more calls.` }], isError: true, summary: `Review: too many pages (${pages.toLocaleString("en-US")})` };
+    // A costly review is a decision for the person: they get the estimate and the cheaper alternatives first.
+    const est = this.lib.estimateReview(files);
+    const money = (v: number) => (v < 10 ? v.toFixed(2) : Math.round(v).toString());
+    if (est.usd > this.lib.confirmAboveUsd && !parsed.data.confirmed) {
+      const text = `Not run yet: this review would read ${est.pages.toLocaleString("en-US")} pages of ${files.length === 1 ? "1 file" : `${files.length} files`} in ${est.pieces} parts, about $${money(est.usd)} and ${est.minutes === 1 ? "about a minute" : `about ${est.minutes} minutes`}.
+Before running it, put the choice to the person, in their language and in a few lines: (1) run the full review for this question at that cost and time, or (2) answer two to four more specific questions instead, which cost cents and take seconds. Suggest those questions yourself from the digests in the library list (what the records are about: dates of service, claims, amounts, letters, deadlines), as a numbered list they can pick from. Then stop and wait for their answer. If they choose the full review, call review_project_files again with the same question and confirmed: true. Do not run it without their agreement.`;
+      return { content: [{ type: "text", text }], summary: `Review of ${est.pages.toLocaleString("en-US")} pages (about $${money(est.usd)}): asking first` };
+    }
     const r = await this.lib.review(this.project, files, parsed.data.question, signal, ctx?.maxChars ?? LIBRARY.reviewMaxChars, ctx?.progress);
     const note = notReady.length > 0 ? `
 
 Not reviewed, still being prepared: ${notReady.map((k) => k.name).join(", ")}.` : "";
-    return { content: [{ type: "text", text: `${r.text}${note}` }], usage: r.usage, summary: `Reviewed ${r.files === 1 ? "1 file" : `${r.files} files`}${r.pages > 0 ? ` (${r.pages.toLocaleString("en-US")} pages)` : ""} for "${parsed.data.question.length > 60 ? `${parsed.data.question.slice(0, 59)}…` : parsed.data.question}"` };
+    const cost = r.usage.estimatedUsd >= 0.01 ? ` · $${money(r.usage.estimatedUsd)}` : "";
+    return { content: [{ type: "text", text: `${r.text}${note}` }], usage: r.usage, summary: `Reviewed ${r.files === 1 ? "1 file" : `${r.files} files`}${r.pages > 0 ? ` (${r.pages.toLocaleString("en-US")} pages)` : ""} for "${parsed.data.question.length > 60 ? `${parsed.data.question.slice(0, 59)}…` : parsed.data.question}"${cost}` };
   }
 
   private async search(call: ToolCall, signal: AbortSignal): Promise<ToolOutput> {

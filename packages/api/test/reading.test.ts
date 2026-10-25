@@ -11,6 +11,7 @@ import { memoryRepos, MemoryUserDirectory } from "../src/repos/memory.js";
 import { MemoryAttachmentStore } from "../src/attachments/store.js";
 import { MemoryFeedbackSender } from "../src/feedback.js";
 import { DocumentReader } from "../src/attachments/reader.js";
+import { ProjectLibrary } from "../src/attachments/library.js";
 import { pageLabel, planChunks, planDelivery } from "../src/attachments/planner.js";
 import { INLINE, readingPrefix } from "../src/attachments/policy.js";
 import type { Deps } from "../src/deps.js";
@@ -405,7 +406,7 @@ describe("Large attachments in a conversation", () => {
     const seen: string[] = [];
     const review = await tools.execute({ id: "v", name: "review_project_files", input: { question: "Every hemoglobin value with its date" } }, new AbortController().signal, { remainingTokens: 200_000, maxChars: 700_000, progress: (t) => seen.push(t) });
     expect(review.isError).toBeFalsy();
-    expect(review.summary).toBe('Reviewed 1 file (120 pages) for "Every hemoglobin value with its date"');
+    expect(review.summary).toMatch(/^Reviewed 1 file \(120 pages\) for "Every hemoglobin value with its date" · \$0\.\d\d$/);
     const findings = (review.content as Array<{ text: string }>)[0]!.text;
     expect(findings).toContain("Reviewed 1 file, 120 pages in 3 parts for: Every hemoglobin value with its date");
     expect(findings).toContain("### Submission.pdf (pp. 1–40)");
@@ -414,6 +415,19 @@ describe("Large attachments in a conversation", () => {
     expect(seen.at(-1)).toContain("3 of 3 parts done");
     expect(review.usage!.inputTokens).toBeGreaterThan(0);
     expect(review.usage!.estimatedUsd).toBeGreaterThan(0);
+    expect(review.summary).toMatch(/· \$0\.\d\d$/);
+
+    // A review that would cost more than the threshold is not run: the model gets the estimate and must ask the person first.
+    const careful = new ProjectLibrary({ store, reader: deps.reader!, provider: deps.provider, catalog: DEFAULT_CATALOG, effort: "low", repos: deps.repos, log: noopLogger, sheetChars: 10_000, retryDelaysMs: [1], reviewConfirmUsd: 0.01 });
+    const carefulTools = careful.tools((await deps.repos.projects.get(p.id)) as never);
+    const ask = await carefulTools.execute({ id: "a", name: "review_project_files", input: { question: "Every hemoglobin value with its date" } }, new AbortController().signal);
+    expect(ask.isError).toBeFalsy();
+    expect(ask.usage).toBeUndefined();
+    expect(ask.summary).toMatch(/^Review of 120 pages \(about \$0\.\d\d\): asking first$/);
+    expect((ask.content as Array<{ text: string }>)[0]!.text).toContain("Not run yet: this review would read 120 pages of 1 file in 3 parts");
+    expect((ask.content as Array<{ text: string }>)[0]!.text).toContain("confirmed: true");
+    const go = await carefulTools.execute({ id: "g", name: "review_project_files", input: { question: "Every hemoglobin value with its date", confirmed: true } }, new AbortController().signal);
+    expect(go.summary).toContain("Reviewed 1 file (120 pages)");
 
     // Many files are fine: the cap is 200 per project, and a 90 MB file is accepted.
     const too = await app.inject({ method: "POST", url: `/api/projects/${p.id}/knowledge`, headers: { ...H, cookie }, payload: { name: "Huge.pdf", size: 90 * MiB, contentType: "application/pdf" } });
