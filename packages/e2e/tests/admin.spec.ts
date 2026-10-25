@@ -11,6 +11,8 @@ test.describe("Administration", () => {
     await page.getByRole("link", { name: "Administration" }).click();
     await expect(page).toHaveURL(/\/admin$/);
     await expect(page.getByRole("tab", { name: "Users", selected: true })).toBeVisible();
+    // The sidebar shows where you are.
+    await expect(page.getByRole("link", { name: "Administration" })).toHaveAttribute("aria-current", "page");
     // An administrator not named in the settings has no billing tab.
     await expect(page.getByRole("tab", { name: "Billing" })).toHaveCount(0);
     // The signed-in administrator appears in the Users table, with the training attested.

@@ -604,8 +604,12 @@ label {
   text-align: left;
   cursor: pointer;
 }
-.side-link:hover {
+.side-link:hover,
+.side-link.active {
   background: var(--surface-2);
+}
+.side-link.active .icon {
+  color: var(--brand-primary);
 }
 .side-link .icon {
   color: var(--muted);
@@ -1723,6 +1727,11 @@ td {
 }
 .billing-grid .card h3 {
   margin-top: 0;
+}
+/* Grid cells shrink with the page instead of pushing it wider than the window. */
+.billing-grid > *,
+.usage-grid > * {
+  min-width: 0;
 }
 .budget-row {
   display: flex;

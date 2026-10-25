@@ -32,6 +32,8 @@ interface Props {
   onImport: () => void;
   /** Desktop: hide the sidebar (a button in the main area brings it back). */
   onCollapse?: () => void;
+  /** The page open beside the sidebar ("/admin"), so its row shows as current. */
+  activeHref?: string | null;
 }
 
 function initials(name: string): string {
@@ -51,7 +53,7 @@ export function projectTag(p: Project): string {
  * chats nested underneath, then the chats that belong to no project, and the signed-in user at the
  * bottom. Rows are text with an icon; the actions (rename, delete, new chat in a project) appear on hover.
  */
-export function Sidebar({ me, conversations, projects, selectedId, projectViewId, open, onClose, onSelect, onNew, onNewInProject, onDelete, onDeleteProject, onRename, onRenameProject, onOpenProject, onNewProject, onLogout, onAdmin, onDocs, onTraining, onImport, onCollapse }: Props) {
+export function Sidebar({ me, conversations, projects, selectedId, projectViewId, open, onClose, onSelect, onNew, onNewInProject, onDelete, onDeleteProject, onRename, onRenameProject, onOpenProject, onNewProject, onLogout, onAdmin, onDocs, onTraining, onImport, onCollapse, activeHref = null }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
@@ -128,7 +130,8 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
   const link = (href: string, label: string, icon: "cap" | "book" | "sliders" | "download", go: () => void) => (
     <a
       href={href}
-      className="side-link"
+      className={`side-link${activeHref === href ? " active" : ""}`}
+      aria-current={activeHref === href ? "page" : undefined}
       onClick={(e) => {
         e.preventDefault();
         go();

@@ -573,6 +573,7 @@ export function App() {
             onDelete={(id) => void removeConversation(id)}
             onDeleteProject={(id) => void removeProject(id)}
             onCollapse={() => setHidden(true)}
+            activeHref={route === "/admin" ? "/admin" : null}
             onRename={rename}
             onRenameProject={renameProject}
             onOpenProject={openProject}
