@@ -140,6 +140,29 @@ test.describe("Conversations", () => {
     errs.expectNone();
   });
 
+  test("the sidebar hides and the chat takes the whole width; it comes back from the corner button", async ({ page, context }) => {
+    const errs = watchErrors(page);
+    await devLogin(context, uniqueUser("e2e-hide"), "staff");
+    await skipTraining(context);
+    await page.goto("/", { waitUntil: "load" });
+    const composer = page.getByPlaceholder("Write a message…");
+    await expect(composer).toBeVisible();
+    await page.getByRole("button", { name: "Hide sidebar" }).click();
+    await expect(page.locator("#sidebar")).toBeHidden();
+    // The page fills the window: nothing collapses to zero width.
+    const main = await page.locator(".main").boundingBox();
+    const viewport = page.viewportSize()!;
+    expect(main?.width ?? 0).toBeGreaterThan(viewport.width * 0.9);
+    await expect(composer).toBeVisible();
+    // The choice survives a reload.
+    await page.reload({ waitUntil: "load" });
+    await expect(page.locator("#sidebar")).toBeHidden();
+    await expect(page.getByPlaceholder("Write a message…")).toBeVisible();
+    await page.getByRole("button", { name: "Show sidebar" }).click();
+    await expect(page.locator("#sidebar")).toBeVisible();
+    errs.expectNone();
+  });
+
   test("a request for a document is answered with a file card: Word by default, the other formats a click away", async ({ page }) => {
     const errs = watchErrors(page);
     await page.goto("/", { waitUntil: "load" });

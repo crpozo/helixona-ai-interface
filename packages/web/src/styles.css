@@ -507,8 +507,10 @@ label {
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
+/* The sidebar and its handle are not rendered, so the page is the only column: three columns with
+   the first two at 0 would put the page in the first one and show nothing. */
 .shell.sidebar-hidden {
-  grid-template-columns: 0 0 1fr;
+  grid-template-columns: 1fr;
 }
 .shell.sidebar-hidden .sidebar,
 .shell.sidebar-hidden .sidebar-resizer {
