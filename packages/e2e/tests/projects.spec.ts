@@ -55,7 +55,8 @@ test.describe("Projects", () => {
 
     // Renaming from the sidebar row changes the page too.
     await page.locator(".project-row").first().hover();
-    await page.locator(".project-list").getByRole("button", { name: "Rename project: EOB review" }).click();
+    await page.locator(".project-list").getByRole("button", { name: "Options for EOB review" }).click();
+    await page.getByRole("menuitem", { name: "Rename project: EOB review" }).click();
     await page.locator(".project-list .rename-form input").fill("EOB appeals");
     await page.locator(".project-list .rename-form").getByRole("button", { name: "Save" }).click();
     await expect(page.locator(".project-list:not(.shared-project-list) .project-select")).toContainText("EOB appeals");

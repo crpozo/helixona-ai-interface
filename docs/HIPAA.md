@@ -483,8 +483,9 @@ team import: every chat in it, personal ones included, becomes visible to the wh
 
 Administrators named in `BILLING_VIEWER_EMAILS` (set in the deployment; today the clinic's owner)
 see, on the Administration page, the usage of each month (turns, tokens and the assistant's own
-cost estimate, by user and by model, from the usage table, which keeps 400 days) and the credits
-left: the amount bought in the Claude Console and the day it counts from, which they record there,
+cost estimate, by user and by model, from the usage table, which keeps 400 days), the month so far
+against a monthly budget they set there (a guide shown with a bar, not a block; the per-person daily
+cap is what stops spending), and the credits left: the amount bought in the Claude Console and the day it counts from, which they record there,
 minus what was spent since. When the organization's Admin API key is stored in AWS Secrets Manager
 (`helixona-prod-anthropic-admin-key`; optional, filled in by hand like the API key, never through
 the repository or CI), the spending comes from Anthropic's cost report (billed amounts per day,

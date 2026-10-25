@@ -203,6 +203,8 @@ export interface BillingReport {
   credits: BillingCredits | null;
   anthropic: { configured: boolean; months: Array<{ month: string; costUsd: number }>; sinceAnchorUsd: number | null; fetchedAt: string | null; error: string | null };
   remaining: { usd: number; spentUsd: number; basis: "anthropic" | "estimate" } | null;
+  /** The month so far against the budget the administrator set. */
+  budget: { monthlyUsd: number; month: string; spentUsd: number; remainingUsd: number; basis: "anthropic" | "estimate"; updatedAt: string; updatedBy: string } | null;
 }
 
 export interface UsageRow {

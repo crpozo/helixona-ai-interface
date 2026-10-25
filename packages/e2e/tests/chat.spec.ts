@@ -100,20 +100,29 @@ test.describe("Conversations", () => {
     const row = page.locator(".conv-list .conv-row").first();
     await expect(page.locator(".conv-list .conv-row")).toHaveCount(1);
     await row.hover();
-    await row.getByRole("button", { name: /^Rename:/ }).click();
+    await row.getByRole("button", { name: /^Options for/ }).click();
+    await page.getByRole("menuitem", { name: /^Rename:/ }).click();
     await page.locator(".rename-form input").fill("Renamed chat");
     await page.locator(".rename-form").getByRole("button", { name: "Save" }).click();
     await expect(page.locator(".conv-list .conv-title").first()).toHaveText("Renamed chat");
     await expect(page.locator(".chat-title")).toHaveText("Renamed chat");
-    // Search finds it by any of its words, and says when nothing matches.
+    // Search opens over the page with the recent chats, finds by any word, says when nothing matches, and Escape closes it.
     await page.getByRole("button", { name: "Search chats" }).click();
+    await expect(page.getByRole("dialog", { name: "Search chats and projects" })).toBeVisible();
+    await expect(page.locator(".search-results .conv-title")).toHaveText("Renamed chat");
+    await expect(page.locator(".search-results .search-when")).toHaveText("Past hour");
     await page.getByRole("searchbox", { name: "Search chats" }).fill("renamed");
     await expect(page.locator(".search-results .conv-title")).toHaveText("Renamed chat");
     await page.getByRole("searchbox", { name: "Search chats" }).fill("nothing like this");
     await expect(page.locator(".search-results .section-title")).toHaveText("No matches");
     await page.getByRole("searchbox", { name: "Search chats" }).press("Escape");
-    await expect(page.locator(".search-results")).toHaveCount(0);
-    await expect(page.getByRole("searchbox", { name: "Search chats" })).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    // The documentation opens beside the sidebar, which stays.
+    await page.getByRole("link", { name: "Documentation" }).click();
+    await expect(page).toHaveURL(/\/documentation$/);
+    await expect(page.locator("#sidebar")).toBeVisible();
+    await page.locator(".conv-list .conv-select").first().click();
+    await expect(page.locator(".chat-title")).toHaveText("Renamed chat");
 
     // Everything survives a reload, and the URL brings the same conversation back.
     await expect(page).toHaveURL(/\/c\/[0-9A-Z]{26}$/);
@@ -124,7 +133,8 @@ test.describe("Conversations", () => {
     // Delete asks first, then the start screen is back.
     page.once("dialog", (d) => void d.accept());
     await page.locator(".conv-list .conv-row").first().hover();
-    await page.locator(".conv-list .conv-row").first().getByRole("button", { name: /^Delete:/ }).click();
+    await page.locator(".conv-list .conv-row").first().getByRole("button", { name: /^Options for/ }).click();
+    await page.getByRole("menuitem", { name: /^Delete:/ }).click();
     await expect(page.locator(".conv-list .conv-row")).toHaveCount(0);
     await expect(page.locator(".home-start")).toBeVisible();
     errs.expectNone();

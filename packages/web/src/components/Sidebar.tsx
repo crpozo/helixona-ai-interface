@@ -1,10 +1,12 @@
 import { Logo } from "./Logo";
 import { Icon } from "./Icon";
 import { BugReport } from "./BugReport";
+import { RowMenu } from "./RowMenu";
+import { useTip } from "./Tip";
+import { SearchDialog } from "./SearchDialog";
 import { useState } from "react";
 import type { Conversation, Me, Project } from "../lib/types";
 import { modelLabel } from "../lib/models";
-import { matchesQuery } from "../lib/search";
 
 interface Props {
   me: Me;
@@ -18,6 +20,7 @@ interface Props {
   onNew: () => void;
   onNewInProject: (projectId: string) => void;
   onDelete: (id: string) => void;
+  onDeleteProject: (id: string) => void;
   onRename: (id: string, title: string) => Promise<void>;
   onRenameProject: (id: string, name: string) => Promise<void>;
   onOpenProject: (id: string) => void;
@@ -27,6 +30,8 @@ interface Props {
   onDocs: () => void;
   onTraining: () => void;
   onImport: () => void;
+  /** Desktop: hide the sidebar (a button in the main area brings it back). */
+  onCollapse?: () => void;
 }
 
 function initials(name: string): string {
@@ -46,20 +51,17 @@ export function projectTag(p: Project): string {
  * chats nested underneath, then the chats that belong to no project, and the signed-in user at the
  * bottom. Rows are text with an icon; the actions (rename, delete, new chat in a project) appear on hover.
  */
-export function Sidebar({ me, conversations, projects, selectedId, projectViewId, open, onClose, onSelect, onNew, onNewInProject, onDelete, onRename, onRenameProject, onOpenProject, onNewProject, onLogout, onAdmin, onDocs, onTraining, onImport }: Props) {
+export function Sidebar({ me, conversations, projects, selectedId, projectViewId, open, onClose, onSelect, onNew, onNewInProject, onDelete, onDeleteProject, onRename, onRenameProject, onOpenProject, onNewProject, onLogout, onAdmin, onDocs, onTraining, onImport, onCollapse }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [projectDraft, setProjectDraft] = useState("");
-  const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const searching = searchOpen && query.trim().length > 0;
-  const closeSearch = () => { setSearchOpen(false); setQuery(""); };
-  /** Chats shown under a project before "View all" (the project page lists them all). */
+  // Projects whose whole chat list is shown in the sidebar ("View all").
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const { tip, bind } = useTip();
+  /** Chats shown under a project before "View all". */
   const SHOWN_PER_PROJECT = 4;
-  // Search: every chat (in a project or not) and every project whose title has all the words, as one flat list.
-  const found = searching ? conversations.filter((c) => matchesQuery(c.title, query)) : [];
-  const foundProjects = searching ? projects.filter((p) => matchesQuery(p.name, query)) : [];
   const isAdmin = me.user.roles.includes("admin");
   const mine = projects.filter((p) => p.visibility === "private");
   const shared = projects.filter((p) => p.visibility !== "private");
@@ -144,26 +146,19 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
             className="conv-select"
             aria-current={c.id === selectedId ? "true" : undefined}
             onClick={() => onSelect(c.id)}
-            title={`${c.title} · ${modelLabel(me.catalog.models, c.modelId)}${inSharedProject && c.createdByName ? ` · started by ${c.createdByName}` : ""}`}
+            {...bind(`${c.title}${inSharedProject && c.createdByName ? ` · started by ${c.createdByName}` : ""}`)}
           >
             <span className="conv-dot" aria-hidden="true" />
             <span className="conv-title">{c.title}</span>
           </button>
           <div className="conv-actions">
-            <button type="button" className="icon-btn" onClick={() => startRename(c)} aria-label={`Rename: ${c.title}`} title="Rename">
-              <Icon name="pencil" size={15} />
-            </button>
-            <button
-              type="button"
-              className="icon-btn"
-              onClick={() => {
-                if (window.confirm("Delete this conversation? All of its messages will be removed.")) onDelete(c.id);
-              }}
-              aria-label={`Delete: ${c.title}`}
-              title="Delete"
-            >
-              <Icon name="trash" size={15} />
-            </button>
+            <RowMenu
+              name={c.title}
+              items={[
+                { label: "Rename", icon: "pencil", ariaLabel: `Rename: ${c.title}`, onSelect: () => startRename(c) },
+                { label: "Delete", icon: "trash", danger: true, ariaLabel: `Delete: ${c.title}`, onSelect: () => { if (window.confirm("Delete this conversation? All of its messages will be removed.")) onDelete(c.id); } },
+              ]}
+            />
           </div>
         </div>
       )}
@@ -214,28 +209,34 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
             className="conv-select project-select"
             aria-current={p.id === projectViewId ? "true" : undefined}
             onClick={() => onOpenProject(p.id)}
-            title={`${p.name} · ${kind} · ${chats.length} ${chats.length === 1 ? "chat" : "chats"}`}
+            {...bind(`${p.name} · ${kind} · ${chats.length} ${chats.length === 1 ? "chat" : "chats"}`)}
           >
             <Icon name="folder" size={15} className="conv-icon" />
             <span className="conv-title">{p.name}</span>
           </button>
-          {p.canEdit && (
-            <button type="button" className="icon-btn row-action" onClick={() => startProjectRename(p)} aria-label={`Rename project: ${p.name}`} title="Rename">
-              <Icon name="pencil" size={15} />
-            </button>
-          )}
           <button type="button" className="icon-btn row-action" onClick={() => onNewInProject(p.id)} aria-label={`New chat in ${p.name}`} title="New chat in this project">
             <Icon name="plus" size={15} />
           </button>
+          <span className="row-action">
+            <RowMenu
+              name={p.name}
+              items={[
+                { label: "Edit details", icon: "sliders", ariaLabel: `Edit project: ${p.name}`, onSelect: () => onOpenProject(p.id) },
+                ...(p.canEdit ? [{ label: "Rename", icon: "pencil" as const, ariaLabel: `Rename project: ${p.name}`, onSelect: () => startProjectRename(p) }] : []),
+                { label: "New chat", icon: "plus", ariaLabel: `Start a chat in ${p.name}`, onSelect: () => onNewInProject(p.id) },
+                ...(p.canManage ? [{ label: "Delete", icon: "trash" as const, danger: true, ariaLabel: `Delete project: ${p.name}`, onSelect: () => { if (window.confirm(`Delete the project "${p.name}"? Its chats stay, outside the project.`)) onDeleteProject(p.id); } }] : []),
+              ]}
+            />
+          </span>
         </div>
         )}
         <ul className="project-chats" aria-label={`Chats in ${p.name}`}>
           {chats.length === 0 && <li className="muted small project-empty">No chats yet</li>}
-          {chats.slice(0, SHOWN_PER_PROJECT).map((c) => conversationItem(c, inShared))}
+          {(expanded[p.id] ? chats : chats.slice(0, SHOWN_PER_PROJECT)).map((c) => conversationItem(c, inShared))}
           {chats.length > SHOWN_PER_PROJECT && (
             <li>
-              <button type="button" className="conv-select view-all" onClick={() => onOpenProject(p.id)}>
-                View all ({chats.length})
+              <button type="button" className="conv-select view-all" aria-expanded={!!expanded[p.id]} onClick={() => setExpanded((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}>
+                {expanded[p.id] ? "Show fewer" : `View all (${chats.length})`}
               </button>
             </li>
           )}
@@ -249,34 +250,20 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
       <div className="sidebar-head">
         <Logo />
         <span className="sidebar-head-actions">
-          <button type="button" className={`icon-btn${searchOpen ? " active" : ""}`} onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))} aria-label="Search chats" aria-expanded={searchOpen} title="Search chats">
+          <button type="button" className={`icon-btn${searchOpen ? " active" : ""}`} onClick={() => setSearchOpen(true)} aria-label="Search chats" aria-expanded={searchOpen} title="Search chats">
             <Icon name="search" size={17} />
           </button>
+          {onCollapse && (
+            <button type="button" className="icon-btn only-desktop" onClick={onCollapse} aria-label="Hide sidebar" title="Hide sidebar">
+              <Icon name="panel" size={17} />
+            </button>
+          )}
           <button type="button" className="icon-btn only-mobile" onClick={onClose} aria-label="Close panel">
             <Icon name="close" />
           </button>
         </span>
       </div>
-      {searchOpen && (
-        <div className="side-search">
-          <Icon name="search" size={15} className="conv-icon" />
-          <label htmlFor="side-search" className="visually-hidden">
-            Search chats
-          </label>
-          <input
-            id="side-search"
-            type="search"
-            placeholder="Search chats and projects"
-            value={query}
-            autoFocus
-            autoComplete="off"
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") closeSearch();
-            }}
-          />
-        </div>
-      )}
+      {searchOpen && <SearchDialog conversations={conversations} projects={projects} onSelect={onSelect} onOpenProject={onOpenProject} onClose={() => setSearchOpen(false)} />}
 
       <nav className="side-nav" aria-label="Main">
         <button type="button" className="side-link side-link-new" onClick={onNew}>
@@ -290,45 +277,7 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
         <BugReport />
       </nav>
 
-      {searching && (
-        <nav className="conv-list search-results sidebar-scroll" aria-label="Search results">
-          <div className="section-head">
-            <span className="section-title">
-              {found.length + foundProjects.length === 0 ? "No matches" : `${found.length + foundProjects.length} ${found.length + foundProjects.length === 1 ? "match" : "matches"}`}
-            </span>
-          </div>
-          <ul>
-            {foundProjects.map((p) => (
-              <li key={`p-${p.id}`} className={p.id === projectViewId ? "active" : ""}>
-                <div className="conv-row">
-                  <button type="button" className="conv-select" onClick={() => onOpenProject(p.id)} title={p.name}>
-                    <Icon name="folder" size={15} className="conv-icon" />
-                    <span className="conv-title">{p.name}</span>
-                  </button>
-                </div>
-              </li>
-            ))}
-            {found.map((c) => {
-              const inProject = projects.find((p) => p.id === c.projectId);
-              return (
-                <li key={c.id} className={c.id === selectedId ? "active" : ""}>
-                  <div className="conv-row">
-                    <button type="button" className="conv-select" aria-current={c.id === selectedId ? "true" : undefined} onClick={() => onSelect(c.id)} title={inProject ? `${c.title} · ${inProject.name}` : c.title}>
-                      <span className="conv-dot" aria-hidden="true" />
-                      <span className="conv-title">
-                        {c.title}
-                        {inProject && <span className="conv-sub">{inProject.name}</span>}
-                      </span>
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-      )}
-
-      <div className="sidebar-scroll" hidden={searching}>
+      <div className="sidebar-scroll">
         <nav className="project-list" aria-label="Projects">
           <div className="section-head">
             <span className="section-title">Projects</span>
@@ -374,6 +323,7 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
           </button>
         </div>
       </div>
+      {tip}
     </aside>
   );
 }

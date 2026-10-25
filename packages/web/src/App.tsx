@@ -32,6 +32,7 @@ import { useVersionWatch } from "./lib/useVersionWatch";
 import { LoginPage } from "./components/LoginPage";
 import { ProjectPage } from "./components/ProjectPage";
 import { Sidebar } from "./components/Sidebar";
+import { Icon } from "./components/Icon";
 import { DocumentViewer } from "./components/DocumentViewer";
 import { DocumentViewerContext, type OpenDocument } from "./lib/documentViewer";
 import { StartComposer } from "./components/StartComposer";
@@ -85,6 +86,24 @@ export function App() {
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [loadingConv, setLoadingConv] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Desktop: the sidebar's width is dragged, and it can be hidden; both remembered in this browser.
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try { const v = Number(localStorage.getItem("hx.sidebar.width")); return v >= 220 && v <= 480 ? v : 272; } catch { return 272; }
+  });
+  const [sidebarHidden, setSidebarHidden] = useState<boolean>(() => {
+    try { return localStorage.getItem("hx.sidebar.hidden") === "1"; } catch { return false; }
+  });
+  const setHidden = (v: boolean) => { setSidebarHidden(v); try { localStorage.setItem("hx.sidebar.hidden", v ? "1" : "0"); } catch { /* private window */ } };
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sidebarWidth;
+    let w = startW;
+    const move = (ev: PointerEvent) => { w = Math.max(220, Math.min(480, startW + ev.clientX - startX)); setSidebarWidth(w); };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); try { localStorage.setItem("hx.sidebar.width", String(w)); } catch { /* private window */ } };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   const [listError, setListError] = useState<string | null>(null);
   // A document opened from a card: shown beside the chat (or over it, on a phone).
   const [viewerDoc, setViewerDoc] = useState<OpenDocument | null>(null);
@@ -498,11 +517,12 @@ export function App() {
   const isAdmin = me.user.roles.includes("admin");
   const trainingBlocked = !!me.training?.required && !me.training.complete;
 
-  return (
-    <>
-      {route === "/documentation" ? (
-        <Docs backLabel="Back to the assistant" backTo="/" me={me} />
-      ) : route === "/training" ? (
+  // Pages opened from the sidebar keep the sidebar beside them (like Claude); the chat is the default.
+  const page =
+    route === "/documentation" ? (
+      <div className="page-scroll"><Docs backLabel="Back to the assistant" backTo="/" me={me} /></div>
+    ) : route === "/training" ? (
+      <div className="page-scroll">
         <Suspense
           fallback={
             <main className="center-screen" aria-busy="true">
@@ -512,9 +532,11 @@ export function App() {
         >
           <TrainingCoursePage me={me} onExit={() => navigate("/")} />
         </Suspense>
-      ) : route === "/admin" && isAdmin ? (
-        <AdminPage me={me} onBack={() => navigate("/")} />
-      ) : route === "/import" ? (
+      </div>
+    ) : route === "/admin" && isAdmin ? (
+      <div className="page-scroll"><AdminPage me={me} onBack={() => navigate("/")} /></div>
+    ) : route === "/import" ? (
+      <div className="page-scroll">
         <ImportPage
           me={me}
           onBack={() => navigate("/")}
@@ -523,8 +545,13 @@ export function App() {
             void refreshProjects();
           }}
         />
-      ) : (
-        <div className="shell">
+      </div>
+    ) : null;
+
+  return (
+    <>
+      {(
+        <div className={`shell${sidebarHidden ? " sidebar-hidden" : ""}`} style={{ "--sidebar-w": `${sidebarWidth}px` } as React.CSSProperties}>
           {sidebarOpen && <div className="scrim only-mobile" onClick={() => setSidebarOpen(false)} aria-hidden="true" />}
           <Sidebar
             me={me}
@@ -537,6 +564,8 @@ export function App() {
             onSelect={(id) => void selectConversation(id)}
             onNew={() => startNew(null)}
             onDelete={(id) => void removeConversation(id)}
+            onDeleteProject={(id) => void removeProject(id)}
+            onCollapse={() => setHidden(true)}
             onRename={rename}
             onRenameProject={renameProject}
             onOpenProject={openProject}
@@ -548,7 +577,13 @@ export function App() {
             onTraining={() => navigate("/training")}
             onImport={() => navigate("/import")}
           />
+          <div className="sidebar-resizer only-desktop" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" onPointerDown={startResize} onDoubleClick={() => { setSidebarWidth(272); try { localStorage.setItem("hx.sidebar.width", "272"); } catch { /* private window */ } }} />
           <div className="main">
+            {sidebarHidden && (
+              <button type="button" className="icon-btn sidebar-show only-desktop" onClick={() => setHidden(false)} aria-label="Show sidebar" title="Show sidebar">
+                <Icon name="panel" size={18} />
+              </button>
+            )}
             <div className="topbar only-mobile">
               <button type="button" className="btn" onClick={() => setSidebarOpen(true)} aria-expanded={sidebarOpen} aria-controls="sidebar">
                 ☰ Conversations
@@ -562,7 +597,9 @@ export function App() {
                 </button>
               </p>
             )}
-            {trainingBlocked ? (
+            {page ? (
+              page
+            ) : trainingBlocked ? (
               <TrainingGate me={me} onRefresh={() => void refreshMe()} />
             ) : projectView && projects.some((p) => p.id === projectView) ? (
               <ProjectPage

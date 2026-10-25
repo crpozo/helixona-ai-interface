@@ -105,6 +105,8 @@ export function registerAdminRoutes(app: FastifyInstance, deps: Deps): void {
 
   // ---- Billing view: usage by month and the credits left, for the administrators named in BILLING_VIEWER_EMAILS.
   const Credits = z.object({ purchasedUsd: z.coerce.number().min(0).max(10_000_000), asOf: Day, note: z.string().trim().max(200).default("") });
+  const Budget = z.object({ monthlyUsd: z.coerce.number().min(0).max(10_000_000) });
+  interface BudgetRecord { monthlyUsd: number; updatedAt: string; updatedBy: string }
   const notViewer = (reply: Parameters<typeof apiError>[0]) => apiError(reply, 403, "forbidden", "The billing view is limited to the accounts named in the server settings.");
 
   app.get("/api/admin/billing", { preHandler: admin }, async (req, reply) => {
@@ -133,7 +135,25 @@ export function registerAdminRoutes(app: FastifyInstance, deps: Deps): void {
       const spentUsd = anthropic.sinceAnchorUsd ?? spentSince(dailyEstimates(rows), credits.asOf);
       remaining = { usd: credits.purchasedUsd - spentUsd, spentUsd, basis: anthropic.sinceAnchorUsd !== null ? "anthropic" : "estimate" };
     }
-    return { months: aggregateMonths(rows, months), credits, anthropic, remaining };
+    // The month so far against the budget the administrator set (a guide, not a block).
+    const monthly = aggregateMonths(rows, months);
+    const thisMonth = months[0]!;
+    const budgetRecord = await deps.repos.settings.get<BudgetRecord>("billing-budget");
+    const billedThisMonth = anthropic.months.find((m) => m.month === thisMonth)?.costUsd;
+    const spentThisMonth = billedThisMonth !== undefined && !anthropic.error && deps.billing ? billedThisMonth : (monthly.find((m) => m.month === thisMonth)?.estimatedUsd ?? 0);
+    const budget = budgetRecord ? { monthlyUsd: budgetRecord.monthlyUsd, month: thisMonth, spentUsd: spentThisMonth, remainingUsd: budgetRecord.monthlyUsd - spentThisMonth, basis: billedThisMonth !== undefined && !anthropic.error && deps.billing ? "anthropic" : "estimate", updatedAt: budgetRecord.updatedAt, updatedBy: budgetRecord.updatedBy } : null;
+    return { months: monthly, credits, anthropic, remaining, budget };
+  });
+
+  app.put("/api/admin/billing/budget", { preHandler: admin }, async (req, reply) => {
+    const s = req.session!;
+    if (!isBillingViewer(deps.config, s)) return notViewer(reply);
+    const body = Budget.safeParse(req.body);
+    if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
+    const record: BudgetRecord = { monthlyUsd: body.data.monthlyUsd, updatedAt: now().toISOString(), updatedBy: s.name };
+    await deps.repos.settings.put("billing-budget", record);
+    await audit(deps, req, { action: "admin_billing_budget", meta: { monthlyUsd: record.monthlyUsd } });
+    return record;
   });
 
   app.put("/api/admin/billing/credits", { preHandler: admin }, async (req, reply) => {

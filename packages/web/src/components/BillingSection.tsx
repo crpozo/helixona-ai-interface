@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { BillingReport, Me } from "../lib/types";
-import { ApiError, adminBilling, adminSetCredits } from "../lib/api";
+import { ApiError, adminBilling, adminSetBudget, adminSetCredits } from "../lib/api";
 import { modelLabel } from "../lib/models";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
@@ -31,6 +31,8 @@ export function BillingSection({ me, userName }: Props) {
   const [form, setForm] = useState({ purchasedUsd: "", asOf: "", note: "" });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
+  const [budgetInput, setBudgetInput] = useState("");
+  const [budgetSaved, setBudgetSaved] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -39,6 +41,7 @@ export function BillingSection({ me, userName }: Props) {
       setReport(r);
       setMonth((m) => m ?? r.months[0]?.month ?? null);
       if (r.credits) setForm({ purchasedUsd: String(r.credits.purchasedUsd), asOf: r.credits.asOf, note: r.credits.note });
+      if (r.budget) setBudgetInput((v) => v || String(r.budget!.monthlyUsd));
     } catch (e) {
       setError(errMsg(e));
     }
@@ -46,6 +49,18 @@ export function BillingSection({ me, userName }: Props) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const saveBudget = async (e: FormEvent) => {
+    e.preventDefault();
+    setBudgetSaved(null);
+    try {
+      await adminSetBudget({ monthlyUsd: Number(budgetInput) });
+      setBudgetSaved("Budget saved.");
+      await load();
+    } catch (err) {
+      setError(errMsg(err));
+    }
+  };
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -80,6 +95,40 @@ export function BillingSection({ me, userName }: Props) {
         <p className="muted">Loading…</p>
       ) : report ? (
         <>
+          <div className="billing-budget">
+            <h3>This month</h3>
+            {report.budget ? (
+              <>
+                <p className="billing-remaining">
+                  <strong>{usd.format(report.budget.spentUsd)}</strong> of {usd.format(report.budget.monthlyUsd)} used in {monthLabel(report.budget.month)}
+                  {report.budget.remainingUsd >= 0 ? <> · {usd.format(report.budget.remainingUsd)} left</> : <> · <span className="over">{usd.format(-report.budget.remainingUsd)} over the budget</span></>}
+                </p>
+                <div className={`budget-bar${report.budget.monthlyUsd > 0 && report.budget.spentUsd / report.budget.monthlyUsd >= 1 ? " over" : report.budget.monthlyUsd > 0 && report.budget.spentUsd / report.budget.monthlyUsd >= 0.8 ? " warn" : ""}`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={report.budget.monthlyUsd > 0 ? Math.min(100, Math.round((report.budget.spentUsd / report.budget.monthlyUsd) * 100)) : 0} aria-label="Share of the monthly budget used">
+                  <span style={{ width: `${report.budget.monthlyUsd > 0 ? Math.min(100, (report.budget.spentUsd / report.budget.monthlyUsd) * 100) : 0}%` }} />
+                </div>
+                <p className="muted small">
+                  {report.budget.basis === "anthropic" ? "Billed by Anthropic this month." : "This assistant's own estimate for the month; billed amounts need the Admin API key."} The budget is a guide for this page, not a block: people keep working past it, and each person still has the $250 daily cap.
+                </p>
+              </>
+            ) : (
+              <p className="muted">No monthly budget set yet. Enter what the clinic plans to spend per month and this page shows how much of it is used.</p>
+            )}
+            <form className="billing-form" onSubmit={(e) => void saveBudget(e)}>
+              <label>
+                Monthly budget (USD)
+                <input type="number" min={0} step="1" required value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)} />
+              </label>
+              <button type="submit" className="btn btn-primary" disabled={!budgetInput}>
+                Save budget
+              </button>
+              {budgetSaved && (
+                <span className="muted small" role="status">
+                  {budgetSaved}
+                </span>
+              )}
+            </form>
+          </div>
+
           <div className="billing-credits">
             <h3>Credits</h3>
             {report.remaining && report.credits ? (

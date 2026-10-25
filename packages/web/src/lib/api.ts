@@ -454,6 +454,10 @@ export function adminBilling(): Promise<BillingReport> {
   return request("/api/admin/billing");
 }
 
+export function adminSetBudget(input: { monthlyUsd: number }): Promise<{ monthlyUsd: number }> {
+  return request("/api/admin/billing/budget", { method: "PUT", body: input });
+}
+
 export function adminSetCredits(input: { purchasedUsd: number; asOf: string; note: string }): Promise<BillingCredits> {
   return request("/api/admin/billing/credits", { method: "PUT", body: input });
 }

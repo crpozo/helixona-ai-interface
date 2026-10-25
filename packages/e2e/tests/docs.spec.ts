@@ -47,7 +47,7 @@ test.describe("Documentation", () => {
     await page.getByRole("button", { name: "Submit answers" }).click();
     await expect(page.locator(".quiz-result")).toContainText("Score: 12 of 12. Passed.");
     await expect(page.locator(".training-status").first()).toContainText("Completed. Passed on");
-    await expect(page.getByRole("button", { name: /Sign/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Sign in/ })).toHaveCount(0);
     await page.getByRole("link", { name: "Back to the assistant" }).click();
     await expect(page.locator(".home-start")).toBeVisible();
     errs.expectNone();

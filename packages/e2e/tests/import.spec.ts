@@ -33,7 +33,7 @@ test.describe("Import from Claude", () => {
     await expect(summary).toContainText("not in the export");
     await expect(summary).toContainText("Not used: data-2026-03-01.zip › users.json.");
     await page.locator("#import-memory").fill("Works at Helixona. Prefers tables.");
-    await page.getByRole("button", { name: "Import" }).click();
+    await page.getByRole("button", { name: "Import", exact: true }).click();
     await expect(page.locator(".import-done")).toContainText("Done. 2 chats imported; 1 projects with 1 documents; memory saved as the project's instructions.");
 
     await page.getByRole("link", { name: "Back to the assistant" }).click();
@@ -50,7 +50,7 @@ test.describe("Import from Claude", () => {
     // Importing the same export again duplicates nothing.
     await page.getByRole("link", { name: "Import from Claude" }).click();
     await page.locator(".import-drop input[type=file]").setInputFiles({ name: "data-2026-03-01.zip", mimeType: "application/zip", buffer });
-    await page.getByRole("button", { name: "Import" }).click();
+    await page.getByRole("button", { name: "Import", exact: true }).click();
     await expect(page.locator(".import-done")).toContainText("0 chats imported, 2 already here (skipped); 0 projects with 0 documents (1 already here)");
     errs.expectNone();
   });
@@ -75,7 +75,7 @@ test.describe("Import from Claude", () => {
     await page.getByRole("radio", { name: /The whole team/ }).check();
     await expect(keep).toBeChecked();
     await page.locator("#import-memory").fill("Clinic in Miami.");
-    await page.getByRole("button", { name: "Import" }).click();
+    await page.getByRole("button", { name: "Import", exact: true }).click();
     await expect(page.locator(".import-done")).toContainText("Done. 1 chats imported; 1 projects with 1 documents (in one file of the project); memory saved as the project's instructions.");
     await expect(page.locator(".import-done")).toContainText('Everything is in the shared project "Backup Claude"');
     await expect(page.locator(".import-done")).toContainText("kept as a backup beyond the retention period");

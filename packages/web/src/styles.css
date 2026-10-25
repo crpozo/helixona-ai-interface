@@ -473,8 +473,49 @@ label {
 
 .shell {
   display: grid;
-  grid-template-columns: 272px 1fr;
+  grid-template-columns: var(--sidebar-w, 272px) 6px 1fr;
   height: 100%;
+}
+.shell.sidebar-hidden {
+  grid-template-columns: 0 0 1fr;
+}
+.shell.sidebar-hidden .sidebar,
+.shell.sidebar-hidden .sidebar-resizer {
+  display: none;
+}
+/* The handle between the sidebar and the page: drag to resize, double-click to reset. */
+.sidebar-resizer {
+  cursor: col-resize;
+  background: transparent;
+  border-right: 1px solid transparent;
+  margin-left: -1px;
+}
+.sidebar-resizer:hover,
+.sidebar-resizer:active {
+  background: var(--brand-line-gold);
+}
+.sidebar-show {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 5;
+}
+.main {
+  position: relative;
+}
+/* A page beside the sidebar (documentation, training, administration, import) scrolls on its own. */
+.page-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.only-desktop {
+  display: inline-flex;
+}
+@media (max-width: 720px) {
+  .only-desktop {
+    display: none !important;
+  }
 }
 
 .sidebar {
@@ -736,6 +777,146 @@ label {
 }
 .side-search input::-webkit-search-cancel-button {
   cursor: pointer;
+}
+/* The search box over the page (like Claude's). */
+.search-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 10vh 1rem 1rem;
+}
+.search-dialog {
+  width: min(680px, 100%);
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--brand-line-gold);
+  border-radius: 14px;
+  box-shadow: var(--brand-shadow);
+  overflow: hidden;
+}
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem 0.5rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+.search-box input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+  padding: 0.4rem 0;
+}
+.search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem;
+  overflow-y: auto;
+}
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.search-row.active {
+  background: var(--surface-2);
+}
+.search-row .conv-title {
+  font-size: 0.95rem;
+}
+.search-sub {
+  margin-left: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+.search-when,
+.search-enter {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.search-empty {
+  padding: 0.8rem;
+}
+/* A row's three-dot menu. */
+.row-menu-btn {
+  width: 26px;
+  height: 26px;
+}
+.row-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 200px;
+  padding: 0.3rem;
+  background: var(--surface);
+  border: 1px solid var(--line-gold, var(--brand-line-gold));
+  border-radius: 12px;
+  box-shadow: var(--brand-shadow);
+  display: flex;
+  flex-direction: column;
+}
+.row-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
+}
+.row-menu-item:hover,
+.row-menu-item:focus-visible {
+  background: var(--surface-2);
+}
+.row-menu-item .icon {
+  color: var(--muted);
+}
+.row-menu-item.danger {
+  color: var(--danger, #e07a6a);
+}
+.row-menu-item.danger .icon {
+  color: inherit;
+}
+.row-menu-item.first-danger {
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 8px 8px;
+  padding-top: 0.6rem;
+}
+/* The full name of a row whose title is cut off. */
+.tip {
+  position: fixed;
+  z-index: 90;
+  max-width: 320px;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  background: #111;
+  color: #f4f1ea;
+  border: 1px solid var(--brand-line-gold);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  pointer-events: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
 .conv-actions {
   display: flex;
@@ -1032,6 +1213,34 @@ label {
   font-size: 0.92rem;
 }
 /* The billing view: credits left and the months. */
+.billing-budget {
+  margin-bottom: 1rem;
+}
+.budget-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin: 0.4rem 0 0.5rem;
+  max-width: 520px;
+}
+.budget-bar span {
+  display: block;
+  height: 100%;
+  background: var(--brand-primary);
+  border-radius: 999px;
+}
+.budget-bar.warn span {
+  background: #d9a441;
+}
+.budget-bar.over span,
+.billing-remaining .over {
+  background: var(--danger, #e07a6a);
+}
+.billing-remaining .over {
+  background: none;
+  color: var(--danger, #e07a6a);
+}
 .billing-remaining {
   margin: 0.2rem 0;
 }
@@ -1595,7 +1804,7 @@ td {
 .project-list li {
   border-radius: var(--radius);
 }
-.project-list li.active {
+.project-list li.active:not(.project-group) {
   background: var(--surface-2);
   box-shadow: inset 3px 0 0 var(--brand-primary);
 }
