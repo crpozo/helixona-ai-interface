@@ -694,6 +694,17 @@ label {
 .project-row .row-action {
   opacity: 0;
 }
+/* The fold chevron is always there, quiet until hovered. */
+.project-row .project-toggle {
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+  opacity: 0.7;
+}
+.project-row:hover .project-toggle,
+.project-row .project-toggle:focus-visible {
+  opacity: 1;
+}
 .project-row:hover .row-action,
 .project-row:focus-within .row-action {
   opacity: 1;

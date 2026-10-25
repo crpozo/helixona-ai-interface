@@ -4,7 +4,7 @@ import { BugReport } from "./BugReport";
 import { RowMenu } from "./RowMenu";
 import { useTip } from "./Tip";
 import { SearchDialog } from "./SearchDialog";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Conversation, Me, Project } from "../lib/types";
 import { modelLabel } from "../lib/models";
 
@@ -59,6 +59,23 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
   const [searchOpen, setSearchOpen] = useState(false);
   // Projects whose whole chat list is shown in the sidebar ("View all").
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // Projects whose chats are folded away, remembered in this browser.
+  const [closed, setClosed] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem("hx.sidebar.projects.closed") ?? "{}") as Record<string, boolean>; } catch { return {}; }
+  });
+  const setProjectClosed = (id: string, value: boolean) =>
+    setClosed((prev) => {
+      if (!!prev[id] === value) return prev;
+      const next = { ...prev, [id]: value };
+      if (!value) delete next[id];
+      try { localStorage.setItem("hx.sidebar.projects.closed", JSON.stringify(next)); } catch { /* private window */ }
+      return next;
+    });
+  // The chat being read is always in view: its project unfolds.
+  const selectedProjectId = conversations.find((c) => c.id === selectedId)?.projectId ?? null;
+  useEffect(() => {
+    if (selectedProjectId) setProjectClosed(selectedProjectId, false);
+  }, [selectedProjectId]);
   // Sections folded away (Projects, Shared projects, Chats), remembered in this browser.
   const [folded, setFolded] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(localStorage.getItem("hx.sidebar.folded") ?? "{}") as Record<string, boolean>; } catch { return {}; }
@@ -230,7 +247,7 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
             <Icon name="folder" size={15} className="conv-icon" />
             <span className="conv-title">{p.name}</span>
           </button>
-          <button type="button" className="icon-btn row-action" onClick={() => onNewInProject(p.id)} aria-label={`New chat in ${p.name}`} title="New chat in this project">
+          <button type="button" className="icon-btn row-action" onClick={() => { setProjectClosed(p.id, false); onNewInProject(p.id); }} aria-label={`New chat in ${p.name}`} title="New chat in this project">
             <Icon name="plus" size={15} />
           </button>
           <span className="row-action">
@@ -244,9 +261,20 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
               ]}
             />
           </span>
+          <button
+            type="button"
+            className="icon-btn project-toggle"
+            onClick={() => setProjectClosed(p.id, !closed[p.id])}
+            aria-expanded={!closed[p.id]}
+            aria-controls={`project-chats-${p.id}`}
+            aria-label={closed[p.id] ? `Show chats in ${p.name}` : `Hide chats in ${p.name}`}
+            title={closed[p.id] ? "Show chats" : "Hide chats"}
+          >
+            <Icon name="chevron" size={13} className={closed[p.id] ? "" : "rotated"} />
+          </button>
         </div>
         )}
-        <ul className="project-chats" aria-label={`Chats in ${p.name}`}>
+        <ul className="project-chats" id={`project-chats-${p.id}`} aria-label={`Chats in ${p.name}`} hidden={!!closed[p.id]}>
           {chats.length === 0 && <li className="muted small project-empty">No chats yet</li>}
           {(expanded[p.id] ? chats : chats.slice(0, SHOWN_PER_PROJECT)).map((c) => conversationItem(c, inShared))}
           {chats.length > SHOWN_PER_PROJECT && (
