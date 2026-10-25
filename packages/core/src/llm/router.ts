@@ -1,7 +1,7 @@
 import type { BetaContentBlock, BetaContentBlockParam, BetaMessageParam, BetaTextBlockParam, BetaToolResultBlockParam, BetaToolUnion, BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { canonicalModelId, estimateUsd, modelByAlias, type Catalog, type CatalogModel } from "../catalog.js";
 import { CircuitBreaker } from "../breaker.js";
-import { classifyError, FirstEventTimeoutError, type ClassifiedError } from "../errors.js";
+import { classifyError, FirstEventTimeoutError, type ClassifiedError, userMessageFor } from "../errors.js";
 import { toMessageParams } from "../history.js";
 import { noopLogger, type SafeLogger } from "../logger.js";
 import type { Conversation, PinReason, StoredMessage, ToolRound, TurnEvent, TurnStep, UsageSummary } from "../types.js";
@@ -403,8 +403,9 @@ export class ModelRouter {
           ci = candidates.indexOf(next) - 1;
           continue;
         }
-        const code = cls.kind === "availability" || cls.kind === "config" ? "model_unavailable" : cls.kind === "bug" ? "bad_request" : "internal";
-        const message = code === "model_unavailable" ? "The model is not available right now" : round > 1 && cls.kind === "bug" ? "The request grew too large while the files were being read. Ask a narrower question, or name the files or pages to look at, and try again." : "The request could not be completed";
+        const code = cls.kind === "availability" || cls.kind === "config" || cls.kind === "billing" ? "model_unavailable" : cls.kind === "bug" ? "bad_request" : "internal";
+        const backupPaused = candidates.slice(ci + 1).some((id) => this.breaker.isOpen(id));
+        const message = code === "model_unavailable" ? userMessageFor(cls, backupPaused) : round > 1 && cls.kind === "bug" ? "The request grew too large while the files were being read. Ask a narrower question, or name the files or pages to look at, and try again." : "The request could not be completed";
         input.emit({ type: "error", code, message, retryable: code === "model_unavailable" || code === "internal" || round > 1, partial: emittedChars > 0 });
         return this.failure(startModel, cls, latencyMs, emittedChars > 0);
       }

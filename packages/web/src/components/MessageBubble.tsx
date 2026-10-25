@@ -120,7 +120,8 @@ function errorText(code: string, fallback: string): string {
       // The server says what is too long (the files, or the conversation) and what to do.
       return fallback || "This conversation is too long. Start a new conversation to continue.";
     case "model_unavailable":
-      return "The model is currently unavailable.";
+      // The server says why (rate limit, overload, configuration, the provider account's credit).
+      return fallback || "The model is currently unavailable.";
     case "network":
       return "Connection to the server was lost.";
     default:
