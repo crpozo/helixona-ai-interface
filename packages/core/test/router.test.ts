@@ -354,3 +354,69 @@ describe("ModelRouter with tools", () => {
     expect(c.events.at(-1)).toMatchObject({ type: "error", code: "aborted" });
   });
 });
+
+describe("ModelRouter keeps a long tool turn inside the conversation", () => {
+  /** A model that asks for one tool per round until `answerAt`, then answers; usage reports the context it was given. */
+  function demanding(answerAt: number, inputTokensPerRound: number): { provider: LlmProvider; requests: Array<{ messages: unknown[] }> } {
+    const requests: Array<{ messages: unknown[] }> = [];
+    const provider: LlmProvider = {
+      stream: (p) => {
+        requests.push({ messages: p.messages.map((m) => JSON.parse(JSON.stringify(m))) });
+        const round = p.messages.filter((m) => m.role === "assistant").length + 1;
+        const toolUse = round < answerAt;
+        const content = toolUse ? [{ type: "tool_use", id: `t${round}`, name: "read_project_file", input: { name: `f${round}` } }] : [{ type: "text", text: "Done.", citations: null }];
+        const final = { id: "m", type: "message", role: "assistant", model: p.model, content, stop_reason: toolUse ? "tool_use" : "end_turn", stop_sequence: null, usage: { input_tokens: inputTokensPerRound * round, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } as unknown as BetaMessage;
+        const events: BetaRawMessageStreamEvent[] = [{ type: "message_start", message: final } as BetaRawMessageStreamEvent, ...(toolUse ? [] : [{ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Done." } } as BetaRawMessageStreamEvent])];
+        return { [Symbol.asyncIterator]: async function* () { for (const e of events) yield e; }, finalMessage: async () => final, abort: () => undefined };
+      },
+    };
+    return { provider, requests };
+  }
+  const tools = (seen: Array<{ name: string; maxChars: number }>) => ({
+    definitions: [{ name: "read_project_file", description: "d", input_schema: { type: "object" as const, properties: {}, required: [] } }],
+    describe: () => "Reading",
+    execute: async (call: { input: unknown }, _s: AbortSignal, ctx: { maxChars: number }) => {
+      seen.push({ name: (call.input as { name: string }).name, maxChars: ctx.maxChars });
+      return { content: [{ type: "text" as const, text: `=== ${(call.input as { name: string }).name} ===\n${"x".repeat(5000)}` }], summary: `Read ${(call.input as { name: string }).name}` };
+    },
+  });
+
+  it("shrinks the results of older rounds to a line, in the request and in what is stored", async () => {
+    const { provider, requests } = demanding(7, 1000);
+    const seen: Array<{ name: string; maxChars: number }> = [];
+    const c = collect();
+    const r = await new ModelRouter({ catalog: DEFAULT_CATALOG, provider, contextLimitTokens: 900_000 }).runTurn({ conversation: conv(), history, userText: "go", systemPrompt: "s", emit: c.emit, tools: tools(seen) });
+    expect(r.ok).toBe(true);
+    expect(r.rounds).toHaveLength(6);
+    const text = (res: unknown) => (res as { content: Array<{ text: string }> }).content[0]!.text;
+    // The last three rounds are whole; the first three were reduced to a line that names what they were.
+    expect(text(r.rounds[0]!.results[0])).toMatch(/^\[Earlier result removed to make room in the conversation: === f1 ===/);
+    expect(text(r.rounds[2]!.results[0])).toMatch(/^\[Earlier result removed/);
+    expect(text(r.rounds[3]!.results[0])).toContain("xxxx");
+    expect(text(r.rounds[5]!.results[0])).toContain("xxxx");
+    const lastRequest = requests.at(-1)!.messages as Array<{ role: string; content: Array<{ type: string; content?: Array<{ text: string }> }> }>;
+    const results = lastRequest.filter((m) => m.role === "user" && m.content[0]?.type === "tool_result");
+    expect(results).toHaveLength(6);
+    expect(results[0]!.content[0]!.content![0]!.text).toMatch(/^\[Earlier result removed/);
+    expect(results[5]!.content[0]!.content![0]!.text).toContain("xxxx");
+    // Every tool got a budget below the room that was left.
+    expect(seen.every((s) => s.maxChars > 0 && s.maxChars < 900_000 * 3.5)).toBe(true);
+  });
+
+  it("stops feeding tools when the conversation is nearly full, and tells the model to answer", async () => {
+    // 350k tokens per round against a 700k limit: round 1 has room, round 2 does not.
+    const { provider } = demanding(3, 350_000);
+    const seen: Array<{ name: string; maxChars: number }> = [];
+    const c = collect();
+    const r = await new ModelRouter({ catalog: DEFAULT_CATALOG, provider, contextLimitTokens: 700_000 }).runTurn({ conversation: conv(), history, userText: "go", systemPrompt: "s", emit: c.emit, tools: tools(seen) });
+    expect(r.ok).toBe(true);
+    expect(seen.map((s) => s.name)).toEqual(["f1"]);
+    const second = (r.rounds[1]!.results[0] as { content: Array<{ text: string }>; is_error?: boolean });
+    expect(second.is_error).toBe(true);
+    expect(second.content[0]!.text).toContain("The conversation is nearly full");
+    // The model then answers with what it has.
+    expect(r.rounds).toHaveLength(2);
+    expect(r.content.map((b) => b.type)).toEqual(["text"]);
+    expect(c.events.filter((e) => e.type === "step" && e.steps[0]!.state === "done").map((e) => (e as { steps: Array<{ text: string }> }).steps[0]!.text)).toEqual(["Read f1", "Reading: no room left in the conversation"]);
+  });
+});

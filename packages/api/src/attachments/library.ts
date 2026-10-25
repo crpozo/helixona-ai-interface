@@ -1,6 +1,6 @@
 import type { BetaTool, BetaToolResultBlockParam, BetaToolUnion } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { z } from "zod";
-import type { AttachmentMeta, Project, SafeLogger, ToolCall, ToolOutput, UsageSummary } from "@helixona/core";
+import type { AttachmentMeta, Project, SafeLogger, ToolCall, ToolContext, ToolOutput, UsageSummary } from "@helixona/core";
 import type { Repos } from "../repos/types.js";
 import type { AttachmentStore } from "./store.js";
 import type { DocumentReader } from "./reader.js";
@@ -18,8 +18,10 @@ const EMPTY_USAGE: UsageSummary = { inputTokens: 0, outputTokens: 0, cacheReadTo
 
 export const LIBRARY = {
   /** Characters of a file one read returns by default; the note at the cut says how to continue. */
-  charsPerRead: 200_000,
-  maxCharsPerRead: 400_000,
+  charsPerRead: 80_000,
+  maxCharsPerRead: 300_000,
+  /** Pages of a PDF one read returns when no range is asked for. */
+  pagesPerRead: 40,
   searchDefaultResults: 40,
   searchMaxResults: 100,
 } as const;
@@ -167,7 +169,7 @@ export const LIBRARY_TOOLS: BetaTool[] = [
   },
   {
     name: "read_project_file",
-    description: `Returns the contents of one library file of the project: a PDF as its page-by-page transcription (every page starts with "(p. N)"; use from_page and to_page to read a range), a spreadsheet as rows with their row numbers, a text file as it is. Long text is cut at max_chars (${LIBRARY.charsPerRead.toLocaleString("en-US")} by default) with the offset to continue. Read the pages the question needs, a range at a time; cite the file and page of what you use.`,
+    description: `Returns the contents of one library file of the project: a PDF as its page-by-page transcription (every page starts with "(p. N)"), a spreadsheet as rows with their row numbers, a text file as it is. A PDF comes ${LIBRARY.pagesPerRead} pages at a time: give from_page and to_page for the range you need (search_project_files tells you which pages matter). Long text is cut at max_chars (${LIBRARY.charsPerRead.toLocaleString("en-US")} by default) with the offset to continue. Read what the question needs, not whole files; cite the file and page of what you use.`,
     input_schema: {
       type: "object",
       properties: {
@@ -222,9 +224,9 @@ export class LibraryTools {
     }
   }
 
-  async execute(call: ToolCall, signal: AbortSignal): Promise<ToolOutput> {
+  async execute(call: ToolCall, signal: AbortSignal, ctx?: ToolContext): Promise<ToolOutput> {
     switch (call.name) {
-      case "read_project_file": return this.read(call);
+      case "read_project_file": return this.read(call, ctx);
       case "search_project_files": return this.search(call, signal);
       case "list_project_files": return this.list(call);
       default: return { content: [{ type: "text", text: `Unknown tool "${call.name}".` }], isError: true, summary: `Unknown tool ${call.name}` };
@@ -264,7 +266,7 @@ export class LibraryTools {
     return { content: [{ type: "text", text }], summary: `Listed ${plural(files.length, "project file")}` };
   }
 
-  private async read(call: ToolCall): Promise<ToolOutput> {
+  private async read(call: ToolCall, ctx?: ToolContext): Promise<ToolOutput> {
     const parsed = ReadInput.safeParse(call.input);
     if (!parsed.success) return this.invalid(call, parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
     const meta = this.find(parsed.data.name);
@@ -275,21 +277,28 @@ export class LibraryTools {
     }
     const text = await this.textOf(meta);
     if (text === null) return { content: [{ type: "text", text: this.notReady(meta) }], isError: true, summary: `${meta.name} is not ready yet` };
-    const perRead = parsed.data.max_chars ?? LIBRARY.charsPerRead;
+    // What one read may return: the cap asked for, and no more than the conversation has room for.
+    const perRead = Math.min(parsed.data.max_chars ?? LIBRARY.charsPerRead, ctx?.maxChars ?? LIBRARY.maxCharsPerRead);
     let body = text;
     let label = "";
-    if (meta.contentType === "application/pdf" && (parsed.data.from_page || parsed.data.to_page)) {
+    let next = "";
+    if (meta.contentType === "application/pdf") {
+      const all = splitPages(text);
+      const total = all.filter((pg) => pg.page !== null).length;
+      // Without a range, a long PDF comes a window of pages at a time, so one read never floods the conversation.
       const from = parsed.data.from_page ?? 1;
-      const to = parsed.data.to_page ?? Number.MAX_SAFE_INTEGER;
-      const pages = splitPages(text).filter((pg) => pg.page !== null && pg.page >= from && pg.page <= to);
+      const to = parsed.data.to_page ?? (parsed.data.from_page || total > LIBRARY.pagesPerRead ? from + LIBRARY.pagesPerRead - 1 : Number.MAX_SAFE_INTEGER);
+      const pages = all.filter((pg) => pg.page !== null && pg.page >= from && pg.page <= to);
       if (pages.length === 0) return { content: [{ type: "text", text: `"${meta.name}" has no pages ${from}–${parsed.data.to_page ?? ""} in its transcription (${meta.pages ?? "?"} pages).` }], isError: true, summary: `${meta.name}: pages ${from}–${parsed.data.to_page ?? ""} not found` };
       body = pages.map((pg) => pg.text).join("");
-      label = ` pages ${from}${parsed.data.to_page ? `–${parsed.data.to_page}` : " on"},`;
+      const last = pages[pages.length - 1]!.page!;
+      label = pages.length === total ? "" : ` pages ${from}–${last},`;
+      if (last < (all[all.length - 1]?.page ?? last)) next = `\n[pages ${last + 1} on follow; call read_project_file with from_page: ${last + 1}${parsed.data.to_page ? "" : ", or search_project_files to find the pages that matter"}]`;
     }
     const start = Math.min(parsed.data.offset ?? 0, body.length);
     const piece = body.slice(start, start + perRead);
     const end = start + piece.length;
-    const cut = end < body.length ? `\n[cut at character ${end.toLocaleString("en-US")} of ${body.length.toLocaleString("en-US")}; call read_project_file again with offset: ${end}, or a narrower page range, to continue]` : "";
+    const cut = end < body.length ? `\n[cut at character ${end.toLocaleString("en-US")} of ${body.length.toLocaleString("en-US")}; call read_project_file again with offset: ${end}, or a narrower page range, to continue]` : next;
     const header = `=== ${meta.name}${label}${start > 0 ? ` from character ${start.toLocaleString("en-US")},` : ""} ${meta.pages ? `${meta.pages} pages` : ""} ===`;
     const blocks: ResultBlocks = [{ type: "text", text: `${header}\n${piece}${cut}` }];
     return { content: blocks, summary: `Read ${meta.name}${label ? label.replace(/,$/, "") : ""}` };
@@ -338,7 +347,7 @@ export class LibraryTools {
 
 /** Several tool sets (ZIPs, the project library) offered to the model as one. */
 export class CombinedTools {
-  constructor(private readonly sets: Array<{ definitions: BetaToolUnion[]; describe(call: ToolCall): string; execute(call: ToolCall, signal: AbortSignal): Promise<ToolOutput> }>) {}
+  constructor(private readonly sets: Array<{ definitions: BetaToolUnion[]; describe(call: ToolCall): string; execute(call: ToolCall, signal: AbortSignal, ctx?: ToolContext): Promise<ToolOutput> }>) {}
 
   get definitions(): BetaToolUnion[] {
     return this.sets.flatMap((s) => s.definitions);
@@ -352,9 +361,9 @@ export class CombinedTools {
     return this.owner(call.name)?.describe(call) ?? `Using ${call.name}`;
   }
 
-  execute(call: ToolCall, signal: AbortSignal): Promise<ToolOutput> {
+  execute(call: ToolCall, signal: AbortSignal, ctx?: ToolContext): Promise<ToolOutput> {
     const set = this.owner(call.name);
     if (!set) return Promise.resolve({ content: [{ type: "text", text: `Unknown tool "${call.name}".` }], isError: true, summary: `Unknown tool ${call.name}` });
-    return set.execute(call, signal);
+    return set.execute(call, signal, ctx);
   }
 }

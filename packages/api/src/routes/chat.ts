@@ -404,7 +404,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
         signal: ac.signal,
         emit,
         estimatedInputTokens: contextBefore + newTokens,
-        ...(zipTools ? { tools: { definitions: zipTools.definitions, execute: (c, s) => zipTools.execute(c, s), describe: (c) => zipTools.describe(c) } } : {}),
+        ...(zipTools ? { tools: { definitions: zipTools.definitions, execute: (c, s, ctx) => zipTools.execute(c, s, ctx), describe: (c) => zipTools.describe(c) } } : {}),
       });
       const latencyMs = now().getTime() - started.getTime();
       if (result.ok && result.servedModel) {

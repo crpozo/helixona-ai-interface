@@ -2,7 +2,7 @@ import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
 import { z } from "zod";
 import type { BetaTool, BetaToolResultBlockParam, BetaToolUnion } from "@anthropic-ai/sdk/resources/beta/messages/messages";
-import type { AttachmentMeta, SafeLogger, ToolCall, ToolOutput } from "@helixona/core";
+import type { AttachmentMeta, SafeLogger, ToolCall, ToolContext, ToolOutput } from "@helixona/core";
 import type { AttachmentStore } from "./store.js";
 import { INLINE } from "./policy.js";
 import { readTables, SpreadsheetError, tablesForModel, XLSX_TYPE } from "./sheets.js";
@@ -32,9 +32,9 @@ export const ZIP = {
   /** Paths one `read_zip_files` call may ask for. */
   maxPathsPerCall: 20,
   /** Characters of one text file per read (the note at the cut says the offset to continue from). */
-  textCharsPerFile: 200_000,
-  /** Characters of text one read may return in all. */
-  textCharsPerCall: 400_000,
+  textCharsPerFile: 120_000,
+  /** Characters of text one read may return in all (less when the conversation has less room). */
+  textCharsPerCall: 250_000,
   /** PDFs and images one read may return in all (the request also has to fit). */
   bytesPerCall: 20 * MiB,
   /** The API caps an image near 5 MB once base64-encoded. */
@@ -307,9 +307,9 @@ export class ZipTools {
     }
   }
 
-  async execute(call: ToolCall, signal: AbortSignal): Promise<ToolOutput> {
+  async execute(call: ToolCall, signal: AbortSignal, ctx?: ToolContext): Promise<ToolOutput> {
     switch (call.name) {
-      case "read_zip_files": return this.read(call, signal);
+      case "read_zip_files": return this.read(call, signal, ctx);
       case "search_zip_files": return this.search(call, signal);
       case "list_zip_files": return this.list(call);
       default: return { content: [{ type: "text", text: `Unknown tool "${call.name}".` }], isError: true, summary: `Unknown tool ${call.name}` };
@@ -369,17 +369,19 @@ export class ZipTools {
     return { content: [{ type: "text", text }], summary: `Listed ${plural(matches.length, "file")} in ${meta.name}${prefix ? ` under ${parsed.data.prefix}` : ""}` };
   }
 
-  private async read(call: ToolCall, signal: AbortSignal): Promise<ToolOutput> {
+  private async read(call: ToolCall, signal: AbortSignal, ctx?: ToolContext): Promise<ToolOutput> {
     const parsed = ReadInput.safeParse(call.input);
     if (!parsed.success) return this.invalid(call, parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
     const meta = this.resolve(parsed.data.attachment);
     if (!meta) return this.notFound(parsed.data.attachment);
     const { zip, index } = await this.open(meta);
-    const perFile = Math.min(parsed.data.max_chars ?? ZIP.textCharsPerFile, ZIP.textCharsPerCall);
+    // What one call may return: the caps, and no more than the conversation has room for.
+    const callChars = Math.min(ZIP.textCharsPerCall, ctx?.maxChars ?? ZIP.textCharsPerCall);
+    const perFile = Math.min(parsed.data.max_chars ?? ZIP.textCharsPerFile, callChars);
     const offset = parsed.data.offset ?? 0;
     const blocks: ResultBlocks = [];
-    let charsLeft = ZIP.textCharsPerCall;
-    let bytesLeft = ZIP.bytesPerCall;
+    let charsLeft = callChars;
+    let bytesLeft = Math.min(ZIP.bytesPerCall, ctx ? Math.floor(callChars / 2) : ZIP.bytesPerCall);
     const read: string[] = [];
     const missing: string[] = [];
     for (const rawPath of [...new Set(parsed.data.paths)]) {

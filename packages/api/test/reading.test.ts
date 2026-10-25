@@ -374,7 +374,7 @@ describe("Large attachments in a conversation", () => {
     expect(ev1.some((e) => e.event === "files")).toBe(false);
     expect(ev1.at(-1)!.event).toBe("done");
     const steps = ev1.filter((e) => e.event === "step").flatMap((e) => (e.data.steps as Array<{ text: string; state: string }>).map((s) => `${s.state}: ${s.text}`));
-    expect(steps).toEqual(["running: Reading Submission.pdf", "done: Read Submission.pdf"]);
+    expect(steps).toEqual(["running: Reading Submission.pdf", "done: Read Submission.pdf pages 1–40"]);
     const answer = ev1.filter((e) => e.event === "text_delta").map((e) => e.data.text).join("");
     expect(answer).toContain("(p. 1)");
     const first = calls[0]!.messages[0]!.content as Array<{ type: string; title?: string; source?: { data?: string } }>;

@@ -18,7 +18,16 @@ export interface ModelRouterOptions {
   /** Extra wait for the first event per thousand estimated input tokens: a long conversation or a large file takes longer to read. */
   firstEventMsPerThousandTokens?: number;
   availabilityPinMinutes?: number;
+  /** The conversation may not grow past this many tokens; tool results are cut to fit (default 900k). */
+  contextLimitTokens?: number;
   now?: () => Date;
+}
+
+/** How much room the conversation has left when a tool runs: results must fit in it. */
+export interface ToolContext {
+  remainingTokens: number;
+  /** Characters of text the tool may return in all (about 3.5 per token). */
+  maxChars: number;
 }
 
 /** A tool call the model made. */
@@ -39,7 +48,7 @@ export interface ToolOutput {
 /** Tools the model may use during a turn. They run here, on the server, between rounds. */
 export interface TurnTools {
   definitions: BetaToolUnion[];
-  execute(call: ToolCall, signal: AbortSignal): Promise<ToolOutput>;
+  execute(call: ToolCall, signal: AbortSignal, ctx: ToolContext): Promise<ToolOutput>;
   /** What a call is about to do, for the activity list while it runs. */
   describe(call: ToolCall): string;
   /** Rounds a turn may take before the model has to answer with what it has (default 30). */
@@ -88,6 +97,13 @@ export interface TurnResult {
 
 const EMPTY_USAGE: UsageSummary = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, estimatedUsd: 0 };
 const DEFAULT_MAX_ROUNDS = 30;
+/** Tokens kept free for the model's answer and its reasoning when tools run. */
+const ANSWER_RESERVE_TOKENS = 40_000;
+/** Below this much room, tools stop returning content and the model is asked to answer with what it has. */
+const MIN_TOOL_TOKENS = 12_000;
+/** Tool results of the most recent rounds travel whole; older ones are replaced by a line, so a long turn never outgrows the conversation. */
+const ROUNDS_KEPT_WHOLE = 3;
+const CHARS_PER_TOKEN = 3.5;
 /** A remark the model made before using a tool is kept this long in the activity list. */
 const NOTE_CHARS = 160;
 
@@ -98,6 +114,15 @@ function untilAborted(signal: AbortSignal): Promise<never> {
     if (signal.aborted) fail();
     else signal.addEventListener("abort", fail, { once: true });
   });
+}
+
+/** An older tool result, reduced to a line that says what it was (the summary the person saw). */
+function shrinkResult(r: BetaToolResultBlockParam): BetaToolResultBlockParam {
+  const content = r.content;
+  if (typeof content === "string" ? content.startsWith("[Earlier result") : Array.isArray(content) && content.length === 1 && content[0]!.type === "text" && content[0]!.text.startsWith("[Earlier result")) return r;
+  const head = typeof content === "string" ? content : Array.isArray(content) ? content.map((b) => (b.type === "text" ? b.text : `[${b.type}]`)).join(" ") : "";
+  const first = head.split("\n").find((l) => l.trim().length > 0)?.trim() ?? "";
+  return { ...r, content: [{ type: "text", text: `[Earlier result removed to make room in the conversation: ${first.slice(0, 160)}. Read it again if you still need it.]` }] };
 }
 
 function note(text: string): string | null {
@@ -183,6 +208,10 @@ export class ModelRouter {
       // One attempt may take several rounds (tool calls); these span the rounds.
       const rounds: ToolRound[] = [];
       const steps: TurnStep[] = [];
+      // Where each round's results sit in the request, to shrink the older ones as the turn goes on.
+      const resultIndexes: number[] = [];
+      let toolsExhausted = false;
+      const contextLimit = this.opts.contextLimitTokens ?? 900_000;
       const usage: UsageSummary = { ...EMPTY_USAGE };
       let currentModel = model;
       let refusalFallback = false;
@@ -251,12 +280,22 @@ export class ModelRouter {
           }
 
           const calls = final.content.filter((b): b is BetaToolUseBlock => b.type === "tool_use");
-          if (final.stop_reason === "tool_use" && calls.length > 0 && input.tools && round < maxRounds) {
+          const roundContext = (final.usage?.input_tokens ?? 0) + (final.usage?.cache_read_input_tokens ?? 0) + (final.usage?.cache_creation_input_tokens ?? 0) + (final.usage?.output_tokens ?? 0);
+          if (final.stop_reason === "tool_use" && calls.length > 0 && input.tools && round < maxRounds && !toolsExhausted) {
             // The model paused to use tools: what it wrote so far was a remark, kept in the activity list.
             const remark = note(roundText);
             input.emit({ type: "round", round, note: remark });
             if (remark) steps.push({ text: remark, ms: 0 });
             const tools = input.tools;
+            // Room left for what the tools return: the conversation so far, plus space kept for the answer.
+            const remainingTokens = Math.max(0, contextLimit - roundContext - ANSWER_RESERVE_TOKENS);
+            const share = Math.floor(remainingTokens / calls.length);
+            const noRoom = share < MIN_TOOL_TOKENS;
+            if (noRoom) {
+              toolsExhausted = true;
+              log.warn("tool_budget_exhausted", { model: currentModel, inputTokens: roundContext, attempt: round });
+            }
+            const ctx: ToolContext = { remainingTokens: share, maxChars: Math.floor(share * CHARS_PER_TOKEN) };
             input.emit({ type: "step", steps: calls.map((c) => ({ id: c.id, text: tools.describe({ id: c.id, name: c.name, input: c.input }), state: "running" as const })) });
             const results = await Promise.all(
               calls.map(async (c): Promise<BetaToolResultBlockParam> => {
@@ -264,7 +303,9 @@ export class ModelRouter {
                 const t0 = this.now().getTime();
                 let out: ToolOutput;
                 try {
-                  out = await Promise.race([tools.execute(call, controller.signal), untilAborted(controller.signal)]);
+                  out = noRoom
+                    ? { content: [{ type: "text", text: "The conversation is nearly full: no more can be read in this turn. Answer now with what you have read, say exactly what you did not get to, and suggest a new conversation (or a narrower question) for the rest." }], isError: true, summary: `${tools.describe(call)}: no room left in the conversation` }
+                    : await Promise.race([tools.execute(call, controller.signal, ctx), untilAborted(controller.signal)]);
                 } catch (e) {
                   if (controller.signal.aborted) throw e;
                   log.warn("tool_error", { action: c.name, errorClass: e instanceof Error ? e.name : "unknown", attempt: round });
@@ -279,6 +320,15 @@ export class ModelRouter {
             );
             rounds.push({ assistant: final.content, results });
             params.messages.push({ role: "assistant", content: final.content as BetaContentBlockParam[] }, { role: "user", content: results });
+            resultIndexes.push(params.messages.length - 1);
+            // Results older than the last few rounds shrink to a line: the model keeps what it concluded, and can read again.
+            if (resultIndexes.length > ROUNDS_KEPT_WHOLE) {
+              const old = resultIndexes.length - ROUNDS_KEPT_WHOLE - 1;
+              const idx = resultIndexes[old]!;
+              const shrunk = rounds[old]!.results.map((r) => shrinkResult(r));
+              rounds[old]!.results = shrunk;
+              params.messages[idx] = { role: "user", content: shrunk };
+            }
             continue;
           }
 
@@ -337,7 +387,8 @@ export class ModelRouter {
           continue;
         }
         const code = cls.kind === "availability" || cls.kind === "config" ? "model_unavailable" : cls.kind === "bug" ? "bad_request" : "internal";
-        input.emit({ type: "error", code, message: code === "model_unavailable" ? "The model is not available right now" : "The request could not be completed", retryable: code === "model_unavailable" || code === "internal", partial: emittedChars > 0 });
+        const message = code === "model_unavailable" ? "The model is not available right now" : round > 1 && cls.kind === "bug" ? "The request grew too large while the files were being read. Ask a narrower question, or name the files or pages to look at, and try again." : "The request could not be completed";
+        input.emit({ type: "error", code, message, retryable: code === "model_unavailable" || code === "internal" || round > 1, partial: emittedChars > 0 });
         return this.failure(startModel, cls, latencyMs, emittedChars > 0);
       }
     }

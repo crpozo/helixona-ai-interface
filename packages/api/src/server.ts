@@ -30,7 +30,7 @@ export async function createDeps(env: NodeJS.ProcessEnv = process.env): Promise<
   const provider = config.LLM_MODE === "fake"
     ? new FakeProvider({ refusalFallbacks: Object.fromEntries(catalog.models.map((m) => [m.modelId, m.refusalFallbacks])), delayMs: config.FAKE_DELAY_MS })
     : new SdkProvider({ mode: config.LLM_MODE, catalog, awsRegion: config.AWS_REGION, apiKey: config.ANTHROPIC_API_KEY, workspaceId: config.ANTHROPIC_AWS_WORKSPACE_ID, timeoutMs: config.LLM_TIMEOUT_MS, logger: log });
-  const router = new ModelRouter({ catalog, provider, breaker: new CircuitBreaker(), logger: log, maxTokens: config.MAX_TOKENS, thinkingDisplay: config.THINKING_DISPLAY, firstEventTimeoutMs: config.FIRST_EVENT_TIMEOUT_MS });
+  const router = new ModelRouter({ catalog, provider, breaker: new CircuitBreaker(), logger: log, maxTokens: config.MAX_TOKENS, thinkingDisplay: config.THINKING_DISPLAY, firstEventTimeoutMs: config.FIRST_EVENT_TIMEOUT_MS, contextLimitTokens: config.CONTEXT_LIMIT_TOKENS });
   const systemPrompt = loadSystemPrompt(config.SYSTEM_PROMPT_FILE, new URL("..", import.meta.url).pathname);
   const attachments = config.ATTACHMENTS_BUCKET
     ? new S3AttachmentStore(config.AWS_REGION!, config.ATTACHMENTS_BUCKET)
