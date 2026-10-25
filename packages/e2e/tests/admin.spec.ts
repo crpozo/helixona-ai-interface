@@ -10,26 +10,39 @@ test.describe("Administration", () => {
     await page.goto("/", { waitUntil: "load" });
     await page.getByRole("link", { name: "Administration" }).click();
     await expect(page).toHaveURL(/\/admin$/);
-    await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
-    // An administrator not named in the settings has no billing view.
-    await expect(page.getByRole("heading", { name: "Usage by month and credits" })).toHaveCount(0);
-    // The signed-in administrator appears in the Users table (and, having attested the training, in the log).
-    await expect(page.locator("tr", { hasText: adminName }).first()).toBeVisible();
-    // Bug reports: where they go and that the inbox is confirmed (memory sender in this environment).
+    await expect(page.getByRole("tab", { name: "Users", selected: true })).toBeVisible();
+    // An administrator not named in the settings has no billing tab.
+    await expect(page.getByRole("tab", { name: "Billing" })).toHaveCount(0);
+    // The signed-in administrator appears in the Users table, with the training attested.
+    const own = page.locator(".users-table tr", { hasText: adminName }).first();
+    await expect(own).toBeVisible();
+    await expect(own).toContainText("Skipped (attested by user)");
+    // System: bug reports, where they go and that the inbox is confirmed (memory sender in this environment).
+    await page.getByRole("tab", { name: "System" }).click();
     await expect(page.getByRole("heading", { name: "Bug reports" })).toBeVisible();
     await expect(page.getByText(/Delivery confirmed/)).toBeVisible();
     await page.getByRole("button", { name: "Send a test report" }).click();
     await expect(page.getByText(/Test report sent/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Failed turns" })).toBeVisible();
+    await expect(page.getByText("No failed turns that day.")).toBeVisible();
+    // Usage: the day's tables.
+    await page.getByRole("tab", { name: "Usage" }).click();
+    await expect(page.locator("#usage-day")).toBeVisible();
+    await page.getByRole("tab", { name: "Users" }).click();
 
-    // A new user is invited.
+    // A new user is invited from the form behind "Add a user".
     const email = `${uniqueUser("paper")}@clinic.test`;
+    await page.getByRole("button", { name: "Add a user" }).click();
     await page.locator("#nu-name").fill("Paper Person");
     await page.locator("#nu-email").fill(email);
     await page.locator("#nu-role").selectOption("staff");
     await page.getByRole("button", { name: "Create user" }).click();
-    const row = page.locator("#users-title ~ * tr, table tr", { hasText: email }).first();
+    const row = page.locator(".users-table tr", { hasText: email }).first();
     await expect(row).toBeVisible();
     await expect(row).toContainText("Invited");
+    const openMenu = async () => {
+      await row.getByRole("button", { name: `Options for ${email}` }).click();
+    };
 
     // The temporary password: a confirm first, then a prompt that shows it once; it never appears on the page afterwards.
     let shown = "";
@@ -38,7 +51,8 @@ test.describe("Administration", () => {
       void d.accept();
     };
     page.on("dialog", onPasswordDialogs);
-    await row.getByRole("button", { name: "Temporary password" }).click();
+    await openMenu();
+    await page.getByRole("menuitem", { name: "Temporary password" }).click();
     await expect.poll(() => shown).not.toBe("");
     page.off("dialog", onPasswordDialogs);
     expect(await page.content()).not.toContain(shown);
@@ -55,18 +69,19 @@ test.describe("Administration", () => {
     // Nobody disables their own account from here: the button on the administrator's own row is off.
     await expect(page.locator("tr", { hasText: adminName }).getByRole("button", { name: "Disable" })).toBeDisabled();
 
-    // Training log: the new user has not started; a paper completion below the passing score is refused.
-    const log = page.locator(".training-log tr", { hasText: email });
-    await expect(log).toContainText("Not started");
+    // Training, in the same row: the new user has not started; a paper completion below the passing score is refused.
+    await expect(row).toContainText("Not started");
     const answers = ["2026-09-20", "9"];
     const onDialog = (d: import("@playwright/test").Dialog) => void d.accept(answers.shift());
     page.on("dialog", onDialog);
-    await log.getByRole("button", { name: "Record paper completion" }).click();
+    await openMenu();
+    await page.getByRole("menuitem", { name: "Record paper completion" }).click();
     await expect(page.getByText(/A score of 10 of 12 or better is required/)).toBeVisible();
     answers.push("2026-09-20", "12");
-    await log.getByRole("button", { name: "Record paper completion" }).click();
-    await expect(log).toContainText("Completed (paper)");
-    await expect(log).toContainText("Sep 20, 2026");
+    await openMenu();
+    await page.getByRole("menuitem", { name: "Record paper completion" }).click();
+    await expect(row).toContainText("Completed (paper)");
+    await expect(row).toContainText("Sep 20, 2026");
     page.off("dialog", onDialog);
 
     await page.getByRole("link", { name: /Back/ }).or(page.getByRole("button", { name: /Back/ })).first().click();
@@ -86,11 +101,17 @@ test.describe("Administration", () => {
     // The usage row is written when the turn ends.
     await expect(page.locator(".composer-stop")).toHaveCount(0);
     await page.getByRole("link", { name: "Administration" }).click();
-    await expect(page.getByRole("heading", { name: "Usage by month and credits" })).toBeVisible();
+    // Usage by month, behind the Day | Month switch.
+    await page.getByRole("tab", { name: "Usage" }).click();
+    await page.getByRole("button", { name: "Month", exact: true }).click();
     const thisMonth = new Date().toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
     const months = page.locator(".billing-months");
     await expect(months).toContainText(thisMonth);
     await expect(months.locator("tbody tr").first().locator("td").nth(1)).not.toHaveText("0");
+    // The detail of the month names the user.
+    await expect(page.locator(".usage-by-user tbody")).toContainText("billing");
+    // Billing: budget and credits.
+    await page.getByRole("tab", { name: "Billing" }).click();
     await expect(page.getByText("No credits recorded yet")).toBeVisible();
     // A monthly budget: the month so far against it.
     await expect(page.getByText("No monthly budget set yet")).toBeVisible();
@@ -105,8 +126,6 @@ test.describe("Administration", () => {
     // The fake turn costs a fraction of a cent, so the credits are (nearly) whole.
     await expect(page.locator(".billing-credits .billing-remaining")).toContainText(/\$(499\.\d\d|500\.00) left/);
     await expect(page.getByText(/Bought \$500\.00 as of 2026-01-01 \(Bought in the console\); spent since then \$0\.00 according to this assistant's own estimate/)).toBeVisible();
-    // The detail of the month names the user.
-    await expect(page.locator(".billing tbody").nth(1)).toContainText("billing");
     errs.expectNone();
   });
 });

@@ -228,7 +228,7 @@ export function TrainingGate({ me, onRefresh }: { me: Me; onRefresh: () => void 
   );
 }
 
-function status(row: AdminTrainingRow, version: string): string {
+export function trainingStatus(row: AdminTrainingRow, version: string): string {
   const r = row.record;
   if (!r) return "Not started";
   if (r.version !== version) return `Outdated (version ${r.version})`;
@@ -314,7 +314,7 @@ export function TrainingLog({ refreshKey = 0 }: { refreshKey?: number } = {}) {
                 {row.role}
                 {!row.inDirectory ? " (no longer in the directory)" : row.enabled ? "" : " (disabled)"}
               </td>
-              <td>{status(row, log.version)}</td>
+              <td>{trainingStatus(row, log.version)}</td>
               <td>{row.record?.attempts ?? 0}</td>
               <td>{row.record ? row.record.bestScore : "–"}</td>
               <td>{row.record?.passedAt ? when(row.record.passedAt) : "–"}</td>

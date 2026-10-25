@@ -372,8 +372,11 @@ export async function adminUsage(day: string): Promise<UsageRow[]> {
   return r.items;
 }
 
-export async function adminAudit(day: string): Promise<AuditEvent[]> {
-  const r = await request<{ items: AuditEvent[] }>(`/api/admin/audit?day=${encodeURIComponent(day)}`);
+export async function adminAudit(day: string, action?: string, limit?: number): Promise<AuditEvent[]> {
+  const q = new URLSearchParams({ day });
+  if (action) q.set("action", action);
+  if (limit) q.set("limit", String(limit));
+  const r = await request<{ items: AuditEvent[] }>(`/api/admin/audit?${q.toString()}`);
   return r.items;
 }
 
