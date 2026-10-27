@@ -14,10 +14,34 @@ import { apiError, audit, requireAuth, today } from "../app.js";
 import { SseWriter } from "../sse.js";
 import { CSP } from "../app.js";
 
-/** A turn's claim on its conversation outlives any model timeout; it is released when the turn ends. */
-const LOCK_MS = 15 * 60_000;
-/** Reading large files can take longer than the claim: it is renewed while the turn runs. */
-const LOCK_RENEW_MS = 5 * 60_000;
+/**
+ * A turn's claim on its conversation. It is renewed while the turn runs and released when it ends; kept
+ * short so that a container that dies mid-turn (a deploy, a crash) frees the conversation within minutes.
+ */
+const LOCK_MS = 3 * 60_000;
+const LOCK_RENEW_MS = 60_000;
+
+/** The turns running in this process, so a restart can let them finish or hand them back to the person. */
+const activeTurns = new Set<{ restart: () => void }>();
+export function registerTurn(turn: { restart: () => void }): () => void {
+  activeTurns.add(turn);
+  return () => activeTurns.delete(turn);
+}
+export function activeTurnCount(): number {
+  return activeTurns.size;
+}
+/**
+ * On SIGTERM: wait up to `graceMs` for the turns in flight to finish; the ones still running are then
+ * told the server is restarting (the client sends the message again on the new container) and aborted.
+ */
+export async function drainTurns(graceMs: number, now: () => number = Date.now): Promise<number> {
+  const until = now() + graceMs;
+  while (activeTurns.size > 0 && now() < until) await new Promise((r) => setTimeout(r, 250));
+  const left = activeTurns.size;
+  for (const t of [...activeTurns]) t.restart();
+  if (left > 0) await new Promise((r) => setTimeout(r, 1_000));
+  return left;
+}
 /** Above this many megabytes of new PDFs, the browser is told that the files are being checked. */
 const SHOW_CHECKING_BYTES = 5 * 1024 * 1024;
 /**
@@ -141,8 +165,10 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     const renew = setInterval(() => {
       void deps.repos.conversations.renew(key, id, new Date(now().getTime() + LOCK_MS).toISOString()).catch(() => undefined);
     }, LOCK_RENEW_MS);
+    let unregister = () => {};
     const release = () => {
       clearInterval(renew);
+      unregister();
       return deps.repos.conversations.unlock(key, id).catch(() => undefined);
     };
 
@@ -151,6 +177,12 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     const sse = new SseWriter(reply.raw, 15_000, { "content-security-policy": CSP });
     const ac = new AbortController();
     reply.raw.on("close", () => ac.abort());
+    unregister = registerTurn({
+      restart: () => {
+        sse.send("error", { code: "server_restart", message: "The server is restarting for an update. The message is sent again in a moment.", retryable: true, partial: false });
+        ac.abort();
+      },
+    });
     const fail = async (code: string, message: string, action = "turn_error") => {
       sse.send("error", { code, message, retryable: false, partial: false });
       await audit(deps, req, { action, conversationId: id, model: conv.modelId, meta: { code } });

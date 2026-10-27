@@ -113,6 +113,8 @@ export function App() {
   // A page left open after a deploy is told to reload.
   const newVersion = useVersionWatch(true);
   const [chat, dispatch] = useReducer(chatReducer, initialChatState);
+  const chatRef = useRef(chat);
+  chatRef.current = chat;
   const abortRef = useRef<AbortController | null>(null);
   const loadSeq = useRef(0);
 
@@ -388,13 +390,30 @@ export function App() {
     }
   };
 
+  // A dropped stream or a server restart: the message is sent again once, by itself, a few seconds
+  // later. The second failure is left to the person (the Retry button).
+  const autoRetried = useRef(new Set<string>());
+  const scheduleAutoRetry = (conv: Conversation, assistantId: string, text: string, attachments: AttachmentMeta[], delayMs: number) => {
+    if (autoRetried.current.has(assistantId)) return;
+    autoRetried.current.add(assistantId);
+    window.setTimeout(() => {
+      const m = chatRef.current.messages.find((x) => x.id === assistantId);
+      // Only while that failed answer is still on screen, empty, and nothing else is streaming.
+      if (!m || m.status !== "error" || m.text || chatRef.current.streaming || chatRef.current.conversationId !== conv.id) return;
+      dispatch({ type: "remove_failed_turn", assistantId });
+      void sendTo(conv, text, attachments);
+    }, delayMs);
+  };
+
   const sendTo = async (conv: Conversation, text: string, attachments: AttachmentMeta[] = []) => {
     const ac = new AbortController();
     abortRef.current = ac;
-    dispatch({ type: "send", text, attachments, userId: localId("u"), assistantId: localId("a"), authorName: authRef.current.status === "authed" ? authRef.current.me.user.name : undefined });
+    const assistantId = localId("a");
+    dispatch({ type: "send", text, attachments, userId: localId("u"), assistantId, authorName: authRef.current.status === "authed" ? authRef.current.me.user.name : undefined });
     try {
       for await (const ev of sendMessage(conv.id, text, ac.signal, attachments.map((a) => ({ id: a.id, name: a.name })))) {
         dispatch({ type: "sse", event: ev });
+        if (ev.type === "error" && ev.data.code === "server_restart") scheduleAutoRetry(conv, assistantId, text, attachments, 6_000);
       }
       dispatch({ type: "finish" });
     } catch (e) {
@@ -412,8 +431,9 @@ export function App() {
                 : e.code === "conversation_busy"
                   ? "Someone else is sending a message in this conversation. Wait for the answer, then try again."
                   : "Could not send the message."
-            : "Connection to the server was lost.";
+            : "Connection to the server was lost. Sending again in a moment…";
         dispatch({ type: "transport_error", message: msg });
+        if (!(e instanceof ApiError)) scheduleAutoRetry(conv, assistantId, text, attachments, 4_000);
       }
     } finally {
       if (abortRef.current === ac) abortRef.current = null;

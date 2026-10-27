@@ -305,6 +305,7 @@ export type SseErrorCode =
   | "quota_exceeded"
   | "context_limit"
   | "model_unavailable"
+  | "server_restart"
   | "bad_request"
   | "internal"
   | "conversation_busy"

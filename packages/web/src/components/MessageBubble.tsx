@@ -123,7 +123,9 @@ function errorText(code: string, fallback: string): string {
       // The server says why (rate limit, overload, configuration, the provider account's credit).
       return fallback || "The model is currently unavailable.";
     case "network":
-      return "Connection to the server was lost.";
+      return fallback || "Connection to the server was lost.";
+    case "server_restart":
+      return "The server was restarting for an update.";
     default:
       return fallback || "An error occurred while generating the response.";
   }

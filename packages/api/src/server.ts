@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { CircuitBreaker, createSafeLogger, FakeProvider, ModelRouter, parseCatalog, SdkProvider } from "@helixona/core";
 import { buildApp } from "./app.js";
+import { drainTurns } from "./routes/chat.js";
 import { loadConfig } from "./config.js";
 import { CognitoIdentityProvider, CognitoUserDirectory } from "./auth/cognito.js";
 import { MemoryAttachmentStore, S3AttachmentStore } from "./attachments/store.js";
@@ -51,8 +52,18 @@ async function main() {
   const app = await buildApp(deps);
   await app.listen({ port: deps.config.PORT, host: deps.config.HOST });
   deps.log.info("server_started", { port: deps.config.PORT, mode: `${deps.config.AUTH_MODE}/${deps.config.STORE_MODE}/${deps.config.LLM_MODE}`, version: process.env["APP_VERSION"] ?? "dev" });
-  const stop = async () => { await app.close(); process.exit(0); };
-  process.on("SIGTERM", stop); process.on("SIGINT", stop);
+  // ECS sends SIGTERM and, after the task's stop timeout (120 s), SIGKILL. Turns in flight get most of
+  // that to finish; the rest are handed back to their senders, who retry on the new container.
+  let stopping = false;
+  const stop = async () => {
+    if (stopping) return;
+    stopping = true;
+    const left = await drainTurns(deps.config.NODE_ENV === "production" ? 100_000 : 2_000);
+    if (left > 0) deps.log.warn("shutdown_turns_restarted", { count: left });
+    await app.close();
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => void stop()); process.on("SIGINT", () => void stop());
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {

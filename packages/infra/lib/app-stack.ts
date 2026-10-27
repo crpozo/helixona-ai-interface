@@ -163,6 +163,8 @@ export class AppStack extends cdk.Stack {
       image: ecs.ContainerImage.fromEcrRepository(props.apiRepository, cfg.imageTag),
       essential: true,
       readonlyRootFilesystem: true,
+      // Fargate's maximum: a turn in flight gets up to this long to finish when the task is replaced.
+      stopTimeout: cdk.Duration.seconds(120),
       portMappings: [{ containerPort, protocol: ecs.Protocol.TCP, name: 'http' }],
       logging: ecs.LogDrivers.awsLogs({ logGroup: this.appLogGroup, streamPrefix: 'api', mode: ecs.AwsLogDriverMode.NON_BLOCKING }),
       healthCheck: {
@@ -300,7 +302,8 @@ export class AppStack extends cdk.Stack {
       protocol: targetProtocol,
       protocolVersion: elbv2.ApplicationProtocolVersion.HTTP1,
       targetType: elbv2.TargetType.IP,
-      deregistrationDelay: cdk.Duration.seconds(30),
+      // Streams in flight keep flowing from the old task for as long as it is given to finish them.
+      deregistrationDelay: cdk.Duration.seconds(120),
       healthCheck: {
         path: '/api/health',
         protocol: cfg.tlsToContainer ? elbv2.Protocol.HTTPS : elbv2.Protocol.HTTP,
