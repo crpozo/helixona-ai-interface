@@ -4,7 +4,7 @@ import { currentModelId, modelByAlias, modelsForRole, ulid, type Catalog, type C
 import type { Deps } from "../deps.js";
 import type { ConversationPatch, Session } from "../repos/types.js";
 import { apiError, audit, requireAuth } from "../app.js";
-import { canReadProject, projectPartition, sharedProjectsFor } from "./projects.js";
+import { canReadProject, projectPartition, sharedProjectsFor, isTeamProject } from "./projects.js";
 import { requireTraining } from "./training.js";
 
 /** What the browser sees of a conversation; its model is the one its alias points to today. */
@@ -53,8 +53,20 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
 
   app.get("/api/conversations", { preHandler: requireAuth() }, async (req) => {
     const s = req.session!;
-    const items = await deps.repos.conversations.list(s.userId);
-    for (const p of await sharedProjectsFor(deps, s.userId)) items.push(...(await deps.repos.conversations.list(projectPartition(p.id))));
+    const own = await deps.repos.conversations.list(s.userId);
+    const team = await sharedProjectsFor(deps, s.userId);
+    // A conversation of a team project that is still filed under one person (started before the project
+    // was shared, or imported that way) moves to the project now, so every member finds it from here on.
+    const teamIds = new Set(team.map((p) => p.id));
+    const items: Conversation[] = [];
+    for (const c of own) {
+      if (c.projectId && teamIds.has(c.projectId)) {
+        const moved = await deps.repos.conversations.move(s.userId, c.id, projectPartition(c.projectId), { createdBy: c.createdBy ?? s.userId, createdByName: c.createdByName ?? s.name });
+        if (moved) continue;
+      }
+      items.push(c);
+    }
+    for (const p of team) items.push(...(await deps.repos.conversations.list(projectPartition(p.id))));
     items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     return { items: items.map((c) => publicConversation(c, deps.catalog)) };
   });
@@ -72,8 +84,8 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
       const project = await deps.repos.projects.get(body.data.projectId);
       if (!project || !canReadProject(project, s.userId)) return apiError(reply, 400, "unknown_project", "Project not found");
       projectId = project.id;
-      // A shared project's conversations belong to the project: every member finds them there.
-      if (project.visibility === "shared") key = projectPartition(project.id);
+      // A team project's conversations belong to the project: every member finds them there.
+      if (isTeamProject(project.visibility)) key = projectPartition(project.id);
     }
     const t = now();
     const c: Conversation = {

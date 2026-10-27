@@ -23,6 +23,11 @@ export function projectPartition(projectId: string): string {
   return `project:${projectId}`;
 }
 
+/** A project whose conversations belong to the project rather than to one person: shared with chosen people or with the clinic. */
+export function isTeamProject(visibility: ProjectVisibility): boolean {
+  return visibility !== "private";
+}
+
 export function isMember(p: Project, userId: string): boolean {
   return p.ownerId === userId || p.members.some((m) => m.id === userId);
 }
@@ -38,8 +43,9 @@ export function canManageProject(p: Project, userId: string, roles: string[]): b
   return p.ownerId === userId || roles.includes("admin");
 }
 /** The shared projects a person takes part in: where their conversations live besides their own. */
+/** The team projects whose conversations this person may see: shared ones they belong to, and every clinic-wide one. */
 export async function sharedProjectsFor(deps: Deps, userId: string): Promise<Project[]> {
-  return (await deps.repos.projects.list()).filter((p) => p.visibility === "shared" && isMember(p, userId));
+  return (await deps.repos.projects.list()).filter((p) => p.visibility === "clinic" || (p.visibility === "shared" && isMember(p, userId)));
 }
 
 function publicProject(p: Project, userId: string, roles: string[], status?: (k: Project["knowledge"][number]) => Project["knowledge"][number]["reading"]) {
@@ -74,13 +80,13 @@ const Visibility = z.enum(["private", "shared", "clinic"]);
 async function rehomeConversations(deps: Deps, p: Project, to: ProjectVisibility, actor: Session): Promise<number> {
   const repo = deps.repos.conversations;
   let moved = 0;
-  if (to === "shared" && p.visibility !== "shared") {
+  if (isTeamProject(to) && !isTeamProject(p.visibility)) {
     // The owner's conversations in the project become the team's.
     const ownerName = actor.userId === p.ownerId ? actor.name : ((await deps.directory.list()).find((u) => u.id === p.ownerId)?.name ?? "");
     for (const c of (await repo.list(p.ownerId)).filter((c) => c.projectId === p.id)) {
       if (await repo.move(p.ownerId, c.id, projectPartition(p.id), { createdBy: c.createdBy ?? p.ownerId, createdByName: c.createdByName ?? ownerName })) moved++;
     }
-  } else if (to !== "shared" && p.visibility === "shared") {
+  } else if (!isTeamProject(to) && isTeamProject(p.visibility)) {
     // Each conversation goes back to whoever started it; a member's leaves the project.
     for (const c of await repo.list(projectPartition(p.id))) {
       const home = c.createdBy ?? p.ownerId;
@@ -166,7 +172,7 @@ export function registerProjectRoutes(app: FastifyInstance, deps: Deps): void {
     await deps.repos.projects.delete(p.id);
     // Conversations keep their history but leave the project: a shared project's go back to whoever started them.
     const repo = deps.repos.conversations;
-    if (p.visibility === "shared") {
+    if (isTeamProject(p.visibility)) {
       for (const c of await repo.list(projectPartition(p.id))) await repo.move(projectPartition(p.id), c.id, c.createdBy ?? p.ownerId, { projectId: null });
     } else {
       for (const c of (await repo.list(p.ownerId)).filter((c) => c.projectId === p.id)) await repo.update(p.ownerId, c.id, { projectId: null, updatedAt: c.updatedAt });

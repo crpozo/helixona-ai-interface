@@ -203,7 +203,7 @@ export function Sidebar({ me, conversations, projects, selectedId, projectViewId
 
   const projectGroup = (p: Project) => {
     const chats = conversations.filter((c) => c.projectId === p.id);
-    const inShared = p.visibility === "shared";
+    const inShared = p.visibility !== "private";
     const kind = p.visibility === "clinic" ? "Shared with the clinic" : p.visibility === "shared" ? `Shared with ${p.members.length + 1} people` : "Private";
     return (
       <li key={p.id} className={`project-group${p.id === projectViewId ? " active" : ""}`}>

@@ -143,12 +143,12 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (visibility === "shared" && project.visibility !== "shared" && conversations.length > 0) {
+    if (visibility !== "private" && project.visibility === "private" && conversations.length > 0) {
       const n = conversations.length;
       if (!window.confirm(`Everyone you add to this project will see and can continue ${n === 1 ? "the chat" : `all ${n} chats`} already in it. Share the project?`)) return;
     }
-    if (visibility !== "shared" && project.visibility === "shared" && project.members.length > 0) {
-      if (!window.confirm("The people in this project will lose access to it. Chats they started go back to them, outside the project. Continue?")) return;
+    if (visibility === "private" && project.visibility !== "private") {
+      if (!window.confirm("Other people will lose access to this project. Chats they started go back to them, outside the project. Continue?")) return;
     }
     setSaving(true);
     setSaveError(null);

@@ -456,7 +456,7 @@ export function App() {
 
   // Shared project: colleagues may be writing in the open conversation. While it is idle, the list is
   // refreshed every 15 seconds; when it reports more messages than are on screen, they are fetched.
-  const selectedShared = !!selected?.projectId && projects.find((p) => p.id === selected.projectId)?.visibility === "shared";
+  const selectedShared = !!selected?.projectId && (projects.find((p) => p.id === selected.projectId)?.visibility ?? "private") !== "private";
   const reloadMessages = useCallback(async (id: string) => {
     const seq = ++loadSeq.current;
     try {

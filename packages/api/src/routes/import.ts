@@ -3,7 +3,7 @@ import { z } from "zod";
 import { estimateTokens, modelByAlias, modelsForRole, ulid, type AttachmentMeta, type BetaContentBlockParam, type Conversation, type Project, type ProjectMember, type StoredMessage } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import { apiError, audit, requireAuth } from "../app.js";
-import { canReadProject, MAX_MEMBERS, projectPartition } from "./projects.js";
+import { canReadProject, isTeamProject, MAX_MEMBERS, projectPartition } from "./projects.js";
 import { requireTraining } from "./training.js";
 import { attachmentKey, projectKnowledgeKey, safeName } from "../attachments/policy.js";
 
@@ -237,7 +237,7 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
         const p = projects.get(ic.projectId);
         if (p && canReadProject(p, s.userId)) {
           projectId = p.id;
-          if (p.visibility === "shared") key = projectPartition(p.id);
+          if (isTeamProject(p.visibility)) key = projectPartition(p.id);
         }
       }
       const done = await importedInto(key);

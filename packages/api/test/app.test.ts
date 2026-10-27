@@ -371,8 +371,9 @@ describe("Password sign-in (in-app)", () => {
 });
 
 describe("Projects and model switching", () => {
-  it("a clinic project is visible to everyone, a private one only to its owner; only owner/admin edit", async () => {
-    const { app } = await makeApp();
+  it("a clinic project is visible to everyone, a private one only to its owner; only owner/admin edit; its chats are everyone's", async () => {
+    const { app, repos } = await makeApp();
+    const listFor = async (a: FastifyInstance, cookie: string) => (await a.inject({ method: "GET", url: "/api/conversations", headers: { cookie } })).json().items as { id: string }[];
     const ana = await login(app, "ana", "staff");
     const luis = await login(app, "luis", "staff");
     const adm = await login(app, "root", "admin");
@@ -386,6 +387,16 @@ describe("Projects and model switching", () => {
     expect((await app.inject({ method: "PATCH", url: `/api/projects/${shared.json().id}`, headers: { ...H, cookie: luis.cookie }, payload: { name: "Hijack" } })).statusCode).toBe(403);
     expect((await app.inject({ method: "PATCH", url: `/api/projects/${shared.json().id}`, headers: { ...H, cookie: adm.cookie }, payload: { description: "Appeals for denied claims" } })).statusCode).toBe(200);
     expect((await app.inject({ method: "GET", url: `/api/projects/${priv.json().id}`, headers: { cookie: luis.cookie } })).statusCode).toBe(404);
+    // A clinic project's conversations are the clinic's: Luis sees Ana's, and can open it.
+    const c1 = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "sonnet", projectId: shared.json().id } })).json();
+    expect((await listFor(app, luis.cookie)).map((x) => x.id)).toEqual([c1.id]);
+    expect((await app.inject({ method: "GET", url: `/api/conversations/${c1.id}`, headers: { cookie: luis.cookie } })).statusCode).toBe(200);
+    // A conversation filed under Ana before the project was shared moves to the project the next time she lists hers.
+    const stray = { ...(await repos.conversations.get(`project:${shared.json().id}`, c1.id))!, id: "01STRAYSTRAYSTRAYSTRAYSTRA", userId: "dev-ana" };
+    await repos.conversations.create(stray, 86400);
+    expect((await listFor(app, luis.cookie)).map((x) => x.id)).toEqual([c1.id]);
+    expect((await listFor(app, ana.cookie)).map((x) => x.id).sort()).toEqual([c1.id, stray.id].sort());
+    expect((await listFor(app, luis.cookie)).map((x) => x.id).sort()).toEqual([c1.id, stray.id].sort());
     await app.close();
   });
 
