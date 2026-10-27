@@ -1,3 +1,4 @@
+import { costLabel } from "../lib/models";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CatalogModel } from "../lib/types";
@@ -189,8 +190,8 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
           </label>
           <select id="start-model" className="model-switch" value={alias} onChange={(e) => setAlias(e.target.value)} disabled={busy} title="Model for the new conversation">
             {available.map((m) => (
-              <option key={m.alias} value={m.alias}>
-                {m.label}
+              <option key={m.alias} value={m.alias} title={m.description}>
+                {m.label} ({costLabel(m)})
               </option>
             ))}
           </select>

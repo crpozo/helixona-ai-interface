@@ -6,6 +6,7 @@ import type { AdminUser, AttachmentMeta, AuditEvent, Conversation, Me, Message, 
 import trainingQuiz from "./training-quiz.json";
 
 const MODELS = [
+  { alias: "haiku", modelId: "anthropic.claude-haiku-5-5", label: "Haiku 5.5", description: "Fastest and cheapest: quick questions, short drafts, simple edits", costFactor: 0.05, available: true },
   { alias: "sonnet", modelId: "anthropic.claude-sonnet-5-5", label: "Sonnet 5.5", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, available: true },
   { alias: "opus", modelId: "anthropic.claude-opus-5-5", label: "Opus 5.5", description: "Recommended balance for everyday work", costFactor: 2, available: true },
   { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable 5.1", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, available: true },

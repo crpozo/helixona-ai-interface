@@ -68,6 +68,10 @@ export const DEFAULT_CATALOG: Catalog = CatalogSchema.parse({
   defaultAlias: "opus",
   effort: "medium",
   models: [
+    // Claude Haiku 5.5: the cheapest and fastest ($0.10 / $0.50 per million up to 100K-token prompts; the
+    // estimate here uses those rates). Its safety classifiers have no server-side fallback, so a refusal
+    // and an outage both go to Sonnet 5.5.
+    { alias: "haiku", modelId: "anthropic.claude-haiku-5-5", label: "Haiku 5.5", description: "Fastest and cheapest: quick questions, short drafts, simple edits", costFactor: 0.05, priceInPerM: 0.1, priceOutPerM: 0.5, priceCacheReadPerM: 0.01, priceCacheWritePerM: 0.125, refusalFallbacks: ["anthropic.claude-sonnet-5-5"], availabilityFallbacks: ["anthropic.claude-sonnet-5-5"] },
     // Claude Sonnet 5.5: same price as Sonnet 5; its classifiers decline in more categories (bio and
     // general_harms among them), so a medical false positive falls back to Sonnet 5, which also covers
     // availability until the organization has access to the new model.

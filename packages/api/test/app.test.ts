@@ -76,7 +76,7 @@ describe("API", () => {
     expect(me.statusCode).toBe(200);
     const body = me.json();
     expect(body.user.roles).toEqual(["staff"]);
-    expect(body.catalog.models.filter((m: { available: boolean }) => m.available).map((m: { alias: string }) => m.alias)).toEqual(["sonnet", "opus", "fable"]);
+    expect(body.catalog.models.filter((m: { available: boolean }) => m.available).map((m: { alias: string }) => m.alias)).toEqual(["haiku", "sonnet", "opus", "fable"]);
     expect(body.catalog.models.find((m: { modelId: string }) => m.modelId === "anthropic.claude-opus-5")).toMatchObject({ label: "Opus 5", available: false });
     expect(body.catalog.defaultAlias).toBe("opus");
   });

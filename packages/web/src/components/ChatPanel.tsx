@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ChatState } from "../lib/chatReducer";
 import type { AttachmentMeta, Conversation, Me } from "../lib/types";
-import { modelLabel } from "../lib/models";
+import { modelLabel, costLabel } from "../lib/models";
 import { getAttachmentTable } from "../lib/api";
 import { AttachmentFilesContext } from "../lib/documentViewer";
 import { isSpreadsheetType } from "../lib/files";
@@ -135,8 +135,8 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
         title="Change the model for the next messages"
       >
         {available.map((m) => (
-          <option key={m.alias} value={m.alias}>
-            {m.label}
+          <option key={m.alias} value={m.alias} title={m.description}>
+            {m.label} ({costLabel(m)})
           </option>
         ))}
       </select>
