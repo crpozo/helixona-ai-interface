@@ -105,9 +105,9 @@ export function loadConfig(app: cdk.App): DeployConfig {
     modelAccess: str(app, 'modelAccess', JSON.stringify({
       default: ['haiku', 'sonnet'],
       users: {
-        'tom@helixona.com': ['opus', 'fable'],
-        'cassandra@helixona.com': ['opus', 'fable'],
-        'vignesh@helixona.com': ['opus'],
+        'tom@helixona.com': ['haiku', 'sonnet', 'opus', 'fable'],
+        'cassandra@helixona.com': ['haiku', 'sonnet', 'opus', 'fable'],
+        'vignesh@helixona.com': ['haiku', 'sonnet', 'opus'],
       },
     })),
     // La Claude API vive en Internet: el contenedor necesita egreso (NAT). Con Bedrock puede ir por PrivateLink.
