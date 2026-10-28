@@ -16,7 +16,7 @@ const H = { "x-requested-with": "helixona", "content-type": "application/json" }
 const NOW = new Date("2026-10-02T12:00:00Z");
 
 async function makeApp(billing: BillingSource | null) {
-  const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "100", WEB_DIST: "/nonexistent", TRAINING_REQUIRED: "false", BILLING_VIEWER_EMAILS: "Carlos@dev.local, other@dev.local" });
+  const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "100", WEB_DIST: "/nonexistent", TRAINING_REQUIRED: "false", AUTO_TITLE: "false", BILLING_VIEWER_EMAILS: "Carlos@dev.local, other@dev.local" });
   const repos = memoryRepos();
   const provider = new FakeProvider({ delayMs: 0 });
   const deps: Deps = {

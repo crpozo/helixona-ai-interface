@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ChatState } from "../lib/chatReducer";
 import type { AttachmentMeta, Conversation, Me } from "../lib/types";
-import { modelLabel, costLabel } from "../lib/models";
+import { modelLabel } from "../lib/models";
+import { ModelPicker } from "./ModelPicker";
 import { getAttachmentTable } from "../lib/api";
 import { AttachmentFilesContext } from "../lib/documentViewer";
 import { isSpreadsheetType } from "../lib/files";
@@ -123,23 +124,7 @@ export function ChatPanel({ me, conversation, projectName, state, loading, onSen
   // Model picker at the bottom of the chat, next to the composer (same place as Claude.ai).
   const modelPicker = (
     <>
-      <label htmlFor="chat-model" className="visually-hidden">
-        Model for this conversation
-      </label>
-      <select
-        id="chat-model"
-        className="model-switch"
-        value={conversation.modelAlias}
-        disabled={state.streaming || loading}
-        onChange={(e) => onChangeModel(e.target.value)}
-        title="Change the model for the next messages"
-      >
-        {available.map((m) => (
-          <option key={m.alias} value={m.alias} title={m.description}>
-            {m.label} ({costLabel(m)})
-          </option>
-        ))}
-      </select>
+      <ModelPicker id="chat-model" label="Model for this conversation" models={available} value={conversation.modelAlias} disabled={state.streaming || loading} onChange={onChangeModel} title="Change the model for the next messages" />
       {conversation.pinnedModel && conversation.pinnedModel !== conversation.modelId && (
         <span className="muted small">(answering with {modelLabel(models, activeModel)})</span>
       )}

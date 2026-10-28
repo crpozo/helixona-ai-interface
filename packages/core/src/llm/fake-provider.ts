@@ -93,7 +93,8 @@ export class FakeProvider implements LlmProvider {
           finalResolve(final);
           return;
         }
-        const reply = self.replyFor(userText, model, titles[titles.length - 1] ?? "", toolResultText(blocks));
+        const systemText = (params.system ?? []).map((b) => (typeof b === "string" ? b : (b as { text?: string }).text ?? "")).join("\n");
+        const reply = self.replyFor(userText, model, titles[titles.length - 1] ?? "", toolResultText(blocks), systemText);
         // A transcription streams a page at a time, so reading a long file in tests takes seconds, not minutes.
         const parts = /^Transcribe pages? \d/.test(userText) ? reply.split(/(?=\(p\. \d+\))/) : (reply.match(/.{1,12}/gs) ?? []);
         let idx = content.length;
@@ -142,8 +143,10 @@ export class FakeProvider implements LlmProvider {
     };
   }
 
-  private replyFor(userText: string, model: string, fileTitle = "", toolResult: string | null = null): string {
+  private replyFor(userText: string, model: string, fileTitle = "", toolResult: string | null = null, system = ""): string {
     if (toolResult !== null) return `**Simulated reply** (${model}).\n\nRead from the ZIP:\n\n${toolResult.slice(0, 400)}`;
+    // The title request: the first words of the message, as a chat title would read.
+    if (/Reply with the title only/.test(system)) return userText.split(/\s+/).filter(Boolean).slice(0, 4).join(" ") || "New chat";
     if (/^\/sheet\b/.test(userText)) {
       const f = fileTitle || "attachment.csv";
       return `Here is the workbook.\n\n\`\`\`document-xlsx\n# Check follow-up\n\nPrepared from ${f}.\n\n## Original data\n\n{{file: ${f}}}\n\n## Cashed by patient\n\n{{file: ${f} | rows: 2, 4}}\n\n## Never cashed\n\n{{file: ${f} | rows: 3}}\n\n## Largest check per status\n\n{{file: ${f} | group: Status | pick: highest Amount | columns: Status, Patient, Amount}}\n\n## Summary\n\n| Tab | Rows |\n| --- | --- |\n| Cashed by patient | 2 |\n| Never cashed | 1 |\n\`\`\`\n\nCashed by patient: 2 rows (status "Cashed"). Never cashed: 1 row (status "Outstanding"). Largest check per status: computed from the whole file.`;

@@ -1,10 +1,10 @@
-import { costLabel } from "../lib/models";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CatalogModel } from "../lib/types";
 import { ApiError } from "../lib/api";
 import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, isZipType, maxMbFor, readsPageByPage } from "../lib/files";
 import { Icon } from "./Icon";
+import { ModelPicker } from "./ModelPicker";
 import { useFileDrop } from "../lib/useFileDrop";
 
 export interface StartAttachmentLimits {
@@ -185,16 +185,7 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
               </button>
             </>
           )}
-          <label htmlFor="start-model" className="visually-hidden">
-            Model
-          </label>
-          <select id="start-model" className="model-switch" value={alias} onChange={(e) => setAlias(e.target.value)} disabled={busy} title="Model for the new conversation">
-            {available.map((m) => (
-              <option key={m.alias} value={m.alias} title={m.description}>
-                {m.label} ({costLabel(m)})
-              </option>
-            ))}
-          </select>
+          <ModelPicker id="start-model" label="Model" models={available} value={alias} onChange={setAlias} disabled={busy} title="Model for the new conversation" />
         </div>
         <div className="composer-right">
           <button type="submit" className="composer-send" disabled={!canSend} aria-label={busy ? (files.length ? "Uploading…" : "Starting…") : "Send"} title="Send (Enter)">

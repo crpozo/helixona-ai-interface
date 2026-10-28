@@ -26,7 +26,7 @@ function parseSse(body: string): { event: string; data: Record<string, unknown> 
 
 async function makeApp(extraEnv: Record<string, string> = {}, identity?: IdentityProvider, passwordAuth: PasswordAuth | null = null, directorySeed: DirectoryUser[] = []) {
   // The training gate is covered by its own tests; everything else runs with it off.
-  const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "1", WEB_DIST: "/nonexistent", TRAINING_REQUIRED: "false", ...extraEnv });
+  const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "1", WEB_DIST: "/nonexistent", TRAINING_REQUIRED: "false", AUTO_TITLE: "false", ...extraEnv });
   const repos = memoryRepos();
   const provider = new FakeProvider({ refusalFallbacks: Object.fromEntries(DEFAULT_CATALOG.models.map((m) => [m.modelId, m.refusalFallbacks])), delayMs: 0 });
   const deps: Deps = {
@@ -371,6 +371,23 @@ describe("Password sign-in (in-app)", () => {
 });
 
 describe("Projects and model switching", () => {
+  it("a new conversation is titled by the topic of its first message, without the date title; a renamed one is left alone", async () => {
+    const { app } = await makeApp({ AUTO_TITLE: "true" });
+    const ana = await login(app, "ana");
+    const c = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "sonnet" } })).json();
+    expect(c.title).toMatch(/^Conversation /);
+    const turn = await app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, headers: { ...H, cookie: ana.cookie }, payload: { text: "Dental EOB out-of-pocket costs for a crown" } });
+    const done = parseSse(turn.body).find((e) => e.event === "done")!;
+    expect(done.data.title).toBe("Dental EOB out-of-pocket costs");
+    expect((await app.inject({ method: "GET", url: `/api/conversations/${c.id}`, headers: { cookie: ana.cookie } })).json().conversation.title).toBe("Dental EOB out-of-pocket costs");
+    // A second message does not retitle; a title the person set is never replaced.
+    const c2 = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "sonnet" } })).json();
+    await app.inject({ method: "PATCH", url: `/api/conversations/${c2.id}`, headers: { ...H, cookie: ana.cookie }, payload: { title: "My own name" } });
+    await app.inject({ method: "POST", url: `/api/conversations/${c2.id}/messages`, headers: { ...H, cookie: ana.cookie }, payload: { text: "Anything at all here" } });
+    expect((await app.inject({ method: "GET", url: `/api/conversations/${c2.id}`, headers: { cookie: ana.cookie } })).json().conversation.title).toBe("My own name");
+    await app.close();
+  });
+
   it("a clinic project is visible to everyone, a private one only to its owner; only owner/admin edit; its chats are everyone's", async () => {
     const { app, repos } = await makeApp();
     const listFor = async (a: FastifyInstance, cookie: string) => (await a.inject({ method: "GET", url: "/api/conversations", headers: { cookie } })).json().items as { id: string }[];

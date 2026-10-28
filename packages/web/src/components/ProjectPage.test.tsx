@@ -67,7 +67,7 @@ describe("ProjectPage", () => {
     expect(screen.getByRole("heading", { level: 1, name: "EOB review" })).toBeTruthy();
     expect(screen.getByText("Explanation-of-benefits checks")).toBeTruthy();
     expect(screen.getByPlaceholderText("How can I help you today?")).toBeTruthy();
-    expect((screen.getByLabelText("Model") as HTMLSelectElement).value).toBe("opus");
+    expect(screen.getByRole("button", { name: "Model: Opus" })).toBeTruthy();
     const rows = screen.getAllByRole("button", { name: /chat/ }).map((b) => b.textContent);
     expect(rows[0]).toContain("Newest chat");
     expect(rows[1]).toContain("Older chat");
@@ -80,7 +80,8 @@ describe("ProjectPage", () => {
 
   it("starts a conversation from the composer with the chosen model", async () => {
     const p = renderPage();
-    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "sonnet" } });
+    fireEvent.click(screen.getByRole("button", { name: "Model: Opus" }));
+    fireEvent.click(screen.getByRole("option", { name: /Sonnet/ }));
     fireEvent.change(screen.getByPlaceholderText("How can I help you today?"), { target: { value: "  Summarize this EOB  " } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(p.onStartConversation).toHaveBeenCalledWith("Summarize this EOB", "sonnet", []));

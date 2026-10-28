@@ -414,6 +414,11 @@ export function App() {
       for await (const ev of sendMessage(conv.id, text, ac.signal, attachments.map((a) => ({ id: a.id, name: a.name })))) {
         dispatch({ type: "sse", event: ev });
         if (ev.type === "error" && ev.data.code === "server_restart") scheduleAutoRetry(conv, assistantId, text, attachments, 6_000);
+        if (ev.type === "done" && ev.data.title) {
+          const title = ev.data.title;
+          setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, title } : c)));
+          setSelected((prev) => (prev && prev.id === conv.id ? { ...prev, title } : prev));
+        }
       }
       dispatch({ type: "finish" });
     } catch (e) {

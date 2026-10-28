@@ -3,6 +3,7 @@ import { DOC_FORMAT_LABEL, copyFormatted, documentTitle, markdownToClipboardHtml
 import { AttachmentFilesContext, DocumentViewerContext } from "../lib/documentViewer";
 import { deliverDocument, FORMAT_LABEL, FORMATS, needsTable, NoTableError } from "../lib/deliver";
 import { expandFileRefs, hasFileRefs, hasTables } from "../lib/workbook";
+import { RowMenu } from "./RowMenu";
 
 interface Props {
   /** The document's content (Markdown), as the model wrote it inside the fence. */
@@ -121,31 +122,25 @@ export function DocumentCard({ markdown: written, format, ready, fallbackTitle }
           <div className="doc-card-open static">{face}</div>
         )}
         <div className="doc-card-actions">
-          <button type="button" className="btn btn-small" disabled={!usable} onClick={() => void copy()} aria-label={`Copy ${title}`} title="Copy with its formatting, for Word, eClinicalWorks or email">
-            {copied ? "Copied" : "Copy"}
+          {openViewer && usable && (
+            <button type="button" className="btn btn-small" onClick={() => openViewer({ markdown, format: primary, title })} title="Open the preview">
+              Open
+            </button>
+          )}
+          <button type="button" className="btn btn-primary btn-small" disabled={!usable || busy !== null} onClick={() => void deliver(primary)} aria-label={`Download ${title} as ${FORMAT_LABEL[primary]}`} title={`Download as ${FORMAT_LABEL[primary]}`}>
+            {busy === primary ? "Preparing…" : "Download"}
           </button>
-          <button type="button" className="btn btn-primary btn-small" disabled={!usable || busy !== null} onClick={() => void deliver(primary)} aria-label={`Download ${title} as ${FORMAT_LABEL[primary]}`}>
-            {busy === primary ? "Preparing…" : primary === "pdf" ? "Save as PDF" : `Download ${FORMAT_LABEL[primary]}`}
-          </button>
+          {usable && (
+          <RowMenu
+            name={title}
+            label={`More for ${title}`}
+            items={[
+              { label: copied ? "Copied" : "Copy", icon: "download" as const, ariaLabel: `Copy ${title}`, onSelect: () => void copy() },
+              ...others.map((f) => ({ label: `Download as ${FORMAT_LABEL[f]}`, icon: "download" as const, ariaLabel: `Download ${title} as ${FORMAT_LABEL[f]}`, onSelect: () => void deliver(f) })),
+            ]}
+          />
+          )}
         </div>
-      </div>
-      <div className="doc-card-foot">
-        <span className="muted small">
-          Also as{" "}
-          {others.map((f, i) => (
-            <span key={f}>
-              {i > 0 ? " · " : ""}
-              <button type="button" className="link small" disabled={!usable || busy !== null} onClick={() => void deliver(f)} aria-label={`Download ${title} as ${FORMAT_LABEL[f]}`}>
-                {FORMAT_LABEL[f]}
-              </button>
-            </span>
-          ))}
-        </span>
-        {openViewer && usable && (
-          <button type="button" className="link small" onClick={() => openViewer({ markdown, format: primary, title })}>
-            Open
-          </button>
-        )}
       </div>
       {problems.length > 0 && (
         <p className="notice notice-error" role="alert">

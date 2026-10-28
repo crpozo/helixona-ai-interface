@@ -46,6 +46,8 @@ const Env = z.object({
   RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   /** Nobody, administrators included, uses the assistant before completing the workforce training. */
   TRAINING_REQUIRED: z.enum(["true", "false"]).default("true"),
+  /** A new conversation is titled by its first message (the cheapest model names the topic). */
+  AUTO_TITLE: z.enum(["true", "false"]).default("true"),
   /** Lets a user skip the online training by attesting they already know it; the log shows the attestation. */
   TRAINING_ALLOW_SKIP: z.enum(["true", "false"]).default("true"),
   FIRST_EVENT_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),

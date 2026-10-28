@@ -178,7 +178,7 @@ describe("A turn over a ZIP, end to end", () => {
   let store: MemoryAttachmentStore;
   let cookie: string;
   beforeAll(async () => {
-    const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", WEB_DIST: "/nonexistent", TRAINING_REQUIRED: "false" });
+    const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", WEB_DIST: "/nonexistent", TRAINING_REQUIRED: "false", AUTO_TITLE: "false" });
     const repos = memoryRepos();
     const rec = recording(new FakeProvider({ refusalFallbacks: Object.fromEntries(DEFAULT_CATALOG.models.map((m) => [m.modelId, m.refusalFallbacks])), delayMs: 0 }));
     calls = rec.calls;

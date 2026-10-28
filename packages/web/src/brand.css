@@ -82,7 +82,7 @@
   --brand-glow: radial-gradient(ellipse 70% 55% at 50% 62%, rgba(201, 162, 39, 0.34), rgba(201, 162, 39, 0.08) 45%, transparent 72%);
 
   /* Typography */
-  --brand-font: "Montserrat", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --brand-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, system-ui, sans-serif;
   --brand-font-heading: "Playfair Display", Georgia, "Times New Roman", serif;
   --brand-heading-weight: 500;
   --brand-tracking: 0.18em;          /* uppercase labels and buttons */

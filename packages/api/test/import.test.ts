@@ -13,7 +13,7 @@ import type { Deps } from "../src/deps.js";
 const H = { "x-requested-with": "helixona", "content-type": "application/json" };
 
 async function makeApp() {
-  const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "100", WEB_DIST: "/nonexistent", TRAINING_REQUIRED: "false" });
+  const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "100", WEB_DIST: "/nonexistent", TRAINING_REQUIRED: "false", AUTO_TITLE: "false" });
   const repos = memoryRepos();
   const provider = new FakeProvider({ delayMs: 0 });
   const store = new MemoryAttachmentStore();

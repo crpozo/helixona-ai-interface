@@ -72,7 +72,7 @@ test.describe("Conversations", () => {
     expect(clip.text).toContain("Simulated reply");
     expect(clip.text).not.toContain("**");
     const [download] = await Promise.all([page.waitForEvent("download"), reply.getByRole("button", { name: "Download the response as a Word document" }).click()]);
-    expect(download.suggestedFilename()).toMatch(/^Conversation .*\.docx$/);
+    expect(download.suggestedFilename()).toMatch(/^Summarize the HIPAA safeguards\.docx$/);
     expect(fs.readFileSync((await download.path())!).subarray(0, 2).toString()).toBe("PK");
 
     // Enter sends; Shift+Enter makes a new line.
@@ -88,7 +88,8 @@ test.describe("Conversations", () => {
     await expect(page.locator(".composer-stop")).toHaveCount(0);
 
     // Changing the model applies to the next reply.
-    await page.locator("#chat-model").selectOption("sonnet");
+    await page.locator("#chat-model").click();
+    await page.getByRole("option", { name: /Sonnet 5.5/ }).click();
     await box.fill("Third question");
     await box.press("Enter");
     await expect(page.locator(".msg-assistant")).toHaveCount(3);
@@ -177,12 +178,15 @@ test.describe("Conversations", () => {
     await expect(page.locator(".msg-assistant").first()).toContainText("Review the names and dates before sending.");
     await expect(page.locator(".msg-assistant .msg-actions")).toHaveCount(0);
     const [docx] = await Promise.all([page.waitForEvent("download"), card.getByRole("button", { name: "Download Intake summary as Word" }).click()]);
+    const more = async () => card.getByRole("button", { name: "More for Intake summary" }).click();
     expect(docx.suggestedFilename()).toBe("Intake summary.docx");
     expect(fs.readFileSync((await docx.path())!).subarray(0, 2).toString()).toBe("PK");
-    const [txt] = await Promise.all([page.waitForEvent("download"), card.getByRole("button", { name: "Download Intake summary as Text" }).click()]);
+    await more();
+    const [txt] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: "Download Intake summary as Text" }).click()]);
     expect(txt.suggestedFilename()).toBe("Intake summary.txt");
     expect(fs.readFileSync((await txt.path())!, "utf8")).toContain("• First finding");
-    const [csv] = await Promise.all([page.waitForEvent("download"), card.getByRole("button", { name: "Download Intake summary as CSV" }).click()]);
+    await more();
+    const [csv] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: "Download Intake summary as CSV" }).click()]);
     expect(csv.suggestedFilename()).toBe("Intake summary.csv");
     expect(fs.readFileSync((await csv.path())!, "utf8")).toContain("Item,Value\nSample,12.3");
     // Clicking the card opens the preview beside the chat: white pages with the letterhead and a page counter.

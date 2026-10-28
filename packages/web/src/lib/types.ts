@@ -344,6 +344,8 @@ export interface SseDone {
   stopReason: string | null;
   usage: Usage | null;
   fallbackReason: FallbackReason | null;
+  /** A topic title given to a new conversation by its first exchange. */
+  title?: string;
 }
 
 /** One file the server is checking or reading page by page before it answers. */

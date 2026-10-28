@@ -24,16 +24,3 @@ export function formatCostFactor(factor: number): string {
   return `${s}x`;
 }
 
-/**
- * A cost tag for the model picker, from the model's cost relative to Sonnet: "$" for Haiku, "$$" for
- * Sonnet, "$$$" for Opus and "$$$$$, very expensive" for Fable, so the price is visible where the
- * choice is made.
- */
-export function costLabel(m: Pick<CatalogModel, "costFactor">): string {
-  const f = m.costFactor;
-  if (f < 0.5) return "$";
-  if (f < 1.5) return "$$";
-  if (f < 3.5) return "$$$";
-  if (f < 6) return "$$$$$, very expensive";
-  return "$$$$$$, extremely expensive";
-}

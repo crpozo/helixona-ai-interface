@@ -24,15 +24,21 @@ describe("DocumentCard", () => {
     expect(screen.getByText("Here it is.")).toBeTruthy();
     expect(screen.getByText("Review before sending.")).toBeTruthy();
     expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    // The requested format is the main button; Copy and the other formats sit in the card's menu.
     fireEvent.click(screen.getByRole("button", { name: "Download Intake summary as Word" }));
     await waitFor(() => expect(downloadBlob).toHaveBeenCalledWith(expect.any(Blob), "Intake summary.docx"));
-    fireEvent.click(screen.getByRole("button", { name: "Download Intake summary as CSV" }));
+    const more = () => fireEvent.click(screen.getByRole("button", { name: "More for Intake summary" }));
+    more();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Download Intake summary as CSV" }));
     await waitFor(() => expect(downloadBlob).toHaveBeenCalledWith(expect.any(Blob), "Intake summary.csv"));
-    fireEvent.click(screen.getByRole("button", { name: "Download Intake summary as Text" }));
+    more();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Download Intake summary as Text" }));
     await waitFor(() => expect(downloadBlob).toHaveBeenCalledWith(expect.any(Blob), "Intake summary.txt"));
-    fireEvent.click(screen.getByRole("button", { name: "Download Intake summary as PDF" }));
+    more();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Download Intake summary as PDF" }));
     expect(printMarkdownDocument).toHaveBeenCalledWith(expect.stringContaining("# Intake summary"), "Intake summary");
-    fireEvent.click(screen.getByRole("button", { name: "Copy Intake summary" }));
+    more();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy Intake summary" }));
     await waitFor(() => expect(copyFormatted).toHaveBeenCalled());
     expect((copyFormatted as unknown as { mock: { calls: string[][] } }).mock.calls[0]![0]).toContain("<h1>Intake summary</h1>");
     // Without a viewer around (other pages, tests) the card is not clickable.
@@ -60,7 +66,7 @@ describe("DocumentCard", () => {
     );
     expect(screen.getByText("Writing the document…")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Download Draft as Word" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Copy Draft" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "More for Draft" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Open Draft" })).toBeNull();
   });
 
@@ -91,7 +97,8 @@ describe("DocumentCard", () => {
     expect((open.mock.calls[0]![0] as { markdown: string }).markdown).not.toContain("{{file:");
     fireEvent.click(screen.getByRole("button", { name: "Download Check follow-up as Excel" }));
     await waitFor(() => expect(downloadBlob).toHaveBeenCalledWith(expect.any(Blob), "Check follow-up.xlsx"));
-    expect(screen.getByRole("button", { name: "Download Check follow-up as CSV" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "More for Check follow-up" }));
+    expect(screen.getByRole("menuitem", { name: "Download Check follow-up as CSV" })).toBeTruthy();
     cleanup();
 
     // A file that is not in the conversation: the card says so, and nothing is made up.
@@ -107,8 +114,10 @@ describe("DocumentCard", () => {
   it("the requested format leads; a spreadsheet needs a table; a document without a title takes the conversation's", () => {
     render(<Markdown text={"```document-pdf\n# Letter\n\nDear patient\n```"} documentReady />);
     expect(screen.getByText("Document · PDF")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Download Letter as PDF" }).textContent).toBe("Save as PDF");
-    expect(screen.queryByRole("button", { name: "Download Letter as CSV" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Download Letter as PDF" }).textContent).toBe("Download");
+    fireEvent.click(screen.getByRole("button", { name: "More for Letter" }));
+    expect(screen.queryByRole("menuitem", { name: "Download Letter as CSV" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Download Letter as Word" })).toBeTruthy();
     cleanup();
     render(<Markdown text={"```document-csv\nNo table here\n```"} documentReady fallbackTitle="Conversation Sep 24" />);
     expect(screen.getByText("Document · DOCX")).toBeTruthy();

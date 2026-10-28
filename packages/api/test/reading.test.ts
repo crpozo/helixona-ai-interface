@@ -226,7 +226,7 @@ describe("DocumentReader", () => {
 // ---- Through the chat route ----
 
 async function makeApp(wrap?: (p: LlmProvider) => LlmProvider) {
-  const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "100", WEB_DIST: "/nonexistent", TRAINING_REQUIRED: "false" });
+  const config = loadConfig({ NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", DAILY_QUOTA_USD: "100", WEB_DIST: "/nonexistent", TRAINING_REQUIRED: "false", AUTO_TITLE: "false" });
   const repos = memoryRepos();
   const fake = fakeProvider();
   const provider = wrap ? wrap(fake) : fake;

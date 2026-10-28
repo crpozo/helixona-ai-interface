@@ -669,6 +669,8 @@ label {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-right: 6px;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -2041,19 +2043,74 @@ td {
   background: var(--surface-2);
 }
 .model-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   width: auto;
   min-height: 32px;
-  padding: 0.2rem 1.6rem 0.2rem 0.5rem;
+  padding: 0.2rem 0.5rem;
+  font: inherit;
   font-size: 0.85rem;
   background: transparent;
-  border-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
   color: var(--muted);
   cursor: pointer;
 }
 .model-switch:hover,
-.model-switch:focus {
+.model-switch:focus,
+.model-switch.open {
   color: var(--text);
   border-color: var(--border);
+}
+.model-switch:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.model-switch .icon {
+  color: var(--muted);
+}
+/* The list of models: name and a line on what each is for, the current one ticked. */
+.model-menu {
+  padding: 0.35rem;
+}
+.model-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.model-option:hover,
+.model-option:focus-visible,
+.model-option.selected {
+  background: var(--surface-2);
+}
+.model-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.model-option-name {
+  font-size: 0.92rem;
+}
+.model-option-desc {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.3;
+}
+.model-option-check {
+  color: var(--brand-primary);
+  flex: none;
 }
 .badge-project {
   border: 1px solid var(--brand-line-gold);
@@ -3430,6 +3487,36 @@ td {
   padding: 96px;
   background: #fff;
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
+}
+/* Nothing in a document may run past the page: tables wrap their cells, long words and links break. */
+.doc-paper table {
+  width: 100%;
+  max-width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+.doc-paper th,
+.doc-paper td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.doc-paper p,
+.doc-paper li,
+.doc-paper h1,
+.doc-paper h2,
+.doc-paper h3,
+.doc-paper blockquote {
+  overflow-wrap: anywhere;
+}
+.doc-paper pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.doc-paper img {
+  max-width: 100%;
+  height: auto;
 }
 .doc-page-number {
   position: absolute;
