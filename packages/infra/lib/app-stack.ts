@@ -203,6 +203,8 @@ export class AppStack extends cdk.Stack {
         // The version the server reports (/api/health): a page left open notices a deploy and asks to reload.
         APP_VERSION: cfg.imageTag,
         BILLING_VIEWER_EMAILS: cfg.billingViewerEmails,
+        // Who may use which models (administrators can adjust a person from the Administration page).
+        MODEL_ACCESS: cfg.modelAccess,
         AWS_REGION: this.region,
         LLM_MODE: cfg.llmMode,
         EFFORT: 'medium',

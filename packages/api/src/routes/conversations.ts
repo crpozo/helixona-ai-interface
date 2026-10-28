@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
+import { allowedModels } from "../model-access.js";
 import { z } from "zod";
-import { currentModelId, modelByAlias, modelsForRole, ulid, type Catalog, type Conversation, type Project } from "@helixona/core";
+import { currentModelId, modelByAlias, ulid, type Catalog, type Conversation, type Project } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import type { ConversationPatch, Session } from "../repos/types.js";
 import { apiError, audit, requireAuth } from "../app.js";
@@ -79,7 +80,7 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
     if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
     const s = req.session!;
     const entry = modelByAlias(deps.catalog, body.data.modelAlias);
-    if (!entry || !modelsForRole(deps.catalog, s.roles).some((m) => m.alias === entry.alias)) return apiError(reply, 400, "unknown_model", "Model not available");
+    if (!entry || !(await allowedModels(deps, s)).some((m) => m.alias === entry.alias)) return apiError(reply, 400, "unknown_model", "Model not available");
     let projectId: string | null = null;
     let key = s.userId;
     if (body.data.projectId) {
@@ -118,7 +119,7 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
     if (body.data.title !== undefined) patch.title = body.data.title;
     if (body.data.modelAlias !== undefined) {
       const entry = modelByAlias(deps.catalog, body.data.modelAlias);
-      if (!entry || !modelsForRole(deps.catalog, req.session!.roles).some((m) => m.alias === entry.alias)) return apiError(reply, 400, "unknown_model", "Model not available");
+      if (!entry || !(await allowedModels(deps, req.session!)).some((m) => m.alias === entry.alias)) return apiError(reply, 400, "unknown_model", "Model not available");
       // Explicit choice by the user: it also lifts any fallback pin.
       Object.assign(patch, { modelAlias: entry.alias, modelId: entry.modelId, pinnedModel: null, pinReason: null, pinnedUntil: null });
     }

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { allowedModels, defaultModelFor } from "../model-access.js";
 import { z } from "zod";
 import { currentModelId, estimateAttachmentTokens, estimateTokens, ulid, withoutRounds, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type ToolRound, type TurnEvent, type UsageSummary } from "@helixona/core";
 import type { Deps } from "../deps.js";
@@ -130,6 +131,14 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
     if (latestModel !== conv.modelId) {
       await deps.repos.conversations.update(key, id, { modelId: latestModel });
       conv.modelId = latestModel;
+    }
+    // A conversation on a model this person may no longer use continues on the model they start with.
+    const allowed = await allowedModels(deps, req.session!);
+    if (allowed.length > 0 && !allowed.some((m) => m.alias === conv.modelAlias)) {
+      const to = defaultModelFor(deps.catalog, allowed)!;
+      await deps.repos.conversations.update(key, id, { modelAlias: to.alias, modelId: to.modelId, pinnedModel: null, pinReason: null, pinnedUntil: null });
+      conv.modelAlias = to.alias;
+      conv.modelId = to.modelId;
     }
 
     // Quick checks of the new files before the reply stream starts, so problems the user can fix are

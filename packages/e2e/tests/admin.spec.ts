@@ -59,6 +59,19 @@ test.describe("Administration", () => {
     page.off("dialog", onPasswordDialogs);
     expect(await page.content()).not.toContain(shown);
 
+    // Models: the row shows what the person may use; the inline editor narrows it and "Use policy" undoes that.
+    await expect(row.getByRole("button", { name: `Models for ${email}` })).toHaveText("Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1");
+    await row.getByRole("button", { name: `Models for ${email}` }).click();
+    const editor = row.getByRole("group", { name: `Models for ${email}` });
+    await editor.getByLabel("Opus 5.5").uncheck();
+    await editor.getByLabel("Fable 5.1").uncheck();
+    await editor.getByRole("button", { name: "Save" }).click();
+    await expect(row.getByRole("button", { name: `Models for ${email}` })).toHaveText("Haiku 5.5, Sonnet 5.5");
+    await expect(row).toContainText("set here");
+    await row.getByRole("button", { name: `Models for ${email}` }).click();
+    await row.getByRole("button", { name: "Use policy" }).click();
+    await expect(row.getByRole("button", { name: `Models for ${email}` })).toHaveText("Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1");
+
     // Disable (asks first) and enable.
     const acceptAll = (d: import("@playwright/test").Dialog) => void d.accept();
     page.on("dialog", acceptAll);

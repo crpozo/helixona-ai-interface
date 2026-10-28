@@ -840,3 +840,48 @@ describe("Shared projects", () => {
     await app.close();
   });
 });
+
+describe("Model access", () => {
+  const POLICY = JSON.stringify({ default: ["haiku", "sonnet"], users: { "tom@dev.local": ["opus", "fable"] } });
+  it("staff get the policy default, named people their list, administrators everything; a setting made here wins", async () => {
+    const { app } = await makeApp({ MODEL_ACCESS: POLICY });
+    const avail = async (cookie: string) => {
+      const me = (await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json();
+      return { models: me.catalog.models.filter((m: { available: boolean }) => m.available).map((m: { alias: string }) => m.alias), def: me.catalog.defaultAlias as string };
+    };
+    const ana = await login(app, "ana", "staff");
+    expect(await avail(ana.cookie)).toEqual({ models: ["haiku", "sonnet"], def: "sonnet" });
+    const denied = await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "opus" } });
+    expect(denied.statusCode).toBe(400);
+    const tom = await login(app, "tom", "staff");
+    expect(await avail(tom.cookie)).toEqual({ models: ["opus", "fable"], def: "opus" });
+    const adm = await login(app, "root", "admin");
+    expect(await avail(adm.cookie)).toEqual({ models: ["haiku", "sonnet", "opus", "fable"], def: "opus" });
+
+    // The listing shows each person's models and where they come from.
+    const list = (await app.inject({ method: "GET", url: "/api/admin/users", headers: { cookie: adm.cookie } })).json();
+    expect(list.defaultModels).toEqual(["haiku", "sonnet"]);
+    expect(list.models.map((m: { alias: string }) => m.alias)).toEqual(["haiku", "sonnet", "opus", "fable"]);
+    expect(list.items.find((u: { id: string }) => u.id === "dev-ana")).toMatchObject({ models: ["haiku", "sonnet"], modelsSource: "default" });
+    expect(list.items.find((u: { id: string }) => u.id === "dev-tom")).toMatchObject({ models: ["opus", "fable"], modelsSource: "policy" });
+    expect(list.items.find((u: { id: string }) => u.id === "dev-root")).toMatchObject({ models: ["haiku", "sonnet", "opus", "fable"], modelsSource: "admin" });
+
+    // A setting for one person: Ana may use Opus only; her open Sonnet conversation continues on Opus at the next message.
+    const conv = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "sonnet" } })).json();
+    const set = await app.inject({ method: "POST", url: "/api/admin/users/dev-ana/models", headers: { ...H, cookie: adm.cookie }, payload: { models: ["opus"] } });
+    expect(set.json()).toEqual({ ok: true });
+    expect(await avail(ana.cookie)).toEqual({ models: ["opus"], def: "opus" });
+    const turn = await app.inject({ method: "POST", url: `/api/conversations/${conv.id}/messages`, headers: { ...H, cookie: ana.cookie }, payload: { text: "hello" } });
+    expect(turn.statusCode).toBe(200);
+    const after = (await app.inject({ method: "GET", url: `/api/conversations/${conv.id}`, headers: { cookie: ana.cookie } })).json();
+    expect(after.conversation.modelAlias).toBe("opus");
+    expect((await app.inject({ method: "GET", url: "/api/admin/users", headers: { cookie: adm.cookie } })).json().items.find((u: { id: string }) => u.id === "dev-ana")).toMatchObject({ models: ["opus"], modelsSource: "override" });
+
+    // Unknown aliases are refused; clearing the setting returns to the policy; staff cannot set models.
+    expect((await app.inject({ method: "POST", url: "/api/admin/users/dev-ana/models", headers: { ...H, cookie: adm.cookie }, payload: { models: ["nope"] } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/api/admin/users/dev-ana/models", headers: { ...H, cookie: adm.cookie }, payload: { models: null } })).json()).toEqual({ ok: true });
+    expect(await avail(ana.cookie)).toEqual({ models: ["haiku", "sonnet"], def: "sonnet" });
+    expect((await app.inject({ method: "POST", url: "/api/admin/users/dev-tom/models", headers: { ...H, cookie: ana.cookie }, payload: { models: ["haiku"] } })).statusCode).toBe(403);
+    await app.close();
+  });
+});

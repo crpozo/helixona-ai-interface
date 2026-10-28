@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { modelsForRole, type Role } from "@helixona/core";
+import type { Role } from "@helixona/core";
+import { allowedModels, defaultModelFor } from "../model-access.js";
 import type { Deps } from "../deps.js";
 import { isBillingViewer } from "../billing/viewer.js";
 import type { IdentityResult, OidcPending } from "../auth/cognito.js";
@@ -148,15 +149,16 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
     const s = req.session!;
     const idleExp = new Date(s.expiresAt * 1000).toISOString();
     const expiresAt = idleExp < s.absoluteExpiresAt ? idleExp : s.absoluteExpiresAt;
+    const allowed = await allowedModels(deps, s);
     return {
       user: { id: s.userId, email: s.email, name: s.name, roles: s.roles },
       session: { expiresAt, idleTimeoutSeconds: config.SESSION_IDLE_SECONDS },
       training: await trainingStatus(deps, s.userId),
       catalog: {
-        defaultAlias: deps.catalog.defaultAlias,
+        defaultAlias: defaultModelFor(deps.catalog, allowed)?.alias ?? deps.catalog.defaultAlias,
         effort: deps.catalog.effort,
         models: [
-          ...deps.catalog.models.map((m) => ({ alias: m.alias, modelId: m.modelId, label: m.label, description: m.description, costFactor: m.costFactor, available: modelsForRole(deps.catalog, s.roles).some((x) => x.alias === m.alias) })),
+          ...deps.catalog.models.map((m) => ({ alias: m.alias, modelId: m.modelId, label: m.label, description: m.description, costFactor: m.costFactor, available: allowed.some((x) => x.alias === m.alias) })),
           // Modelos solo de respaldo: no seleccionables, pero la UI necesita su etiqueta.
           ...deps.catalog.fallbackModels.map((m) => ({ alias: m.modelId, modelId: m.modelId, label: m.label, description: "Fallback only", costFactor: 0, available: false })),
         ],

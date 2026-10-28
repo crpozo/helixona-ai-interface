@@ -35,6 +35,8 @@ const Env = z.object({
   BILLING_VIEWER_EMAILS: z.string().default(""),
   ANTHROPIC_AWS_WORKSPACE_ID: z.string().optional(),
   MODEL_CATALOG_JSON: z.string().optional(),
+  /** JSON `{ default: [aliases for staff], users: { "email": [aliases] } }`; administrators get every model unless named. */
+  MODEL_ACCESS: z.string().optional(),
   SYSTEM_PROMPT_FILE: z.string().default("prompts/system.en.md"),
   EFFORT: EffortSchema.optional(),
   MAX_TOKENS: z.coerce.number().int().positive().default(64000),

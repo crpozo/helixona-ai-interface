@@ -167,6 +167,9 @@ describe('AppStack', () => {
         }),
       ],
     });
+    // The model policy: the people with the larger models by name, everyone else on the economical ones.
+    const policy = JSON.parse((JSON.stringify(appT.toJSON()).match(/"Name":"MODEL_ACCESS","Value":"((?:[^"\\]|\\.)*)"/) ?? [])[1]!.replace(/\\"/g, '"'));
+    expect(policy).toEqual({ default: ['haiku', 'sonnet'], users: { 'tom@helixona.com': ['opus', 'fable'], 'cassandra@helixona.com': ['opus', 'fable'], 'vignesh@helixona.com': ['opus'] } });
   });
 
   it('la política del rol de tarea no permite Update/Delete sobre la tabla audit', () => {

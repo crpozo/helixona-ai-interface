@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AdminTrainingLog, AdminTrainingRow, AdminUser, AuditEvent, Me, Role, UsageRow } from "../lib/types";
-import { ApiError, adminAudit, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminRecordPaperTraining, adminResendInvitation, adminResetMfa, adminSetRole, adminSetTemporaryPassword, adminTraining, adminUsage } from "../lib/api";
+import type { AdminTrainingLog, AdminTrainingRow, AdminUser, AdminUsersPage, AuditEvent, Me, Role, UsageRow } from "../lib/types";
+import { ApiError, adminAudit, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminRecordPaperTraining, adminResendInvitation, adminResetMfa, adminSetModels, adminSetRole, adminSetTemporaryPassword, adminTraining, adminUsage } from "../lib/api";
 import { modelLabel } from "../lib/models";
 import { trainingStatus } from "./TrainingSections";
 import { FeedbackDelivery } from "./FeedbackDelivery";
@@ -52,13 +52,15 @@ export function AdminPage({ me, onBack }: Props) {
 
   // ---- Users and their training
   const [users, setUsers] = useState<AdminUser[] | null>(null);
+  const [modelCatalog, setModelCatalog] = useState<Pick<AdminUsersPage, "models" | "defaultModels">>({ models: [], defaultModels: [] });
   const [training, setTraining] = useState<AdminTrainingLog | null>(null);
   const [usersError, setUsersError] = useState<string | null>(null);
   const loadUsers = useCallback(async () => {
     setUsersError(null);
     try {
       const [u, t] = await Promise.all([adminListUsers(), adminTraining().catch(() => null)]);
-      setUsers(u);
+      setUsers(u.items);
+      setModelCatalog({ models: u.models, defaultModels: u.defaultModels });
       setTraining(t);
     } catch (e) {
       setUsersError(errMsg(e));
@@ -145,7 +147,7 @@ export function AdminPage({ me, onBack }: Props) {
 
       {shownTab === "users" && (
         <section id="panel-users" role="tabpanel" aria-labelledby="tab-users" className="tab-panel">
-          <UsersPanel me={me} users={users} training={training} error={usersError} setError={setUsersError} reload={loadUsers} setUsers={setUsers} />
+          <UsersPanel me={me} users={users} modelCatalog={modelCatalog} training={training} error={usersError} setError={setUsersError} reload={loadUsers} setUsers={setUsers} />
         </section>
       )}
 
@@ -208,9 +210,67 @@ export function AdminPage({ me, onBack }: Props) {
 
 // ---------------------------------------------------------------- Users
 
+const SOURCE_LABEL: Record<NonNullable<AdminUser["modelsSource"]>, string> = { override: "set here", policy: "by policy", admin: "all, as administrator", default: "staff default" };
+
+/** The models one person may use: the current list, and an inline editor with one checkbox per model. */
+function ModelsCell({ user, catalog, onSave }: { user: AdminUser; catalog: AdminUsersPage["models"]; onSave: (models: string[] | null) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const current = user.models ?? [];
+  const labelOf = (alias: string) => catalog.find((m) => m.alias === alias)?.label ?? alias;
+  const open = () => {
+    setPicked(current);
+    setEditing(true);
+  };
+  const save = async (models: string[] | null) => {
+    setBusy(true);
+    try {
+      await onSave(models);
+      setEditing(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!editing) {
+    return (
+      <>
+        <button type="button" className="link-btn models-btn" aria-label={`Models for ${user.email}`} onClick={open} disabled={catalog.length === 0}>
+          {current.length === 0 ? "None" : current.map(labelOf).join(", ")}
+        </button>
+        {user.modelsSource && <span className="cell-sub">{SOURCE_LABEL[user.modelsSource]}</span>}
+      </>
+    );
+  }
+  return (
+    <fieldset className="models-edit" aria-label={`Models for ${user.email}`}>
+      {catalog.map((m) => (
+        <label key={m.alias} className="check">
+          <input type="checkbox" checked={picked.includes(m.alias)} disabled={busy} onChange={(e) => setPicked((prev) => (e.target.checked ? [...prev, m.alias] : prev.filter((a) => a !== m.alias)))} />
+          <span>{m.label}</span>
+        </label>
+      ))}
+      <div className="row gap">
+        <button type="button" className="btn btn-small btn-primary" disabled={busy || picked.length === 0} onClick={() => void save(picked)}>
+          Save
+        </button>
+        {user.modelsSource === "override" && (
+          <button type="button" className="btn btn-small" disabled={busy} onClick={() => void save(null)} title="Remove the setting made here; the configured policy applies again">
+            Use policy
+          </button>
+        )}
+        <button type="button" className="btn btn-small" disabled={busy} onClick={() => setEditing(false)}>
+          Cancel
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
 interface UsersPanelProps {
   me: Me;
   users: AdminUser[] | null;
+  modelCatalog: Pick<AdminUsersPage, "models" | "defaultModels">;
   training: AdminTrainingLog | null;
   error: string | null;
   setError: (s: string | null) => void;
@@ -218,7 +278,7 @@ interface UsersPanelProps {
   setUsers: React.Dispatch<React.SetStateAction<AdminUser[] | null>>;
 }
 
-function UsersPanel({ me, users, training, error, setError, reload, setUsers }: UsersPanelProps) {
+function UsersPanel({ me, users, modelCatalog, training, error, setError, reload, setUsers }: UsersPanelProps) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState<{ email: string; name: string; role: Role }>({ email: "", name: "", role: "staff" });
   const [formBusy, setFormBusy] = useState(false);
@@ -233,6 +293,16 @@ function UsersPanel({ me, users, training, error, setError, reload, setUsers }: 
     try {
       await adminSetRole(u.id, role);
       setUsers((prev) => prev?.map((x) => (x.id === u.id ? { ...x, role } : x)) ?? prev);
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  };
+
+  const saveModels = async (u: AdminUser, models: string[] | null) => {
+    setError(null);
+    try {
+      await adminSetModels(u.id, models);
+      await reload();
     } catch (e) {
       setError(errMsg(e));
     }
@@ -406,6 +476,7 @@ function UsersPanel({ me, users, training, error, setError, reload, setUsers }: 
                 <tr>
                   <th scope="col">Person</th>
                   <th scope="col">Role</th>
+                  <th scope="col">Models</th>
                   <th scope="col">Status</th>
                   <th scope="col">Training</th>
                   <th scope="col">Since</th>
@@ -427,6 +498,9 @@ function UsersPanel({ me, users, training, error, setError, reload, setUsers }: 
                         <option value="admin">admin</option>
                       </select>
                     </td>
+                    <td>
+                      <ModelsCell user={u} catalog={modelCatalog.models} onSave={(m) => saveModels(u, m)} />
+                    </td>
                     <td>{!u.enabled ? <span className="warn">Disabled</span> : u.status === "invited" ? <span className="muted">Invited</span> : "Active"}</td>
                     <td>{trainingCell(u)}</td>
                     <td className="muted">{dateFmt.format(new Date(u.createdAt))}</td>
@@ -447,6 +521,7 @@ function UsersPanel({ me, users, training, error, setError, reload, setUsers }: 
                       <span className="cell-sub">{r.email} · no longer in the directory</span>
                     </td>
                     <td>{r.role}</td>
+                    <td>–</td>
                     <td>Removed</td>
                     <td>{training ? trainingStatus(r, training.version) : "–"}</td>
                     <td>–</td>
@@ -455,7 +530,7 @@ function UsersPanel({ me, users, training, error, setError, reload, setUsers }: 
                 ))}
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="muted">
+                    <td colSpan={7} className="muted">
                       No users.
                     </td>
                   </tr>

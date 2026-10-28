@@ -3768,3 +3768,42 @@ td {
   margin: 0;
   accent-color: var(--brand-primary);
 }
+
+/* Administration › Users › Models: the list reads as text and opens a compact inline editor. */
+.models-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.models-btn:hover:not(:disabled) {
+  color: var(--brand-primary);
+}
+.models-btn:disabled {
+  cursor: default;
+  text-decoration: none;
+}
+.models-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 11rem;
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.models-edit .check {
+  display: flex;
+  margin: 0;
+  font-size: 0.88rem;
+}
+.models-edit .row {
+  margin-top: 0.25rem;
+}

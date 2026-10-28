@@ -6,7 +6,7 @@ import type {
   AgreementFile,
   AgreementsInfo,
   AdminTrainingLog,
-  AdminUser,
+  AdminUser, AdminUsersPage,
   ApiErrorBody,
   AuditEvent,
   ChatSseEvent,
@@ -331,9 +331,13 @@ export async function* sendMessage(
 
 // ---- Administración ----
 
-export async function adminListUsers(): Promise<AdminUser[]> {
-  const r = await request<{ items: AdminUser[] }>("/api/admin/users");
-  return r.items;
+export function adminListUsers(): Promise<AdminUsersPage> {
+  return request<AdminUsersPage>("/api/admin/users");
+}
+
+/** The models one person may use; `null` removes the override so the configured policy applies again. */
+export function adminSetModels(id: string, models: string[] | null): Promise<{ ok: true }> {
+  return request(`/api/admin/users/${encodeURIComponent(id)}/models`, { method: "POST", body: { models } });
 }
 
 export function adminCreateUser(input: { email: string; name: string; role: Role }): Promise<AdminUser> {

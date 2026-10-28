@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
+import { allowedModels, defaultModelFor } from "../model-access.js";
 import { z } from "zod";
-import { estimateTokens, modelByAlias, modelsForRole, ulid, type AttachmentMeta, type BetaContentBlockParam, type Conversation, type Project, type ProjectMember, type StoredMessage } from "@helixona/core";
+import { estimateTokens, ulid, type AttachmentMeta, type BetaContentBlockParam, type Conversation, type Project, type ProjectMember, type StoredMessage } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import { apiError, audit, requireAuth } from "../app.js";
 import { canReadProject, isTeamProject, MAX_MEMBERS, projectPartition } from "./projects.js";
@@ -212,8 +213,7 @@ export function registerImportRoutes(app: FastifyInstance, deps: Deps): void {
     const body = z.object({ conversations: z.array(ImportedConversation).max(MAX_CONVERSATIONS_PER_REQUEST) }).safeParse(req.body);
     if (!body.success) return apiError(reply, 400, "bad_request", "The chats could not be read from the export");
     const s = req.session!;
-    const entry = modelByAlias(deps.catalog, deps.catalog.defaultAlias) ?? deps.catalog.models[0]!;
-    const model = modelsForRole(deps.catalog, s.roles).some((m) => m.alias === entry.alias) ? entry : modelsForRole(deps.catalog, s.roles)[0] ?? entry;
+    const model = defaultModelFor(deps.catalog, await allowedModels(deps, s)) ?? deps.catalog.models[0]!;
     const projects = new Map<string, Project | null>();
     // What was imported before, per place the chats are stored: the person's own conversations, or a
     // shared project's (its chats belong to the team). The same chat may exist in both.

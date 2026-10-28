@@ -163,6 +163,17 @@ export interface AdminUser {
   createdAt: string;
   /** `invited`: still on the temporary password from the invitation email (first sign-in pending). */
   status?: "invited" | "active";
+  /** Catalog aliases this person may use, and where that comes from. */
+  models?: string[];
+  modelsSource?: "override" | "policy" | "admin" | "default";
+}
+
+export interface AdminUsersPage {
+  items: AdminUser[];
+  /** The selectable catalog, for the per-person model editor. */
+  models: { alias: string; label: string }[];
+  /** What staff get unless an entry names them. */
+  defaultModels: string[];
 }
 
 export interface AuditEvent {

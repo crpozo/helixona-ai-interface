@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Deps } from "../deps.js";
 import { apiError, audit, requireAuth, today } from "../app.js";
 import { isBillingViewer } from "../billing/viewer.js";
+import { MODEL_ACCESS_SETTING, loadOverrides, policyOf, resolveAccess, type ModelAccessOverrides } from "../model-access.js";
 import { aggregateMonths, dailyEstimates, monthsBack, spentSince, type CreditsRecord } from "../billing/monthly.js";
 
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -11,7 +12,39 @@ export function registerAdminRoutes(app: FastifyInstance, deps: Deps): void {
   const admin = requireAuth(["admin"]);
   const now = deps.now ?? (() => new Date());
 
-  app.get("/api/admin/users", { preHandler: admin }, async () => ({ items: await deps.directory.list() }));
+  // Each account with the models it may use and where that comes from (an override set here, the
+  // configured policy, every model as an administrator, or the staff default).
+  app.get("/api/admin/users", { preHandler: admin }, async () => {
+    const [users, overrides] = await Promise.all([deps.directory.list(), loadOverrides(deps)]);
+    const catalogAliases = deps.catalog.models.map((m) => m.alias);
+    return {
+      items: users.map((u) => {
+        const roles = u.role === "admin" ? (["staff", "admin"] as const) : (["staff"] as const);
+        const access = resolveAccess(policyOf(deps), overrides, u.email, [...roles], deps.catalog);
+        return { ...u, models: catalogAliases.filter((a) => access.aliases.includes(a)), modelsSource: access.source };
+      }),
+      models: deps.catalog.models.map((m) => ({ alias: m.alias, label: m.label })),
+      defaultModels: catalogAliases.filter((a) => (policyOf(deps).default ?? catalogAliases).includes(a)),
+    };
+  });
+
+  // The models one person may use; `null` removes the override and the policy applies again.
+  app.post("/api/admin/users/:id/models", { preHandler: admin }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const aliases = deps.catalog.models.map((m) => m.alias);
+    const body = z.object({ models: z.array(z.string().min(2).max(32)).max(aliases.length).nullable() }).safeParse(req.body);
+    if (!body.success || body.data.models?.some((a) => !aliases.includes(a))) return apiError(reply, 400, "bad_request", "Invalid request");
+    const user = (await deps.directory.list()).find((u) => u.id === id);
+    if (!user) return apiError(reply, 404, "not_found", "User not found");
+    const key = user.email.trim().toLowerCase();
+    const current = (await loadOverrides(deps)) ?? { users: {} };
+    const next: ModelAccessOverrides = { users: { ...current.users } };
+    if (body.data.models === null) delete next.users[key];
+    else next.users[key] = aliases.filter((a) => body.data.models!.includes(a));
+    await deps.repos.settings.put(MODEL_ACCESS_SETTING, next);
+    await audit(deps, req, { action: "admin_user_models", meta: { targetUserId: id, models: body.data.models === null ? "policy" : next.users[key]!.join(",") } });
+    return { ok: true };
+  });
 
   app.post("/api/admin/users", { preHandler: admin }, async (req, reply) => {
     const body = z.object({ email: z.string().email().max(120), name: z.string().trim().min(1).max(80), role: z.enum(["staff", "admin"]) }).safeParse(req.body);
