@@ -5,6 +5,7 @@ import type { Deps } from "../deps.js";
 import type { ConversationPatch, Session } from "../repos/types.js";
 import { apiError, audit, requireAuth } from "../app.js";
 import { canReadProject, projectPartition, sharedProjectsFor, isTeamProject } from "./projects.js";
+import { backfillTitles } from "../titles.js";
 import { requireTraining } from "./training.js";
 
 /** What the browser sees of a conversation; its model is the one its alias points to today. */
@@ -68,6 +69,7 @@ export function registerConversationRoutes(app: FastifyInstance, deps: Deps): vo
     }
     for (const p of team) items.push(...(await deps.repos.conversations.list(projectPartition(p.id))));
     items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    backfillTitles(deps, items, s.userId);
     return { items: items.map((c) => publicConversation(c, deps.catalog)) };
   });
 

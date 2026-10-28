@@ -372,7 +372,7 @@ describe("Password sign-in (in-app)", () => {
 
 describe("Projects and model switching", () => {
   it("a new conversation is titled by the topic of its first message, without the date title; a renamed one is left alone", async () => {
-    const { app } = await makeApp({ AUTO_TITLE: "true" });
+    const { app, repos } = await makeApp({ AUTO_TITLE: "true" });
     const ana = await login(app, "ana");
     const c = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "sonnet" } })).json();
     expect(c.title).toMatch(/^Conversation /);
@@ -385,6 +385,12 @@ describe("Projects and model switching", () => {
     await app.inject({ method: "PATCH", url: `/api/conversations/${c2.id}`, headers: { ...H, cookie: ana.cookie }, payload: { title: "My own name" } });
     await app.inject({ method: "POST", url: `/api/conversations/${c2.id}/messages`, headers: { ...H, cookie: ana.cookie }, payload: { text: "Anything at all here" } });
     expect((await app.inject({ method: "GET", url: `/api/conversations/${c2.id}`, headers: { cookie: ana.cookie } })).json().conversation.title).toBe("My own name");
+    // An older chat that still has the date title (made before titles existed) is titled when the list is read.
+    const c3 = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "sonnet" } })).json();
+    await repos.messages.append({ id: "01OLDMESSAGEOLDMESSAGEOLDM", conversationId: c3.id, seq: 1, role: "user", content: [{ type: "text", text: "Prior authorization for an MRI scan" }], model: null, fallbackReason: null, stopReason: null, usage: null, createdAt: new Date().toISOString() }, 86400);
+    await repos.conversations.update("dev-ana", c3.id, { messageCount: 1 });
+    await app.inject({ method: "GET", url: "/api/conversations", headers: { cookie: ana.cookie } });
+    await expect.poll(async () => (await app.inject({ method: "GET", url: `/api/conversations/${c3.id}`, headers: { cookie: ana.cookie } })).json().conversation.title, { timeout: 3_000 }).toBe("Prior authorization for an");
     await app.close();
   });
 

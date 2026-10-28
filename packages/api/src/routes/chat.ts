@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { currentModelId, estimateAttachmentTokens, estimateTokens, estimateUsd, ulid, withoutRounds, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type ToolRound, type TurnEvent, type UsageSummary } from "@helixona/core";
+import { currentModelId, estimateAttachmentTokens, estimateTokens, ulid, withoutRounds, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type ToolRound, type TurnEvent, type UsageSummary } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import { attachmentKey, INLINE, MAX_PDF_PAGES, READ, sheetCharBudget } from "../attachments/policy.js";
 import { AttachmentProblem, checkUpload, contentBlock, inspectPdf, readingBlock, type PdfInfo } from "../attachments/documents.js";
@@ -9,6 +9,7 @@ import { CombinedTools } from "../attachments/library.js";
 import { Semaphore, type FileReading } from "../attachments/reader.js";
 import { isZipType, ZipTools } from "../attachments/zips.js";
 import { locateConversation } from "./conversations.js";
+import { DEFAULT_TITLE, topicTitle } from "../titles.js";
 import { requireTraining } from "./training.js";
 import { apiError, audit, requireAuth, today } from "../app.js";
 import { SseWriter } from "../sse.js";
@@ -89,32 +90,6 @@ function isAbort(e: unknown): boolean {
 }
 
 const EMPTY_USAGE: UsageSummary = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, estimatedUsd: 0 };
-
-/** The opaque title a conversation starts with ("Conversation Oct 27, 03:20 PM"). */
-const DEFAULT_TITLE = /^Conversation [A-Z][a-z]{2} \d{1,2}, \d{2}:\d{2} [AP]M$/;
-const TITLE_SYSTEM =
-  "You name chats. Reply with a title of three to six words for a chat that starts with the message you are given: the topic, in the message's language, no quotes, no final period. Never include a person's name or initials, a date of birth, an age, a member, claim, account or phone number, an address, or anything else that could identify a patient; name the kind of document or question instead (\"Dental EOB out-of-pocket costs\"). Reply with the title only.";
-
-/** A short topic title for a new conversation, from its first message, by the cheapest model; "" when it cannot be had. */
-async function topicTitle(deps: Deps, text: string, signal: AbortSignal, onUsage: (model: string, u: UsageSummary) => void): Promise<string> {
-  const cheapest = [...deps.catalog.models].sort((a, b) => a.costFactor - b.costFactor)[0];
-  if (!cheapest || !text.trim()) return "";
-  try {
-    const handle = deps.provider.stream({ model: cheapest.modelId, maxTokens: 40, effort: "low", system: [{ type: "text", text: TITLE_SYSTEM }], messages: [{ role: "user", content: [{ type: "text", text: text.slice(0, 2_000) }] }] }, { signal, conversationId: "title" });
-    for await (const _ev of handle) {
-      // the title is taken from the final message
-    }
-    const msg = await handle.finalMessage();
-    const spent = { inputTokens: msg.usage?.input_tokens ?? 0, outputTokens: msg.usage?.output_tokens ?? 0, cacheReadTokens: msg.usage?.cache_read_input_tokens ?? 0, cacheWriteTokens: msg.usage?.cache_creation_input_tokens ?? 0 };
-    onUsage(cheapest.modelId, { ...spent, estimatedUsd: estimateUsd(deps.catalog, cheapest.modelId, spent) });
-    if (msg.stop_reason === "refusal") return "";
-    const raw = msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join(" ");
-    const title = raw.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? "";
-    return title.replace(/^["'“”‘’#*\s]+|["'“”‘’.*\s]+$/g, "").slice(0, 60);
-  } catch {
-    return "";
-  }
-}
 
 export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
   const now = deps.now ?? (() => new Date());
