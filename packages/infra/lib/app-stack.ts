@@ -302,13 +302,15 @@ export class AppStack extends cdk.Stack {
       protocol: targetProtocol,
       protocolVersion: elbv2.ApplicationProtocolVersion.HTTP1,
       targetType: elbv2.TargetType.IP,
-      // Streams in flight keep flowing from the old task for as long as it is given to finish them.
-      deregistrationDelay: cdk.Duration.seconds(120),
+      // Streams in flight keep flowing from the old task while it drains, and for the 100 s the server
+      // waits after SIGTERM on top of that; a shorter drain makes each deploy faster.
+      deregistrationDelay: cdk.Duration.seconds(45),
       healthCheck: {
         path: '/api/health',
         protocol: cfg.tlsToContainer ? elbv2.Protocol.HTTPS : elbv2.Protocol.HTTP,
         healthyHttpCodes: '200',
-        interval: cdk.Duration.seconds(30),
+        // A new task counts as healthy after two probes 10 s apart, not 60 s.
+        interval: cdk.Duration.seconds(10),
         timeout: cdk.Duration.seconds(5),
         healthyThresholdCount: 2,
         unhealthyThresholdCount: 3,

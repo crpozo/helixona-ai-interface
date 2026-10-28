@@ -8,7 +8,7 @@
 #       CLOUDFRONT_PREFIX_LIST_ID (opcional), LLM_MODE (opcional, default anthropic),
 #       ENABLE_CLOUDTRAIL (opcional, default true: trail propio con data events de S3/DynamoDB;
 #       poner "false" si la organización ya entrega un trail a la cuenta).
-# Orden: FoundationStack (crea el ECR) -> build+push de la imagen -> cdk deploy --all.
+# Orden: en paralelo, las pruebas y [FoundationStack (crea el ECR) -> build+push de la imagen]; después cdk deploy --all.
 name: Deploy
 
 on:
@@ -68,6 +68,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Cache Playwright Chromium
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
@@ -84,12 +90,14 @@ jobs:
             packages/e2e/test-results
           retention-days: 14
 
-  deploy:
-    name: Deploy ${{ inputs.stage }}
-    needs: verify
+  # The image is built and pushed while the tests run; it is only deployed once they pass.
+  image:
+    name: Build image
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     environment: production
+    outputs:
+      image_tag: ${{ steps.ctx.outputs.image_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -104,9 +112,6 @@ jobs:
 
       - name: Install (npm ci)
         run: npm ci
-
-      - name: Build
-        run: npm run build
 
       # Diagnóstico: qué identidad OIDC presenta GitHub (debe coincidir con la trust policy del rol:
       # sub = repo:<org>/<repo>:environment:<environment>, aud = sts.amazonaws.com) y que el secreto
@@ -203,15 +208,79 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      # TODO: anclar por SHA (docker/setup-buildx-action v3, docker/build-push-action v6).
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Layers are cached between runs (the npm install layer only changes with the lockfile).
       - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/api/Dockerfile
+          push: true
+          tags: ${{ steps.ctx.outputs.ecr_uri }}:${{ steps.ctx.outputs.image_tag }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+  deploy:
+    name: Deploy ${{ inputs.stage }}
+    needs: [verify, image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 22
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install (npm ci)
+        run: npm ci
+
+      # TODO: anclar por SHA (verificar el commit del tag v4 en github.com/aws-actions/configure-aws-credentials).
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: helixona-deploy-${{ inputs.stage }}-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve deployment context
+        id: ctx
         run: |
           set -euo pipefail
-          docker build \
-            --file packages/api/Dockerfile \
-            --tag "${{ steps.ctx.outputs.ecr_uri }}:${{ steps.ctx.outputs.image_tag }}" \
-            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
-            .
-          docker push "${{ steps.ctx.outputs.ecr_uri }}:${{ steps.ctx.outputs.image_tag }}"
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "$TAG" ]; then TAG="${GITHUB_SHA::12}"; fi
+          echo "account_id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "ecr_uri=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/helixona-${{ inputs.stage }}-api" >> "$GITHUB_OUTPUT"
+          {
+            echo "cdk_context<<EOF"
+            echo "-c stage=${{ inputs.stage }}"
+            echo "-c imageTag=$TAG"
+            echo "-c appBaseUrl=${{ vars.APP_BASE_URL }}"
+            echo "-c domainName=${{ vars.DOMAIN_NAME }}"
+            echo "-c certificateArn=${{ vars.CERTIFICATE_ARN }}"
+            echo "-c cognitoDomainPrefix=${{ vars.COGNITO_DOMAIN_PREFIX }}"
+            echo "-c alertEmail=${{ vars.ALERT_EMAIL }}"
+            echo "-c monthlyBudgetUsd=${{ vars.MONTHLY_BUDGET_USD || '1500' }}"
+            echo "-c cloudFrontPrefixListId=${{ vars.CLOUDFRONT_PREFIX_LIST_ID }}"
+            echo "-c llmMode=${{ vars.LLM_MODE || 'anthropic' }}"
+            echo "-c enableCloudTrail=${{ vars.ENABLE_CLOUDTRAIL || 'true' }}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
 
       - name: Deploy all stacks
         working-directory: packages/infra
