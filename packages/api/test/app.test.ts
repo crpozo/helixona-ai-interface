@@ -289,6 +289,30 @@ describe("Attachments", () => {
     expect(unsupported.json().error.code).toBe("unsupported_type");
     await app.close();
   });
+
+  it("a screenshot travels with the message and reaches the model as an image", async () => {
+    const { app } = await makeApp();
+    const s = await login(app, "ana");
+    const convId = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: s.cookie }, payload: { modelAlias: "opus" } })).json().id as string;
+    // A 1×1 PNG.
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+    const att = await app.inject({ method: "POST", url: `/api/conversations/${convId}/attachments`, headers: { ...H, cookie: s.cookie }, payload: { name: "Screenshot 2026-10-30.png", size: png.length, contentType: "image/png" } });
+    expect(att.statusCode).toBe(201);
+    const a = att.json();
+    expect((await app.inject({ method: "PUT", url: a.upload.url, headers: { "content-type": "image/png", "x-requested-with": "helixona" }, payload: png })).statusCode).toBe(200);
+    const r = await app.inject({ method: "POST", url: `/api/conversations/${convId}/messages`, headers: { ...H, cookie: s.cookie }, payload: { text: "What does this error mean?", attachments: [{ id: a.id, name: a.name }] } });
+    expect(r.statusCode).toBe(200);
+    const events = parseSse(r.body);
+    expect(events.some((e) => e.event === "done")).toBe(true);
+    const conv = await app.inject({ method: "GET", url: `/api/conversations/${convId}`, headers: { cookie: s.cookie } });
+    const msgs = conv.json().messages;
+    expect(msgs.find((m: { role: string }) => m.role === "user").attachments).toEqual([expect.objectContaining({ id: a.id, contentType: "image/png", size: png.length })]);
+    expect(JSON.stringify(msgs.find((m: { role: string }) => m.role === "assistant").content)).toContain("I can see 1 image in your message.");
+    // Too large for the model (5 MB per image) and not a project file.
+    const big = await app.inject({ method: "POST", url: `/api/conversations/${convId}/attachments`, headers: { ...H, cookie: s.cookie }, payload: { name: "photo.jpg", size: 6 * 1048576, contentType: "image/jpeg" } });
+    expect(big.json().error.code).toBe("file_too_large");
+    await app.close();
+  });
 });
 
 describe("Password sign-in (in-app)", () => {

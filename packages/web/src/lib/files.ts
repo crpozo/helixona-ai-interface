@@ -10,15 +10,27 @@ const EXT_TYPES: Record<string, string> = {
   txt: "text/plain",
   md: "text/markdown",
   zip: ZIP_TYPE,
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
 };
 /** Browsers name a ZIP either way. */
 const TYPE_ALIASES: Record<string, string> = { "application/x-zip-compressed": ZIP_TYPE };
 
 /** What the file pickers offer: the types the server reads, and a ZIP (uploaded as one file; the assistant reads inside it). */
-export const ATTACH_ACCEPT = `.pdf,.xlsx,.csv,.txt,.md,.zip,application/pdf,${XLSX_TYPE},text/csv,text/plain,text/markdown,application/zip,application/x-zip-compressed`;
-export const ATTACH_TYPES_TEXT = "PDF, Excel, CSV, TXT, MD or ZIP";
+export const ATTACH_ACCEPT = `.pdf,.xlsx,.csv,.txt,.md,.zip,.png,.jpg,.jpeg,.gif,.webp,application/pdf,${XLSX_TYPE},text/csv,text/plain,text/markdown,application/zip,application/x-zip-compressed,image/png,image/jpeg,image/gif,image/webp`;
+export const ATTACH_TYPES_TEXT = "PDF, Excel, CSV, TXT, MD, ZIP or an image (PNG, JPEG, GIF, WebP)";
+/** Project files: what the server reads for every message of a project (no ZIPs, no images). */
+export const KNOWLEDGE_ACCEPT = `.pdf,.xlsx,.csv,.txt,.md,application/pdf,${XLSX_TYPE},text/csv,text/plain,text/markdown`;
+export const KNOWLEDGE_TYPES_TEXT = "PDF, Excel, CSV, TXT or MD";
 
-/** Size cap for a type, as on the server: PDFs and ZIPs up to the configured limit, Excel 10 MB, text files 5 MB. */
+export function isImageType(contentType: string): boolean {
+  return contentType.startsWith("image/");
+}
+
+/** Size cap for a type, as on the server: PDFs and ZIPs up to the configured limit, Excel 10 MB, text files and images 5 MB. */
 export function maxMbFor(contentType: string, maxMb: number): number {
   if (contentType === "application/pdf" || contentType === ZIP_TYPE) return maxMb;
   return Math.min(maxMb, contentType === XLSX_TYPE ? 10 : 5);

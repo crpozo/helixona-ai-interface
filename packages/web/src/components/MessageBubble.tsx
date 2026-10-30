@@ -4,7 +4,7 @@ import type { CatalogModel } from "../lib/types";
 import { modelLabel } from "../lib/models";
 import { Markdown } from "./Markdown";
 import { FilesProgress } from "./FilesProgress";
-import { formatSize, isZipType } from "../lib/files";
+import { formatSize, isImageType, isZipType } from "../lib/files";
 import { copyFormatted, docxFileName, downloadBlob, markdownToClipboardHtml, markdownToDocxBlob, markdownToPlain } from "../lib/markdownExport";
 
 interface Props {
@@ -212,7 +212,7 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
         <ul className="attach-list" aria-label={`Attached files (${m.attachments.length})`}>
           {shownFiles.map((a) => (
             <li key={a.id} className="attach-chip" title={a.zip ? `${a.name}: ${a.zip.files} files, ${a.zip.readable} the assistant can read` : a.name}>
-              <span className="attach-icon" aria-hidden="true">{isZipType(a.contentType) ? "🗂️" : "📄"}</span>
+              <span className="attach-icon" aria-hidden="true">{isZipType(a.contentType) ? "🗂️" : isImageType(a.contentType) ? "🖼️" : "📄"}</span>
               <span className="attach-name">{a.name}</span>
               <span className="attach-meta">
                 {a.zip ? `${a.zip.files.toLocaleString("en-US")} ${a.zip.files === 1 ? "file" : "files"} · ` : a.pages ? `${a.pages} p · ` : ""}

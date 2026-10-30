@@ -222,7 +222,7 @@ export function registerProjectRoutes(app: FastifyInstance, deps: Deps): void {
     if (!p) return reply;
     if (p.knowledge.length >= MAX_PROJECT_FILES) return apiError(reply, 400, "too_many_files", `A project can hold up to ${MAX_PROJECT_FILES} files`);
     const { contentType, size } = body.data;
-    if (!ALLOWED_TYPES[contentType] || ALLOWED_TYPES[contentType]!.kind === "zip") return apiError(reply, 400, "unsupported_type", "Only PDF, Excel, CSV, plain text and Markdown files can be project files (a ZIP goes in a chat)");
+    if (!ALLOWED_TYPES[contentType] || ALLOWED_TYPES[contentType]!.kind === "zip" || ALLOWED_TYPES[contentType]!.kind === "image") return apiError(reply, 400, "unsupported_type", "Only PDF, Excel, CSV, plain text and Markdown files can be project files (a ZIP or an image goes in a chat)");
     const maxBytes = maxBytesFor(contentType, knowledgeMaxMb);
     if (size > maxBytes) return apiError(reply, 400, "file_too_large", `Project files of this type are limited to ${Math.round(maxBytes / 1048576)} MB`);
     const attachmentId = ulid();

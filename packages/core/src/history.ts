@@ -63,5 +63,7 @@ export function estimateAttachmentTokens(a: AttachmentMeta): number {
   if (a.contentType === "application/pdf") return a.pages ? a.pages * 2000 : Math.ceil(a.size / 350);
   // An Excel workbook is compressed: its text is roughly ten times the file size.
   if (a.contentType.includes("spreadsheetml")) return Math.ceil((a.size * 10) / 3.5);
+  // An image is scaled to at most ~1.15 megapixels before it is read: about 1,600 tokens whatever its size.
+  if (a.contentType.startsWith("image/")) return 1600;
   return Math.ceil(a.size / 3.5);
 }

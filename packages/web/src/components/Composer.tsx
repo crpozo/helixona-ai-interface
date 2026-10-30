@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AttachmentLimits, AttachmentMeta } from "../lib/types";
 import { ApiError, createAttachment, uploadFile } from "../lib/api";
-import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, isZipType, maxMbFor, readsPageByPage } from "../lib/files";
+import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, isImageType, isZipType, maxMbFor, readsPageByPage } from "../lib/files";
 import { useFileDrop } from "../lib/useFileDrop";
 import { Icon } from "./Icon";
 
@@ -147,7 +147,7 @@ export function Composer({ conversationId, maxChars, attachments, streaming, dis
         <ul className="attach-list composer-pending" aria-label="Files to send">
           {pending.map((p) => (
             <li key={p.localId} className={`attach-chip${p.status === "error" ? " error" : ""}`} title={p.error ?? p.name}>
-              <span className="attach-icon" aria-hidden="true">{isZipType(p.contentType) ? "🗂️" : "📄"}</span>
+              <span className="attach-icon" aria-hidden="true">{isZipType(p.contentType) ? "🗂️" : isImageType(p.contentType) ? "🖼️" : "📄"}</span>
               <span className="attach-name">{p.name}</span>
               {p.status === "uploading" && (
                 <span className="attach-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p.progress * 100)} aria-label={`Uploading ${p.name}`}>

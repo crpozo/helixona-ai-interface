@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CatalogModel } from "../lib/types";
 import { ApiError } from "../lib/api";
-import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, isZipType, maxMbFor, readsPageByPage } from "../lib/files";
+import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, isImageType, isZipType, maxMbFor, readsPageByPage } from "../lib/files";
 import { Icon } from "./Icon";
 import { ModelPicker } from "./ModelPicker";
 import { useFileDrop } from "../lib/useFileDrop";
@@ -122,7 +122,7 @@ export function StartComposer({ models, defaultAlias, attachments = null, onStar
         <ul className="attach-list composer-pending" aria-label="Files to send">
           {files.map((f, i) => (
             <li key={`${f.name}-${i}`} className="attach-chip" title={f.name}>
-              <span className="attach-icon" aria-hidden="true">{isZipType(attachmentType(f) ?? "") ? "🗂️" : "📄"}</span>
+              <span className="attach-icon" aria-hidden="true">{isZipType(attachmentType(f) ?? "") ? "🗂️" : isImageType(attachmentType(f) ?? "") ? "🖼️" : "📄"}</span>
               <span className="attach-name">{f.name}</span>
               <span className="attach-meta">{isZipType(attachmentType(f) ?? "") ? `ZIP · ${formatSize(f.size)}` : formatSize(f.size)}</span>
               <button type="button" className="attach-remove" onClick={() => setFiles((prev) => prev.filter((_, k) => k !== i))} aria-label={`Remove ${f.name}`} disabled={busy}>

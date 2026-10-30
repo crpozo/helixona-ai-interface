@@ -3,7 +3,7 @@
  * No imports on purpose (also used by /api/me), so it never creates import cycles.
  */
 
-export type AttachmentKind = "pdf" | "text" | "sheet" | "zip";
+export type AttachmentKind = "pdf" | "text" | "sheet" | "zip" | "image";
 
 /** Accepted MIME types. `maxMb: null` means the configurable MAX_ATTACHMENT_MB applies. */
 export const ALLOWED_TYPES: Record<string, { kind: AttachmentKind; maxMb: number | null }> = {
@@ -16,7 +16,24 @@ export const ALLOWED_TYPES: Record<string, { kind: AttachmentKind; maxMb: number
   // A ZIP is stored as it is; the server lists what is inside and the model reads files from it with tools (zips.ts).
   "application/zip": { kind: "zip", maxMb: null },
   "application/x-zip-compressed": { kind: "zip", maxMb: null },
+  // Images (screenshots, photos of a page): sent to the model as they are. The model takes at most 5 MB
+  // and about 8,000 px a side per image; a screenshot is far below both.
+  "image/png": { kind: "image", maxMb: 5 },
+  "image/jpeg": { kind: "image", maxMb: 5 },
+  "image/gif": { kind: "image", maxMb: 5 },
+  "image/webp": { kind: "image", maxMb: 5 },
 };
+
+export type ImageMediaType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+export function isImageType(contentType: string): contentType is ImageMediaType {
+  return ALLOWED_TYPES[contentType]?.kind === "image";
+}
+
+/** The MIME type for a file name the browser sent without one, or with one the server does not know. */
+export function typeFromName(lowerName: string): string | null {
+  const ext = lowerName.split(".").pop() ?? "";
+  return ({ pdf: "application/pdf", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", csv: "text/csv", zip: "application/zip", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", txt: "text/plain", md: "text/markdown" } as Record<string, string>)[ext] ?? null;
+}
 
 const MiB = 1024 * 1024;
 

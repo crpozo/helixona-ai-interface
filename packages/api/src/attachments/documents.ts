@@ -1,7 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 import type { AttachmentMeta, BetaContentBlockParam } from "@helixona/core";
 import type { AttachmentStore } from "./store.js";
-import { ALLOWED_TYPES, MAX_PDF_PAGES, maxBytesFor, safeName } from "./policy.js";
+import { ALLOWED_TYPES, MAX_PDF_PAGES, isImageType, maxBytesFor, safeName, typeFromName } from "./policy.js";
 import { fitForModel, isSpreadsheet, readTables, SpreadsheetError, tablesForModel, XLSX_TYPE } from "./sheets.js";
 import { isZipType, loadZipIndex, prepareZip, ZIP_TYPE, ZipProblem } from "./zips.js";
 
@@ -33,10 +33,11 @@ export async function pdfPageCount(bytes: Buffer): Promise<number | null> {
   return (await pdfInfo(bytes)).pages;
 }
 
-/** PDFs go to the model natively (base64); text files as plain-text documents. `cache` marks a prompt-cache breakpoint. */
+/** PDFs and images go to the model natively (base64); text files as plain-text documents. `cache` marks a prompt-cache breakpoint. */
 export function documentBlock(meta: AttachmentMeta, bytes: Buffer, cache: boolean): BetaContentBlockParam {
-  const block =
-    meta.contentType === "application/pdf"
+  const block = isImageType(meta.contentType)
+    ? { type: "image" as const, source: { type: "base64" as const, media_type: meta.contentType, data: bytes.toString("base64") } }
+    : meta.contentType === "application/pdf"
       ? { type: "document" as const, title: meta.name, source: { type: "base64" as const, media_type: "application/pdf" as const, data: bytes.toString("base64") } }
       : { type: "document" as const, title: meta.name, source: { type: "text" as const, media_type: "text/plain" as const, data: bytes.toString("utf8") } };
   return (cache ? { ...block, cache_control: { type: "ephemeral", ttl: "1h" } } : block) as BetaContentBlockParam;
@@ -142,7 +143,7 @@ export async function checkUpload(store: AttachmentStore, key: string, id: strin
   const head = await store.head(key);
   if (!head) throw new AttachmentProblem("attachment_missing", `The file "${name}" was not uploaded`);
   const lower = name.toLowerCase();
-  const declared = head.contentType && ALLOWED_TYPES[head.contentType] ? head.contentType : lower.endsWith(".pdf") ? "application/pdf" : lower.endsWith(".xlsx") ? XLSX_TYPE : lower.endsWith(".csv") ? "text/csv" : lower.endsWith(".zip") ? ZIP_TYPE : "text/plain";
+  const declared = head.contentType && ALLOWED_TYPES[head.contentType] ? head.contentType : (typeFromName(lower) ?? "text/plain");
   const contentType = isZipType(declared) ? ZIP_TYPE : declared;
   if (head.size > maxBytesFor(contentType, maxAttachmentMb)) throw new AttachmentProblem("file_too_large", `The file "${name}" is too large`);
   if (contentType === "application/pdf") {

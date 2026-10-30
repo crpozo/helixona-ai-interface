@@ -74,6 +74,7 @@ export class FakeProvider implements LlmProvider {
         // The newest attached file's title, for "/sheet" (a workbook that references its rows).
         const blocks = (Array.isArray(last?.content) ? last!.content : []) as unknown as Array<Record<string, unknown>>;
         const titles = blocks.flatMap((b) => (b.type === "document" ? [String(b.title ?? "")] : []));
+        const images = blocks.filter((b) => b.type === "image").length;
         const zipCall = cmd ? null : zipToolCall(params, blocks);
         if (zipCall) {
           const remark = "Let me read the files first.";
@@ -94,7 +95,7 @@ export class FakeProvider implements LlmProvider {
           return;
         }
         const systemText = (params.system ?? []).map((b) => (typeof b === "string" ? b : (b as { text?: string }).text ?? "")).join("\n");
-        const reply = self.replyFor(userText, model, titles[titles.length - 1] ?? "", toolResultText(blocks), systemText);
+        const reply = self.replyFor(userText, model, titles[titles.length - 1] ?? "", toolResultText(blocks), systemText) + (images > 0 ? `\n\nI can see ${images} ${images === 1 ? "image" : "images"} in your message.` : "");
         // A transcription streams a page at a time, so reading a long file in tests takes seconds, not minutes.
         const parts = /^Transcribe pages? \d/.test(userText) ? reply.split(/(?=\(p\. \d+\))/) : (reply.match(/.{1,12}/gs) ?? []);
         let idx = content.length;

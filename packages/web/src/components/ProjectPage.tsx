@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AttachmentMeta, CatalogModel, Conversation, Project, ProjectVisibility } from "../lib/types";
 import { ApiError, createProjectKnowledge, deleteProjectKnowledge, getProject, registerProjectKnowledge, updateProject, uploadFile } from "../lib/api";
-import { ATTACH_ACCEPT, ATTACH_TYPES_TEXT, attachmentType, formatSize, isZipType, maxMbFor } from "../lib/files";
+import { KNOWLEDGE_ACCEPT, KNOWLEDGE_TYPES_TEXT, attachmentType, formatSize, isImageType, isZipType, maxMbFor } from "../lib/files";
 import { modelLabel } from "../lib/models";
 import { useFileDrop } from "../lib/useFileDrop";
 import { ProjectMembers } from "./ProjectMembers";
@@ -210,11 +210,15 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
     for (const file of Array.from(files)) {
       const contentType = attachmentType(file);
       if (!contentType) {
-        setFileError(`"${file.name}": unsupported type. Use ${ATTACH_TYPES_TEXT}.`);
+        setFileError(`"${file.name}": unsupported type. Use ${KNOWLEDGE_TYPES_TEXT}.`);
         continue;
       }
       if (isZipType(contentType)) {
         setFileError(`"${file.name}": a ZIP cannot be a project file. Add the files inside it one by one, or attach the ZIP in a chat.`);
+        continue;
+      }
+      if (isImageType(contentType)) {
+        setFileError(`"${file.name}": an image cannot be a project file. Attach it in a chat instead.`);
         continue;
       }
       const cap = maxMbFor(contentType, maxMb);
@@ -430,7 +434,7 @@ export function ProjectPage({ project, conversations, models, defaultAlias, maxM
               <h2 id="proj-knowledge-h">Knowledge</h2>
               {canUpload && (
                 <>
-                  <input ref={fileRef} type="file" accept={ATTACH_ACCEPT} multiple hidden onChange={(e) => addFiles(e.target.files)} />
+                  <input ref={fileRef} type="file" accept={KNOWLEDGE_ACCEPT} multiple hidden onChange={(e) => addFiles(e.target.files)} />
                   <button type="button" className="btn btn-small" onClick={() => fileRef.current?.click()}>
                     Add files
                   </button>
