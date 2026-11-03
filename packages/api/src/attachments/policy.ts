@@ -11,8 +11,9 @@ export const ALLOWED_TYPES: Record<string, { kind: AttachmentKind; maxMb: number
   "text/plain": { kind: "text", maxMb: 5 },
   "text/markdown": { kind: "text", maxMb: 5 },
   "text/csv": { kind: "sheet", maxMb: 5 },
-  // Excel workbooks: read on the server into rows of text (sheets.ts); compressed, so 10 MB is a lot of rows.
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { kind: "sheet", maxMb: 10 },
+  // Excel workbooks: read on the server into rows of text (sheets.ts). Compressed, so 50 MB is a very large
+  // report; the reader keeps the first 20,000 rows of each sheet and the zip-bomb guard below bounds memory.
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { kind: "sheet", maxMb: 50 },
   // A ZIP is stored as it is; the server lists what is inside and the model reads files from it with tools (zips.ts).
   "application/zip": { kind: "zip", maxMb: null },
   "application/x-zip-compressed": { kind: "zip", maxMb: null },

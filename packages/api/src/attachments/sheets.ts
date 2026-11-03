@@ -23,9 +23,13 @@ export const SHEET_LIMITS = {
   maxCols: 200,
   maxCellChars: 4_000,
   maxSheets: 50,
-  /** A part of the workbook (a sheet, the shared strings) larger than this is refused: a zip bomb guard. A 10 MB report inflates to about 100 MB of XML. */
-  maxPartBytes: 160 * 1024 * 1024,
-  maxTotalBytes: 320 * 1024 * 1024,
+  /**
+   * A part of the workbook (a sheet, the shared strings) larger than this is refused: a zip bomb guard.
+   * A report inflates to about ten times its size in XML, so a 50 MB file is near this cap; the part
+   * cap also stays under what one JavaScript string can hold (512 MiB).
+   */
+  maxPartBytes: 480 * 1024 * 1024,
+  maxTotalBytes: 960 * 1024 * 1024,
 } as const;
 
 /** The file cannot be read as a spreadsheet (maps to a 400 the person can fix). */
