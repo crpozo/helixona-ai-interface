@@ -30,10 +30,10 @@ export function isImageType(contentType: string): boolean {
   return contentType.startsWith("image/");
 }
 
-/** Size cap for a type, as on the server: PDFs and ZIPs up to the configured limit, Excel 50 MB, text files and images 5 MB. */
+/** Size cap for a type, as on the server: PDFs, Excel and ZIPs up to the configured limit, text files and images 5 MB. */
 export function maxMbFor(contentType: string, maxMb: number): number {
-  if (contentType === "application/pdf" || contentType === ZIP_TYPE) return maxMb;
-  return Math.min(maxMb, contentType === XLSX_TYPE ? 50 : 5);
+  if (contentType === "application/pdf" || contentType === ZIP_TYPE || contentType === XLSX_TYPE) return maxMb;
+  return Math.min(maxMb, 5);
 }
 
 /** A ZIP: one attachment whose files the assistant reads in parts, with tools. */

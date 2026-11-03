@@ -303,7 +303,7 @@ deleted, and never kept on the desktop, in email or in a personal drive.
 
 Chart prep often means ten or more files per patient, some of them hundreds of pages. A message can
 carry up to 20 files, each up to 100 MB and 1,000 pages (PDF, Excel, CSV, TXT, MD or an image such as
-a screenshot; Excel files up to 50 MB, text files and images up to 5 MB).
+a screenshot; text files and images up to 5 MB).
 Project files take the same per-file caps, up to 200 files per project. In the order they were
 added, files travel with every message of the project while they fit one request and stay within
 about 200,000 tokens together; the rest form the project's **library**. A library PDF is read page

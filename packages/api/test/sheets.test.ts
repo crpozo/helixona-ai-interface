@@ -56,6 +56,24 @@ async function workbook(): Promise<Buffer> {
   return Buffer.from(await zip.generateAsync({ type: "uint8array" }));
 }
 
+describe("Large workbooks", () => {
+  it("reads the first 20,000 rows of a sheet as it inflates and counts the rest", async () => {
+    const zip = new JSZip();
+    zip.file("xl/workbook.xml", `<workbook><sheets><sheet name="Detail" sheetId="1" r:id="rId1"/></sheets></workbook>`);
+    zip.file("xl/_rels/workbook.xml.rels", `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`);
+    zip.file("xl/sharedStrings.xml", `<sst>${Array.from({ length: 3000 }, (_, i) => `<si><t>CPT ${10000 + i}</t></si>`).join("")}</sst>`);
+    const rows: string[] = [];
+    for (let r = 1; r <= 70_000; r++) rows.push(`<row r="${r}"><c r="A${r}" t="s"><v>${r % 3000}</v></c><c r="B${r}"><v>${r}.5</v></c></row>`);
+    zip.file("xl/worksheets/sheet1.xml", `<worksheet><sheetData>${rows.join("")}</sheetData></worksheet>`);
+    const bytes = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+    const [table] = await parseXlsx(bytes);
+    expect(table!.rows.length).toBe(20_000);
+    expect(table!.rows[0]).toEqual(["CPT 10001", "1.5"]);
+    expect(table!.rows[19_999]).toEqual([`CPT ${10000 + (20_000 % 3000)}`, "20000.5"]);
+    expect(table!.truncatedRows).toBe(50_000);
+  });
+});
+
 describe("Reading spreadsheets", () => {
   it("reads CSV the way Excel does: quotes, commas and line breaks in cells, CRLF, a byte-order mark, other separators", () => {
     expect(parseCsv('﻿Name,Note\r\n"Pérez, Ana","said ""hi""\nthen left"\r\nLuis,\r\n')).toEqual([

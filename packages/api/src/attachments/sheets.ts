@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { StringDecoder } from "node:string_decoder";
 
 /**
  * Spreadsheets attached to a conversation (CSV and Excel .xlsx): read into rows of text, the way
@@ -24,12 +25,13 @@ export const SHEET_LIMITS = {
   maxCellChars: 4_000,
   maxSheets: 50,
   /**
-   * A part of the workbook (a sheet, the shared strings) larger than this is refused: a zip bomb guard.
-   * A report inflates to about ten times its size in XML, so a 50 MB file is near this cap; the part
-   * cap also stays under what one JavaScript string can hold (512 MiB).
+   * The small parts (workbook, relationships, styles) are read whole and refused above this. The large
+   * ones (each sheet, the shared strings) are streamed row by row, so their size only costs time; the
+   * total inflated bytes stay bounded (a zip bomb guard), and one element pending across chunks too.
    */
-  maxPartBytes: 480 * 1024 * 1024,
-  maxTotalBytes: 960 * 1024 * 1024,
+  maxPartBytes: 64 * 1024 * 1024,
+  maxTotalBytes: 4 * 1024 * 1024 * 1024,
+  maxPendingBytes: 32 * 1024 * 1024,
 } as const;
 
 /** The file cannot be read as a spreadsheet (maps to a 400 the person can fix). */
@@ -213,6 +215,73 @@ function formatNumber(v: number, fmt: NumberFormat, date1904: boolean): string {
   }
 }
 
+/**
+ * A large part of the workbook, read as it inflates: `onText` receives the XML in pieces and never
+ * sees the whole string, so a sheet of a million rows costs time, not memory.
+ */
+async function streamPart(zip: JSZip, path: string, budget: { used: number }, onText: (chunk: string) => boolean | void): Promise<boolean> {
+  const file = zip.file(path);
+  if (!file) return false;
+  const decoder = new StringDecoder("utf8");
+  const stream = file.nodeStream("nodebuffer");
+  let stopped = false;
+  await new Promise<void>((resolve, reject) => {
+    const feed = (text: string) => {
+      if (stopped || !text) return;
+      if (onText(text) === false) {
+        stopped = true;
+        stream.pause();
+        resolve();
+      }
+    };
+    stream.on("data", (buf: Buffer) => {
+      budget.used += buf.length;
+      if (budget.used > SHEET_LIMITS.maxTotalBytes) {
+        stopped = true;
+        stream.pause();
+        reject(new SpreadsheetError("This workbook is too large to read. Save the rows you need in a smaller file, or as CSV."));
+        return;
+      }
+      feed(decoder.write(buf));
+    });
+    stream.on("end", () => {
+      feed(decoder.end());
+      resolve();
+    });
+    stream.on("error", () => reject(new SpreadsheetError("This file could not be opened as an Excel workbook. Save it again as .xlsx or CSV and attach that.")));
+    stream.resume();
+  });
+  return true;
+}
+
+/**
+ * Feeds complete XML elements matching `element` (a sticky-free global regex whose match is one whole
+ * element) to `onMatch` as the text arrives, keeping only the unfinished tail between chunks.
+ */
+function elementScanner(element: RegExp, onMatch: (m: RegExpExecArray) => boolean | void): { feed: (chunk: string) => boolean; rest: () => string } {
+  let pending = "";
+  const re = new RegExp(element.source, "g");
+  return {
+    feed: (chunk) => {
+      pending += chunk;
+      let last = 0;
+      re.lastIndex = 0;
+      for (let m = re.exec(pending); m; m = re.exec(pending)) {
+        last = m.index + m[0].length;
+        if (onMatch(m) === false) {
+          pending = pending.slice(last);
+          return false;
+        }
+      }
+      pending = pending.slice(last);
+      if (pending.length > SHEET_LIMITS.maxPendingBytes) throw new SpreadsheetError("This workbook has a row too large to read. Save the rows you need in a smaller file, or as CSV.");
+      return true;
+    },
+    /** What arrived after the last element handled (for the caller that stops early). */
+    rest: () => pending,
+  };
+}
+
 async function part(zip: JSZip, path: string, budget: { used: number }): Promise<string | null> {
   const file = zip.file(path);
   if (!file) return null;
@@ -250,8 +319,10 @@ export async function parseXlsx(bytes: Uint8Array): Promise<SheetTable[]> {
   }
 
   const shared: string[] = [];
-  const sst = await part(zip, "xl/sharedStrings.xml", budget);
-  if (sst) for (const m of sst.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>|<si\b[^>]*\/>/g)) shared.push(textOf(m[1] ?? ""));
+  await streamPart(zip, "xl/sharedStrings.xml", budget, elementScanner(/<si\b[^>]*>([\s\S]*?)<\/si>|<si\b[^>]*\/>/, (m) => {
+    const text = textOf(m[1] ?? "");
+    shared.push(text.length > SHEET_LIMITS.maxCellChars ? text.slice(0, SHEET_LIMITS.maxCellChars) : text);
+  }).feed);
 
   const custom = new Map<number, string>();
   const styleFormats: number[] = [];
@@ -282,26 +353,24 @@ export async function parseXlsx(bytes: Uint8Array): Promise<SheetTable[]> {
     const rid = attr(m[0], "r:id");
     const path = rid ? rels.get(rid) : undefined;
     if (!path) continue;
-    const xml = await part(zip, path, budget);
-    if (xml === null) continue;
-    sheets.push(readSheet(name, xml, shared, formatFor, date1904));
+    const sheet = await readSheet(zip, path, budget, name, shared, formatFor, date1904);
+    if (sheet) sheets.push(sheet);
   }
   if (sheets.length === 0) throw new SpreadsheetError("This workbook has no visible sheet to read.");
   return sheets;
 }
 
-function readSheet(name: string, xml: string, shared: string[], formatFor: (style: number) => NumberFormat, date1904: boolean): SheetTable {
+async function readSheet(zip: JSZip, path: string, budget: { used: number }, name: string, shared: string[], formatFor: (style: number) => NumberFormat, date1904: boolean): Promise<SheetTable | null> {
   const rows: string[][] = [];
   let truncated = 0;
   let nextRow = 1;
-  const data = /<sheetData\b[^>]*>([\s\S]*)<\/sheetData>/.exec(xml)?.[1] ?? "";
-  for (const rm of data.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>|<row\b([^>]*)\/>/g)) {
+  const onRow = (rm: RegExpExecArray) => {
     const rowAttrs = rm[1] ?? rm[3] ?? "";
     const r = Number(attr(`<row ${rowAttrs}>`, "r") ?? nextRow);
     nextRow = r + 1;
     if (r > SHEET_LIMITS.maxRows) {
       truncated++;
-      continue;
+      return;
     }
     const cells: string[] = [];
     let nextCol = 0;
@@ -330,7 +399,29 @@ function readSheet(name: string, xml: string, shared: string[], formatFor: (styl
     }
     while (rows.length < r - 1) rows.push([]);
     rows[r - 1] = cells;
-  }
+  };
+  // Rows live only inside <sheetData>; the scanner sees the sheet as it inflates, one row at a time.
+  // Past the row cap the rest is only counted, cheaply: the tail of each chunk carries over so a
+  // "<row" split between two chunks still counts once.
+  const scan = elementScanner(/<row\b([^>]*)>([\s\S]*?)<\/row>|<row\b([^>]*)\/>/, (m) => {
+    onRow(m);
+    return nextRow <= SHEET_LIMITS.maxRows + 1;
+  });
+  let counting = false;
+  let tail = "";
+  const count = (chunk: string) => {
+    const text = tail + chunk;
+    // A "<row" that ended inside the tail was counted with the previous chunk.
+    for (const m of text.matchAll(/<row[\s>/]/g)) if (m.index + 5 > tail.length) truncated++;
+    tail = text.slice(-5);
+  };
+  const found = await streamPart(zip, path, budget, (chunk) => {
+    if (counting) return count(chunk);
+    if (scan.feed(chunk)) return;
+    counting = true;
+    count(scan.rest());
+  });
+  if (!found) return null;
   return { name, rows: trim(rows), truncatedRows: truncated };
 }
 
