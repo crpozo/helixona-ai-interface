@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
-import { AdminCreateUserCommand, AdminDisableUserCommand, AdminEnableUserCommand, AdminAddUserToGroupCommand, AdminRemoveUserFromGroupCommand, AdminSetUserMFAPreferenceCommand, AdminSetUserPasswordCommand, CognitoIdentityProviderClient, ListUsersCommand, ListUsersInGroupCommand, AdminUserGlobalSignOutCommand } from "@aws-sdk/client-cognito-identity-provider";
+import { AdminCreateUserCommand, AdminDeleteUserCommand, AdminDisableUserCommand, AdminEnableUserCommand, AdminAddUserToGroupCommand, AdminRemoveUserFromGroupCommand, AdminSetUserMFAPreferenceCommand, AdminSetUserPasswordCommand, CognitoIdentityProviderClient, ListUsersCommand, ListUsersInGroupCommand, AdminUserGlobalSignOutCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { randomInt } from "node:crypto";
 
 /** 16 characters that satisfy the pool's policy (upper, lower, digit, symbol), without look-alike characters. */
@@ -170,6 +170,12 @@ export class CognitoUserDirectory implements UserDirectory {
     await this.client.send(new AdminSetUserPasswordCommand({ UserPoolId: this.userPoolId, Username: username, Password: password, Permanent: false }));
     await this.client.send(new AdminUserGlobalSignOutCommand({ UserPoolId: this.userPoolId, Username: username })).catch(() => {});
     return password;
+  }
+
+  /** Deletes the account; its sessions are revoked by the caller. */
+  async delete(id: string): Promise<void> {
+    const { username } = await this.userFor(id);
+    await this.client.send(new AdminDeleteUserCommand({ UserPoolId: this.userPoolId, Username: username }));
   }
 
   private async userFor(sub: string): Promise<{ username: string; email: string }> {

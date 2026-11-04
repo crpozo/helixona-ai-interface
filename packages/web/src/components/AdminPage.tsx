@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AdminTrainingLog, AdminTrainingRow, AdminUser, AdminUsersPage, AuditEvent, Me, Role, UsageRow } from "../lib/types";
-import { ApiError, adminAudit, adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminRecordPaperTraining, adminResendInvitation, adminResetMfa, adminSetModels, adminSetRole, adminSetTemporaryPassword, adminTraining, adminUsage } from "../lib/api";
+import { ApiError, adminAudit, adminCreateUser, adminDeleteUser, adminDisableUser, adminEnableUser, adminListUsers, adminRecordPaperTraining, adminResendInvitation, adminResetMfa, adminSetModels, adminSetRole, adminSetTemporaryPassword, adminTraining, adminUsage } from "../lib/api";
 import { modelLabel } from "../lib/models";
 import { trainingStatus } from "./TrainingSections";
 import { FeedbackDelivery } from "./FeedbackDelivery";
@@ -359,6 +359,18 @@ function UsersPanel({ me, users, modelCatalog, training, error, setError, reload
     }
   };
 
+  const deleteUser = async (u: AdminUser) => {
+    const what = u.status === "invited" ? "This invitation has not been used." : "They will be signed out everywhere and will not be able to sign in again.";
+    if (!window.confirm(`Delete the account of ${u.name} (${u.email})? ${what} Their conversations are kept for the record.`)) return;
+    setError(null);
+    try {
+      await adminDeleteUser(u.id);
+      await reload();
+    } catch (err) {
+      setError(errMsg(err));
+    }
+  };
+
   const toggle = async (u: AdminUser) => {
     const action = u.enabled ? "disable" : "enable";
     if (!window.confirm(`Are you sure you want to ${action} ${u.name}?`)) return;
@@ -413,6 +425,7 @@ function UsersPanel({ me, users, modelCatalog, training, error, setError, reload
     items.push({ label: "Reset MFA", icon: "gear", onSelect: () => void resetMfa(u) });
     if (u.id !== me.user.id) items.push({ label: "Temporary password", icon: "pencil", onSelect: () => void temporaryPassword(u) });
     if (training && u.enabled && !complete(row)) items.push({ label: "Record paper completion", icon: "cap", onSelect: () => void recordPaper(row ?? { id: u.id, name: u.name, email: u.email, role: u.role, enabled: u.enabled, inDirectory: true, record: null }) });
+    if (u.id !== me.user.id) items.push({ label: "Delete user", icon: "trash", danger: true, onSelect: () => void deleteUser(u) });
     return items;
   };
 
@@ -506,6 +519,11 @@ function UsersPanel({ me, users, modelCatalog, training, error, setError, reload
                     <td className="muted">{dateFmt.format(new Date(u.createdAt))}</td>
                     <td>
                       <div className="row gap">
+                        {u.enabled && u.status === "invited" && (
+                          <button type="button" className="btn btn-small" onClick={() => void resendInvitation(u)} title="Send the invitation email again, with a new temporary password">
+                            Resend invite
+                          </button>
+                        )}
                         <button type="button" className="btn btn-small" onClick={() => void toggle(u)} disabled={u.id === me.user.id}>
                           {u.enabled ? "Disable" : "Enable"}
                         </button>

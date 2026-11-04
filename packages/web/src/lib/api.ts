@@ -363,6 +363,10 @@ export function adminResetMfa(id: string): Promise<{ ok: true }> {
 }
 
 /** Sends the invitation email again with a new temporary password (users who have not signed in yet). */
+export function adminDeleteUser(id: string): Promise<{ ok: true }> {
+  return request(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export function adminResendInvitation(id: string): Promise<{ ok: true }> {
   return request(`/api/admin/users/${encodeURIComponent(id)}/invitation/resend`, { method: "POST" });
 }

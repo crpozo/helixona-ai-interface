@@ -42,6 +42,11 @@ test.describe("Administration", () => {
     const row = page.locator(".users-table tr", { hasText: email }).first();
     await expect(row).toBeVisible();
     await expect(row).toContainText("Invited");
+    // An invited person has a visible "Resend invite" button (a confirm, then a notice).
+    const onResend = (d: import("@playwright/test").Dialog) => void d.accept();
+    page.on("dialog", onResend);
+    await row.getByRole("button", { name: "Resend invite" }).click();
+    page.off("dialog", onResend);
     const openMenu = async () => {
       await row.getByRole("button", { name: `Options for ${email}` }).click();
     };
@@ -98,6 +103,16 @@ test.describe("Administration", () => {
     await expect(row).toContainText("Completed (paper)");
     await expect(row).toContainText("Sep 20, 2026");
     page.off("dialog", onDialog);
+
+    // Delete the account from the row menu (asks first); the row disappears.
+    const onDelete = (d: import("@playwright/test").Dialog) => void d.accept();
+    page.on("dialog", onDelete);
+    await openMenu();
+    await page.getByRole("menuitem", { name: "Delete user" }).click();
+    // The account is gone from the directory; its training record stays in the log, marked as such.
+    await expect(row).toContainText("no longer in the directory");
+    await expect(row.getByRole("button", { name: `Options for ${email}` })).toHaveCount(0);
+    page.off("dialog", onDelete);
 
     await page.getByRole("link", { name: /Back/ }).or(page.getByRole("button", { name: /Back/ })).first().click();
     await expect(page.locator(".home-start")).toBeVisible();

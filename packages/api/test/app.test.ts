@@ -558,6 +558,15 @@ describe("Invitations", () => {
     expect((await app.inject({ method: "POST", url: "/api/admin/users/unknown/invitation/resend", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(409);
     const staff = await login(app, "pepe");
     expect((await app.inject({ method: "POST", url: `/api/admin/users/${created.id}/invitation/resend`, headers: { ...H, cookie: staff.cookie } })).statusCode).toBe(403);
+    // Deleting: not by staff, not oneself, not twice; the account leaves the list and its sessions go.
+    expect((await app.inject({ method: "DELETE", url: `/api/admin/users/${created.id}`, headers: { ...H, cookie: staff.cookie } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "DELETE", url: "/api/admin/users/dev-root", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(400);
+    const gone = await login(app, "leaving");
+    expect((await app.inject({ method: "DELETE", url: "/api/admin/users/dev-leaving", headers: { ...H, cookie: admin.cookie } })).json()).toEqual({ ok: true });
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: { cookie: gone.cookie } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/api/admin/users", headers: { cookie: admin.cookie } })).json().items.some((u: { id: string }) => u.id === "dev-leaving")).toBe(false);
+    expect((await app.inject({ method: "DELETE", url: "/api/admin/users/dev-leaving", headers: { ...H, cookie: admin.cookie } })).statusCode).toBe(404);
+    expect(repos.audit.events.find((e) => e.action === "admin_user_delete")?.meta).toMatchObject({ targetUserId: "dev-leaving", sessionsRevoked: 1 });
     // A temporary password is returned once and never written to the audit log.
     const tp = await app.inject({ method: "POST", url: `/api/admin/users/${created.id}/temporary-password`, headers: { ...H, cookie: admin.cookie } });
     expect(tp.statusCode).toBe(200);

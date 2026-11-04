@@ -94,6 +94,7 @@ export class MemoryUserDirectory implements UserDirectory {
   async setEnabled(id: string, enabled: boolean) { const u = this.users.find((x) => x.id === id); if (u) u.enabled = enabled; }
   async setRole(id: string, role: "staff" | "admin") { const u = this.users.find((x) => x.id === id); if (u) u.role = role; }
   async resetMfa() {} // no authenticator in dev mode
+  async delete(id: string) { this.users = this.users.filter((x) => x.id !== id); }
   async resendInvitation(id: string) {
     const u = this.users.find((x) => x.id === id);
     if (!u || u.status !== "invited") throw new Error("not invited");

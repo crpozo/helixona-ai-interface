@@ -71,6 +71,19 @@ export function registerAdminRoutes(app: FastifyInstance, deps: Deps): void {
     return { ok: true };
   });
 
+  // Removes the account (an unused invitation, a person who left): the directory entry goes, every
+  // session is revoked. What the person wrote stays, under the conversation's retention, for the record.
+  app.delete("/api/admin/users/:id", { preHandler: admin }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (id === req.session!.userId) return apiError(reply, 400, "bad_request", "You cannot delete your own account");
+    const user = (await deps.directory.list()).find((u) => u.id === id);
+    if (!user) return apiError(reply, 404, "not_found", "User not found");
+    await deps.directory.delete(id);
+    const n = await deps.repos.sessions.deleteAllForUser(id);
+    await audit(deps, req, { action: "admin_user_delete", meta: { targetUserId: id, role: user.role, status: user.status, sessionsRevoked: n } });
+    return { ok: true };
+  });
+
   app.post("/api/admin/users/:id/role", { preHandler: admin }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = z.object({ role: z.enum(["staff", "admin"]) }).safeParse(req.body);

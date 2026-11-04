@@ -138,6 +138,8 @@ export interface UserDirectory {
   resendInvitation(id: string): Promise<void>;
   /** Sets a new temporary password (returned once, for the administrator to hand over) and signs the user out everywhere. */
   setTemporaryPassword(id: string): Promise<string>;
+  /** Removes the account from the directory (an invitation that will not be used, a person who left). */
+  delete(id: string): Promise<void>;
 }
 
 export interface TrainingModuleProgress {
