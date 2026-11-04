@@ -947,6 +947,8 @@ describe("Packages", () => {
     expect(JSON.stringify(assistant.content)).toContain("Here is the package");
     const got = await app.inject({ method: "GET", url: `/api/conversations/${convId}/packages/${manifest.id}`, headers: { cookie: s.cookie } });
     expect(got.json()).toMatchObject({ id: manifest.id, pages: 7 });
+    expect(got.json().candidates).toBeUndefined(); // object keys stay on the server
+    expect(built!.data.candidates).toBeUndefined();
     const pdf = await app.inject({ method: "GET", url: `/api/conversations/${convId}/packages/${manifest.id}/pdf`, headers: { cookie: s.cookie } });
     expect(pdf.statusCode).toBe(200);
     expect(pdf.headers["content-type"]).toBe("application/pdf");

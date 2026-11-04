@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { allowedModels, defaultModelFor } from "../model-access.js";
-import { PackageTools, canPackage, type PackageCandidate, type PackageManifest } from "../attachments/packages.js";
+import { PackageTools, canPackage, type PackageCandidate, type PublicPackage } from "../attachments/packages.js";
 import { z } from "zod";
 import { currentModelId, estimateAttachmentTokens, estimateTokens, ulid, withoutRounds, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type ToolRound, type TurnEvent, type UsageSummary } from "@helixona/core";
 import type { Deps } from "../deps.js";
@@ -446,7 +446,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
         }
         toolSets.push(new PackageTools({
           store, log: deps.log, conversationId: id, conversationTitle: conv.title, candidates, ...(deps.now ? { now: deps.now } : {}),
-          onPackage: (manifest: PackageManifest) => {
+          onPackage: (manifest: PublicPackage) => {
             builtPackages.push({ id: manifest.id, title: manifest.title });
             sse.send("package", manifest);
           },

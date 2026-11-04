@@ -44,10 +44,17 @@ export interface PackageManifest {
   /** Pages and bytes of the merged PDF. */
   pages: number;
   bytes: number;
+  /** Everything the package could hold when it was built (object keys included); kept on the server only. */
+  candidates?: PackageCandidate[];
 }
 
-/** What the client sees (object keys stay on the server). */
-export type PublicPackage = PackageManifest;
+/** What the client sees: the manifest without the object keys. */
+export type PublicPackage = Omit<PackageManifest, "candidates">;
+
+export function publicManifest(m: PackageManifest): PublicPackage {
+  const { candidates: _c, ...rest } = m;
+  return rest;
+}
 
 export interface PackageCandidate extends AttachmentMeta {
   source: "chat" | "project";
@@ -431,7 +438,7 @@ export async function buildPackage(input: BuildInput): Promise<PackageManifest> 
     ...pieces.map((p) => p.item),
     ...input.candidates.filter((c) => !includedIds.has(c.id)).map((c) => ({ id: c.id, name: c.name, source: c.source, contentType: c.contentType, pages: c.pages, included: false, startPage: null, mergedPages: null })),
   ];
-  const manifest: PackageManifest = { id: input.packageId, title: input.title, createdAt: input.createdAt ?? now, updatedAt: now, summary: input.summary, items, pages: total, bytes: bytes.length };
+  const manifest: PackageManifest = { id: input.packageId, title: input.title, createdAt: input.createdAt ?? now, updatedAt: now, summary: input.summary, items, pages: total, bytes: bytes.length, candidates: input.candidates };
   await input.store.put(packageKey(input.conversationId, input.packageId, "package.pdf"), bytes, "application/pdf");
   await input.store.put(packageKey(input.conversationId, input.packageId, "summary.pdf"), summaryBytes, "application/pdf");
   await input.store.put(packageKey(input.conversationId, input.packageId, "manifest.json"), Buffer.from(JSON.stringify(manifest), "utf8"), "application/json");
@@ -482,7 +489,7 @@ export interface PackageToolsOptions {
   conversationTitle: string;
   candidates: PackageCandidate[];
   /** Called when a package is built, so the interface can show it at once. */
-  onPackage: (manifest: PackageManifest) => void;
+  onPackage: (manifest: PublicPackage) => void;
   now?: () => Date;
 }
 
@@ -545,7 +552,7 @@ export class PackageTools {
       subtitle: `${this.opts.conversationTitle} · prepared ${date} with the Helixona Assistant`,
       now,
     });
-    this.opts.onPackage(manifest);
+    this.opts.onPackage(publicManifest(manifest));
     const included = manifest.items.filter((i) => i.included);
     const contents = included.map((i, n) => `${n + 1}. ${i.name}${i.startPage ? ` (p. ${i.startPage})` : ""}${i.note ? ` — ${i.note}` : ""}`).join("\n");
     const docs = included.length - 1;

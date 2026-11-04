@@ -4,7 +4,7 @@ import type { AttachmentMeta } from "@helixona/core";
 import type { Deps } from "../deps.js";
 import { apiError, audit, requireAuth } from "../app.js";
 import { locateConversation } from "./conversations.js";
-import { buildPackage, canPackage, loadManifest, packageKey, packageZip, type PackageCandidate, type PackageManifest } from "../attachments/packages.js";
+import { buildPackage, canPackage, loadManifest, packageKey, packageZip, publicManifest, type PackageCandidate } from "../attachments/packages.js";
 import { safeName } from "../attachments/policy.js";
 
 /**
@@ -26,25 +26,30 @@ export function registerPackageRoutes(app: FastifyInstance, deps: Deps): void {
     return { ...params.data, l, manifest };
   }
 
-  /** Everything the package may hold now: the conversation's attachments and the project's files. */
-  async function candidatesOf(conversationId: string, projectKnowledge: AttachmentMeta[]): Promise<PackageCandidate[]> {
+  /**
+   * Everything the package may hold now: what it could hold when it was built (the turn's own
+   * attachments may not be saved yet when the person edits right away), plus the conversation's
+   * attachments and the project's files since.
+   */
+  async function candidatesOf(conversationId: string, known: PackageCandidate[], projectKnowledge: AttachmentMeta[]): Promise<PackageCandidate[]> {
     const messages = await deps.repos.messages.list(conversationId);
     const seen = new Set<string>();
     const out: PackageCandidate[] = [];
-    for (const [source, metas] of [["project", projectKnowledge], ["chat", messages.filter((m) => m.role === "user").flatMap((m) => m.attachments ?? [])]] as const) {
-      for (const m of metas) {
-        if (seen.has(m.id) || !canPackage(m.contentType)) continue;
-        seen.add(m.id);
-        out.push({ ...m, source });
-      }
-    }
+    const add = (m: AttachmentMeta, source: "chat" | "project") => {
+      if (seen.has(m.id) || !canPackage(m.contentType)) return;
+      seen.add(m.id);
+      out.push({ ...m, source });
+    };
+    for (const c of known) add(c, c.source);
+    for (const m of projectKnowledge) add(m, "project");
+    for (const m of messages.filter((m) => m.role === "user").flatMap((m) => m.attachments ?? [])) add(m, "chat");
     return out;
   }
 
   app.get("/api/conversations/:id/packages/:pid", { preHandler: requireAuth() }, async (req, reply) => {
     const x = await locate(req, reply);
     if (!x) return;
-    return x.manifest satisfies PackageManifest;
+    return publicManifest(x.manifest);
   });
 
   app.get("/api/conversations/:id/packages/:pid/pdf", { preHandler: requireAuth() }, async (req, reply) => {
@@ -62,7 +67,7 @@ export function registerPackageRoutes(app: FastifyInstance, deps: Deps): void {
   app.get("/api/conversations/:id/packages/:pid/zip", { preHandler: requireAuth() }, async (req, reply) => {
     const x = await locate(req, reply);
     if (!x) return;
-    const candidates = await candidatesOf(x.id, x.l.project?.knowledge ?? []);
+    const candidates = await candidatesOf(x.id, x.manifest.candidates ?? [], x.l.project?.knowledge ?? []);
     const bytes = await packageZip(deps.attachments!, x.id, x.manifest, new Map(candidates.map((c) => [c.id, c])));
     await audit(deps, req, { action: "package_download", conversationId: x.id, meta: { format: "zip", documents: x.manifest.items.filter((i) => i.included).length - 1, bytes: bytes.length } });
     return reply
@@ -78,7 +83,7 @@ export function registerPackageRoutes(app: FastifyInstance, deps: Deps): void {
     if (!x) return;
     const body = z.object({ documents: z.array(z.string().min(1).max(64)).max(40) }).safeParse(req.body);
     if (!body.success) return apiError(reply, 400, "bad_request", "Invalid request");
-    const candidates = await candidatesOf(x.id, x.l.project?.knowledge ?? []);
+    const candidates = await candidatesOf(x.id, x.manifest.candidates ?? [], x.l.project?.knowledge ?? []);
     const ids = new Set(candidates.map((c) => c.id));
     const selection = body.data.documents.filter((d) => ids.has(d));
     const now = deps.now ?? (() => new Date());
@@ -95,6 +100,6 @@ export function registerPackageRoutes(app: FastifyInstance, deps: Deps): void {
       now,
     });
     await audit(deps, req, { action: "package_rebuild", conversationId: x.id, meta: { documents: selection.length, pages: manifest.pages } });
-    return manifest;
+    return publicManifest(manifest);
   });
 }
