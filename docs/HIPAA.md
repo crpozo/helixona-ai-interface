@@ -299,6 +299,18 @@ and no audit event is written: the copy is equivalent to selecting the text on s
 file may contain PHI, so the policies document asks that it be pasted into the record and then
 deleted, and never kept on the desktop, in email or in a personal drive.
 
+## Packages
+
+On request ("summarize these and give me a package with the originals"), the assistant builds a
+**package**: one PDF that opens with a cover and an index, then the summary it wrote, then the chosen
+documents of the conversation or the project appended whole and unchanged, with the originals also
+offered as a ZIP next to the summary. The package is built on the server with the files already in the
+clinic's storage: nothing is sent to a third party to merge or convert. It is stored under its
+conversation, with the conversation's retention, and only people who can read the conversation can
+download it. The audit log records that a package was built, rebuilt or downloaded, with the number of
+documents and pages, never their names or content. Staff can add, remove or reorder documents from the
+card without the model's help; the summary is kept as written and should be reviewed before sending.
+
 ## Large and many attachments
 
 Chart prep often means ten or more files per patient, some of them hundreds of pages. A message can

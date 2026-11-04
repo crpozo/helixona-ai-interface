@@ -126,6 +126,33 @@ export interface Message {
   authorName?: string;
   /** An answer that used tools (reading inside a ZIP): what was done, step by step. */
   tools?: { steps: Array<{ text: string; ms: number }> };
+  /** Packages built in this turn (a summary with documents appended); the card loads the rest. */
+  packages?: Array<{ id: string; title: string }>;
+}
+
+/** One entry of a package: the summary, or a document of the conversation or the project. */
+export interface PackageItem {
+  id: string;
+  name: string;
+  source: "summary" | "chat" | "project";
+  contentType: string;
+  pages: number | null;
+  included: boolean;
+  startPage: number | null;
+  mergedPages: number | null;
+  note?: string;
+}
+
+/** A package: one PDF with a cover, the summary and the chosen documents, also offered as a ZIP. */
+export interface PackageManifest {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  summary: string;
+  items: PackageItem[];
+  pages: number;
+  bytes: number;
 }
 
 /** A file attached to a user turn (metadata only; bytes stay in the clinic's storage). */
@@ -404,6 +431,7 @@ export type ChatSseEvent =
   | { type: "refused"; data: SseRefused }
   | { type: "error"; data: SseError }
   | { type: "files"; data: SseFiles }
+  | { type: "package"; data: PackageManifest }
   | { type: "done"; data: SseDone };
 
 // ---- Business associate agreements ----

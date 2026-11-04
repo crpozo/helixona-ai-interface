@@ -225,7 +225,7 @@ describe("A turn over a ZIP, end to end", () => {
     expect(events.at(-1)!.event).toBe("done");
     // Two requests: the first offered the tools, the second carried the tool result.
     expect(calls).toHaveLength(2);
-    expect(calls[0]!.tools?.map((t) => (t as { name: string }).name)).toEqual(["list_zip_files", "read_zip_files", "search_zip_files"]);
+    expect(calls[0]!.tools?.map((t) => (t as { name: string }).name)).toEqual(["list_zip_files", "read_zip_files", "search_zip_files", "build_package"]);
     const last = calls[1]!.messages.at(-1)!;
     expect((last.content as Array<{ type: string }>)[0]!.type).toBe("tool_result");
 
@@ -245,7 +245,7 @@ describe("A turn over a ZIP, end to end", () => {
     expect(calls).toHaveLength(1);
     const roles = calls[0]!.messages.map((m) => `${m.role}:${(m.content as Array<{ type: string }>).map((b) => b.type).join("+")}`);
     expect(roles).toEqual(["user:document+text", "assistant:text+tool_use", "user:tool_result", "assistant:text", "user:text"]);
-    expect(calls[0]!.tools).toHaveLength(3);
+    expect(calls[0]!.tools).toHaveLength(4); // the three ZIP tools and build_package
 
     // Three tool turns later, only the two most recent are replayed in full.
     for (const name of ["Second.zip", "Third.zip"]) {

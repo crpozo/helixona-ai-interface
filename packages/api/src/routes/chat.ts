@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { allowedModels, defaultModelFor } from "../model-access.js";
+import { PackageTools, canPackage, type PackageCandidate, type PackageManifest } from "../attachments/packages.js";
 import { z } from "zod";
 import { currentModelId, estimateAttachmentTokens, estimateTokens, ulid, withoutRounds, type AttachmentMeta, type BetaContentBlockParam, type StoredMessage, type ToolRound, type TurnEvent, type UsageSummary } from "@helixona/core";
 import type { Deps } from "../deps.js";
@@ -427,10 +428,30 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
 
       // ZIPs in the conversation: the model reads inside them with tools, run here between rounds.
       const zips = [...historyFiles, ...newFiles].filter((f) => isZipType(f.contentType));
-      const toolSets = [
+      const toolSets: ConstructorParameters<typeof CombinedTools>[0] = [
         ...(zips.length > 0 && store ? [new ZipTools({ store, log: deps.log, zips, sheetChars })] : []),
         ...(libraryFiles.length > 0 && deps.library && project ? [deps.library.tools(project)] : []),
       ];
+      // Packages: the summary plus chosen documents in one PDF, built on request with a tool.
+      const builtPackages: Array<{ id: string; title: string }> = [];
+      if (store) {
+        const seen = new Set<string>();
+        const candidates: PackageCandidate[] = [];
+        for (const [source, metas] of [["project", allKnowledge], ["chat", [...historyFiles, ...newFiles]]] as const) {
+          for (const m of metas) {
+            if (seen.has(m.id) || !canPackage(m.contentType)) continue;
+            seen.add(m.id);
+            candidates.push({ ...m, source });
+          }
+        }
+        toolSets.push(new PackageTools({
+          store, log: deps.log, conversationId: id, conversationTitle: conv.title, candidates, ...(deps.now ? { now: deps.now } : {}),
+          onPackage: (manifest: PackageManifest) => {
+            builtPackages.push({ id: manifest.id, title: manifest.title });
+            sse.send("package", manifest);
+          },
+        }));
+      }
       const zipTools = toolSets.length > 0 ? new CombinedTools(toolSets) : null;
 
       // ---- The answer ----
@@ -469,6 +490,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
           await store.put(roundsKey, Buffer.from(JSON.stringify({ rounds: result.rounds }), "utf8"), "application/json");
           assistantMsg.tools = { key: roundsKey, steps: result.steps };
         }
+        if (builtPackages.length > 0) assistantMsg.packages = builtPackages;
         await deps.repos.messages.append(userMsg, ttl);
         await deps.repos.messages.append(assistantMsg, ttl);
         await deps.repos.conversations.update(key, id, {

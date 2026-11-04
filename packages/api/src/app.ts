@@ -23,6 +23,7 @@ import { registerProjectRoutes } from "./routes/projects.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { registerImportRoutes } from "./routes/import.js";
 import { registerTrainingRoutes } from "./routes/training.js";
+import { registerPackageRoutes } from "./routes/packages.js";
 
 declare module "fastify" {
   interface FastifyRequest { session: Session | null; requestId: string }
@@ -139,6 +140,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   registerConversationRoutes(app, deps);
   registerChatRoute(app, deps);
   registerAttachmentRoutes(app, deps);
+  registerPackageRoutes(app, deps);
   registerProjectRoutes(app, deps);
   registerAdminRoutes(app, deps);
   registerTrainingRoutes(app, deps);

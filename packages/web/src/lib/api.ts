@@ -9,7 +9,7 @@ import type {
   AdminUser, AdminUsersPage,
   ApiErrorBody,
   AuditEvent,
-  ChatSseEvent,
+  ChatSseEvent, PackageManifest,
   Conversation,
   DirectoryEntry,
   Me,
@@ -283,6 +283,7 @@ const KNOWN_EVENTS = new Set<ChatSseEvent["type"]>([
   "error",
   "done",
   "files",
+  "package",
 ]);
 
 /**
@@ -503,4 +504,19 @@ export function importClaudeProjects(projects: ExportProject[]): Promise<{ proje
 
 export function importClaudeConversations(conversations: Array<Omit<ExportConversation, "projectSourceId"> & { projectId: string | null; archive: boolean }>): Promise<{ conversations: ImportedConversationResult[] }> {
   return request("/api/import/claude/conversations", { method: "POST", body: { conversations }, timeoutMs: IMPORT_TIMEOUT_MS });
+}
+
+// ---- Packages (a summary with documents appended) ----
+
+export function getPackage(conversationId: string, packageId: string): Promise<PackageManifest> {
+  return request<PackageManifest>(`/api/conversations/${encodeURIComponent(conversationId)}/packages/${encodeURIComponent(packageId)}`);
+}
+
+/** Other contents, same summary: the ids of the documents to append, in order. */
+export function rebuildPackage(conversationId: string, packageId: string, documents: string[]): Promise<PackageManifest> {
+  return request<PackageManifest>(`/api/conversations/${encodeURIComponent(conversationId)}/packages/${encodeURIComponent(packageId)}`, { method: "POST", body: { documents }, timeoutMs: 120_000 });
+}
+
+export function packageDownloadUrl(conversationId: string, packageId: string, format: "pdf" | "zip"): string {
+  return `/api/conversations/${encodeURIComponent(conversationId)}/packages/${encodeURIComponent(packageId)}/${format}`;
 }

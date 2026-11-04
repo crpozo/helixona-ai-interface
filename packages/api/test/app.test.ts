@@ -909,3 +909,65 @@ describe("Model access", () => {
     await app.close();
   });
 });
+
+describe("Packages", () => {
+  it("the assistant builds a package from the attached PDFs; it downloads as PDF and ZIP and its contents can change", async () => {
+    const { app } = await makeApp();
+    const s = await login(app, "ana");
+    const convId = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: s.cookie }, payload: { modelAlias: "opus" } })).json().id as string;
+    const upload = async (name: string, pages: number) => {
+      const pdf = await PDFDocument.create();
+      for (let i = 0; i < pages; i++) pdf.addPage();
+      const bytes = Buffer.from(await pdf.save());
+      const a = (await app.inject({ method: "POST", url: `/api/conversations/${convId}/attachments`, headers: { ...H, cookie: s.cookie }, payload: { name, size: bytes.length, contentType: "application/pdf" } })).json();
+      expect((await app.inject({ method: "PUT", url: a.upload.url, headers: { "content-type": "application/pdf", "x-requested-with": "helixona" }, payload: bytes })).statusCode).toBe(200);
+      return { id: a.id as string, name: a.name as string };
+    };
+    const eob = await upload("EOB March.pdf", 3);
+    const note = await upload("Office visit note.pdf", 2);
+    const r = await app.inject({ method: "POST", url: `/api/conversations/${convId}/messages`, headers: { ...H, cookie: s.cookie }, payload: { text: "Summarize these and build a package with the originals", attachments: [{ id: eob.id, name: eob.name }, { id: note.id, name: note.name }] } });
+    expect(r.statusCode).toBe(200);
+    const events = parseSse(r.body);
+    const built = events.find((e) => e.event === "package");
+    expect(built).toBeTruthy();
+    const manifest = built!.data as { id: string; title: string; pages: number; items: Array<{ id: string; included: boolean; startPage: number | null; mergedPages: number | null; source: string }> };
+    expect(manifest.title).toBe("Appeal package");
+    const included = manifest.items.filter((i) => i.included);
+    expect(included.map((i) => i.source)).toEqual(["summary", "chat", "chat"]);
+    // Cover (1) + summary (1) + 3 + 2 pages, in that order.
+    expect(manifest.pages).toBe(7);
+    expect(included[1]).toMatchObject({ id: eob.id, startPage: 3, mergedPages: 3 });
+    expect(included[2]).toMatchObject({ id: note.id, startPage: 6, mergedPages: 2 });
+    expect(events.some((e) => e.event === "done")).toBe(true);
+
+    // The saved message points at the package; the manifest and the files download.
+    const conv = (await app.inject({ method: "GET", url: `/api/conversations/${convId}`, headers: { cookie: s.cookie } })).json();
+    const assistant = conv.messages.find((m: { role: string }) => m.role === "assistant");
+    expect(assistant.packages).toEqual([{ id: manifest.id, title: "Appeal package" }]);
+    expect(JSON.stringify(assistant.content)).toContain("Here is the package");
+    const got = await app.inject({ method: "GET", url: `/api/conversations/${convId}/packages/${manifest.id}`, headers: { cookie: s.cookie } });
+    expect(got.json()).toMatchObject({ id: manifest.id, pages: 7 });
+    const pdf = await app.inject({ method: "GET", url: `/api/conversations/${convId}/packages/${manifest.id}/pdf`, headers: { cookie: s.cookie } });
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers["content-type"]).toBe("application/pdf");
+    expect(pdf.headers["content-disposition"]).toContain('filename="Appeal package.pdf"');
+    expect((await PDFDocument.load(pdf.rawPayload)).getPageCount()).toBe(7);
+    const zip = await app.inject({ method: "GET", url: `/api/conversations/${convId}/packages/${manifest.id}/zip`, headers: { cookie: s.cookie } });
+    expect(zip.statusCode).toBe(200);
+    const { default: JSZip } = await import("jszip");
+    const names = Object.keys((await JSZip.loadAsync(zip.rawPayload)).files).filter((n) => !n.endsWith("/")).sort();
+    expect(names).toEqual(["Appeal package/00 Index.txt", "Appeal package/01 Appeal package - summary.md", "Appeal package/01 Appeal package - summary.pdf", "Appeal package/02 EOB March.pdf", "Appeal package/03 Office visit note.pdf"]);
+
+    // Other contents: the note only, then nothing but the summary. Someone else cannot see it.
+    const fewer = await app.inject({ method: "POST", url: `/api/conversations/${convId}/packages/${manifest.id}`, headers: { ...H, cookie: s.cookie }, payload: { documents: [note.id] } });
+    expect(fewer.statusCode).toBe(200);
+    expect(fewer.json().items.filter((i: { included: boolean }) => i.included).map((i: { id: string }) => i.id)).toEqual(["summary", note.id]);
+    expect(fewer.json().pages).toBe(4);
+    expect(fewer.json().items.find((i: { id: string }) => i.id === eob.id)).toMatchObject({ included: false });
+    const none = await app.inject({ method: "POST", url: `/api/conversations/${convId}/packages/${manifest.id}`, headers: { ...H, cookie: s.cookie }, payload: { documents: [] } });
+    expect(none.json().pages).toBe(2);
+    const other = await login(app, "pepe");
+    expect((await app.inject({ method: "GET", url: `/api/conversations/${convId}/packages/${manifest.id}/pdf`, headers: { cookie: other.cookie } })).statusCode).toBe(404);
+    await app.close();
+  });
+});

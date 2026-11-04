@@ -3,6 +3,7 @@ import type { ChatMessage, Notice, Step } from "../lib/chatReducer";
 import type { CatalogModel } from "../lib/types";
 import { modelLabel } from "../lib/models";
 import { Markdown } from "./Markdown";
+import { PackageCard } from "./PackageCard";
 import { FilesProgress } from "./FilesProgress";
 import { formatSize, isImageType, isZipType } from "../lib/files";
 import { copyFormatted, docxFileName, downloadBlob, markdownToClipboardHtml, markdownToDocxBlob, markdownToPlain } from "../lib/markdownExport";
@@ -15,6 +16,8 @@ interface Props {
   showAuthor?: boolean;
   /** The conversation's title: the name of the Word file a response is downloaded as. */
   exportTitle?: string;
+  /** The conversation the message belongs to (packages are downloaded from it). */
+  conversationId?: string;
 }
 
 function noticeText(n: Notice, models: CatalogModel[]): string {
@@ -136,7 +139,7 @@ const FILES_COLLAPSE_OVER = 6;
 const FILES_SHOWN_COLLAPSED = 4;
 
 // Memoized: while one message streams, the others must not re-render on every token.
-export const MessageBubble = memo(function MessageBubble({ message: m, models, onRetry, showAuthor = false, exportTitle = "" }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message: m, models, onRetry, showAuthor = false, exportTitle = "", conversationId }: Props) {
   const [showThinking, setShowThinking] = useState(false);
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -243,6 +246,7 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
         ) : m.text ? (
           <Markdown text={m.text} documentReady={finished} fallbackTitle={exportTitle} />
         ) : null}
+        {!isUser && conversationId && m.packages.map((p) => <PackageCard key={p.id} conversationId={conversationId} id={p.id} title={p.title} initial={p.manifest} />)}
       </div>
 
       {!isUser && (m.notices.length > 0 || m.error) && (

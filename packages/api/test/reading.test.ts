@@ -381,7 +381,7 @@ describe("Large attachments in a conversation", () => {
     const first = calls[0]!.messages[0]!.content as Array<{ type: string; title?: string; source?: { data?: string } }>;
     expect(first.map((b) => b.title)).toEqual(["Agreement.pdf", "Project library", undefined]);
     expect(first[1]!.source!.data).toContain("Submission.pdf · 120 pages · ready");
-    expect(calls[0]!.tools?.map((t) => (t as { name: string }).name)).toEqual(["list_project_files", "search_project_files", "read_project_file", "review_project_files"]);
+    expect(calls[0]!.tools?.map((t) => (t as { name: string }).name)).toEqual(["list_project_files", "search_project_files", "read_project_file", "review_project_files", "build_package"]);
 
     // Search and a page range, straight through the tools.
     const tools = deps.library!.tools(await deps.repos.projects.get(p.id) as never);

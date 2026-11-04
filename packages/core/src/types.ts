@@ -116,6 +116,8 @@ export interface StoredMessage {
   rounds?: ToolRound[];
   /** A turn that used tools: where its rounds are kept, and the activity list shown with the answer. */
   tools?: { key: string; steps: TurnStep[] };
+  /** Packages (a summary with documents appended) built in this turn; their contents live in storage. */
+  packages?: Array<{ id: string; title: string }>;
   model: string | null;
   fallbackReason: PinReason | null;
   stopReason: string | null;

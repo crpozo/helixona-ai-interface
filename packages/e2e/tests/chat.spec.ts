@@ -277,6 +277,39 @@ test.describe("Conversations", () => {
     await expect(page).toHaveURL(/\/c\/[0-9A-Z]{26}$/);
   });
 
+  test("a package: the summary and the attached PDF in one download, with contents the person can change", async ({ page }) => {
+    const errs = watchErrors(page);
+    await page.goto("/", { waitUntil: "load" });
+    const input = page.locator(".composer input[type=file]");
+    await input.setInputFiles([
+      { name: "Denial letter.pdf", mimeType: "application/pdf", buffer: await samplePdf("Denial", 2) },
+      { name: "EOB August.pdf", mimeType: "application/pdf", buffer: await samplePdf("EOB", 3) },
+    ]);
+    await expect(page.locator(".composer-pending .attach-chip")).toHaveCount(2);
+    await expect(page.locator(".composer-pending .attach-progress")).toHaveCount(0);
+    await page.getByPlaceholder("Write a message…").fill("Summarize these for the appeal and build a package with the originals");
+    await page.getByRole("button", { name: "Send" }).click();
+    const card = page.getByRole("group", { name: "Package: Appeal package" });
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("2 documents after the summary · 7 pages");
+    await expect(card.getByRole("list", { name: "Contents" })).toContainText("Denial letter.pdf");
+    await expect(page.locator(".msg-assistant .steps")).toContainText("Built the package");
+    // The PDF downloads from the card's link.
+    const href = await card.getByRole("link", { name: "Download Appeal package as PDF" }).getAttribute("href");
+    const pdf = await page.request.get(href!);
+    expect(pdf.ok()).toBeTruthy();
+    expect(pdf.headers()["content-type"]).toBe("application/pdf");
+    // Fewer documents: uncheck the EOB and apply.
+    await card.getByRole("button", { name: "Change contents" }).click();
+    await card.getByRole("checkbox", { name: /EOB August\.pdf/ }).uncheck();
+    await card.getByRole("button", { name: "Apply" }).click();
+    await expect(card).toContainText("1 document after the summary · 4 pages");
+    // The package survives a reload.
+    await page.reload({ waitUntil: "load" });
+    await expect(page.getByRole("group", { name: "Package: Appeal package" })).toContainText("1 document after the summary");
+    errs.expectNone();
+  });
+
   test("a PDF attached from the composer travels with the message; unsupported files are refused", async ({ page }) => {
     const errs = watchErrors(page);
     await page.goto("/", { waitUntil: "load" });

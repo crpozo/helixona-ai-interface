@@ -1,4 +1,4 @@
-import type { AttachmentMeta, ChatSseEvent, ContentBlock, FallbackReason, Message, SseError, SseFiles } from "./types";
+import type { AttachmentMeta, ChatSseEvent, ContentBlock, FallbackReason, Message, PackageManifest, SseError, SseFiles } from "./types";
 
 export type MessageStatus =
   | "pending" // enviado, esperando message_start / primer texto
@@ -41,6 +41,8 @@ export interface ChatMessage {
   steps: Step[];
   /** Round of the model's work being shown (a turn that uses tools has several); the step ids carry it. */
   round: number;
+  /** Packages built for this answer; a saved message brings the id and title, the card loads the rest. */
+  packages: Array<{ id: string; title: string; manifest: PackageManifest | null }>;
 }
 
 export interface Step {
@@ -148,6 +150,7 @@ export function fromServerMessage(m: Message): ChatMessage {
     wait: null,
     steps: (m.tools?.steps ?? []).map((s, i) => ({ id: `saved-${i}`, text: s.text, model: null, state: "done" as const, startedAt: 0, ms: s.ms })),
     round: 1,
+    packages: (m.packages ?? []).map((p) => ({ ...p, manifest: null })),
   };
 }
 
@@ -215,6 +218,8 @@ function applySse(state: ChatState, event: ChatSseEvent): ChatState {
         return { ...m, text: "", status: "pending", round: round + 1, wait: null, steps };
       });
     }
+    case "package":
+      return updateActive(state, (m) => ({ ...m, packages: [...m.packages.filter((p) => p.id !== event.data.id), { id: event.data.id, title: event.data.title, manifest: event.data }] }));
     case "files":
       // A snapshot: the list replaces the previous one; an empty list clears it.
       return updateActive(state, (m) => ({ ...m, files: event.data.files.length > 0 ? event.data : null, steps: event.data.files.length > 0 ? upsertStep(m.steps, filesStep(event.data)) : m.steps }));
@@ -311,6 +316,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         wait: null,
         steps: [],
         round: 1,
+        packages: [],
       };
       const assistant: ChatMessage = {
         id: action.assistantId,
@@ -331,6 +337,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         wait: null,
         steps: [],
         round: 1,
+        packages: [],
       };
       return {
         ...state,

@@ -75,9 +75,9 @@ export class FakeProvider implements LlmProvider {
         const blocks = (Array.isArray(last?.content) ? last!.content : []) as unknown as Array<Record<string, unknown>>;
         const titles = blocks.flatMap((b) => (b.type === "document" ? [String(b.title ?? "")] : []));
         const images = blocks.filter((b) => b.type === "image").length;
-        const zipCall = cmd ? null : zipToolCall(params, blocks);
+        const zipCall = cmd ? null : (zipToolCall(params, blocks) ?? packageToolCall(params, blocks, userText));
         if (zipCall) {
-          const remark = "Let me read the files first.";
+          const remark = zipCall.tool === "build_package" ? "Let me build the package." : "Let me read the files first.";
           yield { type: "content_block_start", index: content.length, content_block: { type: "text", text: "", citations: null } } as BetaRawMessageStreamEvent;
           yield { type: "content_block_delta", index: content.length, delta: { type: "text_delta", text: remark } } as BetaRawMessageStreamEvent;
           yield { type: "content_block_stop", index: content.length } as BetaRawMessageStreamEvent;
@@ -145,6 +145,7 @@ export class FakeProvider implements LlmProvider {
   }
 
   private replyFor(userText: string, model: string, fileTitle = "", toolResult: string | null = null, system = ""): string {
+    if (toolResult !== null && toolResult.startsWith("Package built")) return `**Simulated reply** (${model}).\n\nHere is the package: the summary first, then the originals unchanged. Review the summary before sending.`;
     if (toolResult !== null) return `**Simulated reply** (${model}).\n\nRead from the ZIP:\n\n${toolResult.slice(0, 400)}`;
     // The title request: the first words of the message, as a chat title would read.
     if (/Reply with the title only/.test(system)) return userText.split(/\s+/).filter(Boolean).slice(0, 4).join(" ") || "New chat";
@@ -205,6 +206,20 @@ function zipToolCall(params: StreamParams, blocks: Array<Record<string, unknown>
 }
 
 /** The text of the first tool result in the last message, when the last message carries one. */
+/**
+ * "package" in the message with the build_package tool offered: a summary-only or all-documents
+ * package, with the names taken from the tool's own list (the documents the server can package).
+ */
+function packageToolCall(params: StreamParams, blocks: Array<Record<string, unknown>>, userText: string): { tool: string; input: Record<string, unknown> } | null {
+  if (!/\bpackage\b/i.test(userText) || blocks.some((b) => b.type === "tool_result")) return null;
+  const tool = (params.tools ?? []).find((t) => (t as { name?: string }).name === "build_package") as { description?: string } | undefined;
+  if (!tool) return null;
+  const names = [...(tool.description ?? "").matchAll(/^- "(.+?)" \(/gm)].map((m) => m[1]!);
+  const only = /\bonly the summary\b/i.test(userText) ? [] : names;
+  const summary = `# Appeal summary\n\nPrepared from ${names.length} ${names.length === 1 ? "document" : "documents"}.\n\n## Findings\n\n- First finding (doc. 2, p. 1)\n- Second finding\n\n| Item | Value |\n| --- | --- |\n| Sample | 12.3 |`;
+  return { tool: "build_package", input: { title: "Appeal package", summary, documents: only } };
+}
+
 function toolResultText(blocks: Array<Record<string, unknown>>): string | null {
   const r = blocks.find((b) => b.type === "tool_result");
   if (!r) return null;
