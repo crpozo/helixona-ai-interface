@@ -7,6 +7,7 @@ import { FeedbackDelivery } from "./FeedbackDelivery";
 import { BudgetAndCredits, MonthlyUsage, useBillingReport } from "./BillingSection";
 import { UsageTables } from "./UsageTables";
 import { RowMenu, type RowMenuItem } from "./RowMenu";
+import { ScrollTable } from "./ScrollTable";
 
 interface Props {
   me: Me;
@@ -483,7 +484,7 @@ function UsersPanel({ me, users, modelCatalog, training, error, setError, reload
         {users === null ? (
           <p className="muted">Loading…</p>
         ) : (
-          <div className="table-wrap">
+          <ScrollTable stickyActions>
             <table className="users-table">
               <thead>
                 <tr>
@@ -555,7 +556,7 @@ function UsersPanel({ me, users, modelCatalog, training, error, setError, reload
                 )}
               </tbody>
             </table>
-          </div>
+          </ScrollTable>
         )}
       </div>
     </>

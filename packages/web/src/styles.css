@@ -3924,3 +3924,61 @@ td {
 .btn-ghost {
   background: transparent;
 }
+
+/* Wide tables: the scrollbar always shows, a shadow marks what is hidden, the actions stay in view. */
+.table-scroll-body {
+  position: relative;
+}
+.table-scroll-hint {
+  margin: 0 0 0.4rem;
+}
+.table-scroll .table-wrap {
+  scrollbar-width: thin;
+  scrollbar-color: var(--brand-primary) var(--surface-2);
+  padding-bottom: 2px;
+}
+.table-scroll .table-wrap::-webkit-scrollbar {
+  height: 10px;
+}
+.table-scroll .table-wrap::-webkit-scrollbar-track {
+  background: var(--surface-2);
+  border-radius: 999px;
+}
+.table-scroll .table-wrap::-webkit-scrollbar-thumb {
+  background: var(--brand-primary);
+  border-radius: 999px;
+}
+.table-scroll .table-wrap:focus-visible {
+  outline: 1px solid var(--brand-line-gold);
+  outline-offset: 2px;
+}
+.table-scroll-body.more-right::after,
+.table-scroll-body.more-left::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 12px;
+  width: 28px;
+  pointer-events: none;
+  z-index: 2;
+}
+.table-scroll-body.more-right::after {
+  right: 0;
+  background: linear-gradient(to left, var(--surface) 20%, transparent);
+}
+.table-scroll-body.more-left::before {
+  left: 0;
+  background: linear-gradient(to right, var(--surface) 20%, transparent);
+}
+/* The last column (the buttons) stays pinned at the right edge while the rest scrolls under it. */
+.table-scroll.sticky-actions th:last-child,
+.table-scroll.sticky-actions td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: var(--surface);
+  box-shadow: -10px 0 10px -8px rgba(0, 0, 0, 0.55);
+}
+.table-scroll.sticky-actions .table-scroll-body.more-right::after {
+  display: none; /* the pinned column already marks the edge */
+}
