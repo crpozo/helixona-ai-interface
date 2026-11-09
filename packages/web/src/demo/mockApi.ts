@@ -9,11 +9,11 @@ const MODELS = [
   { alias: "haiku", modelId: "anthropic.claude-haiku-5-5", label: "Haiku 5.5", description: "Fastest and cheapest: quick questions, short drafts, simple edits", costFactor: 0.05, available: true },
   { alias: "sonnet", modelId: "anthropic.claude-sonnet-5-5", label: "Sonnet 5.5", description: "Fast and economical: translations, letters, short summaries", costFactor: 1, available: true },
   { alias: "opus", modelId: "anthropic.claude-opus-5-5", label: "Opus 5.5", description: "Recommended balance for everyday work", costFactor: 2, available: true },
-  { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable 5.1", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, available: true },
+  { alias: "fable", modelId: "anthropic.claude-fable-5-2", label: "Fable 5.2", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, available: true },
   { alias: "anthropic.claude-opus-5", modelId: "anthropic.claude-opus-5", label: "Opus 5", description: "Fallback only", costFactor: 0, available: false },
 ];
-const PRICES: Record<string, [number, number]> = { "anthropic.claude-sonnet-5-5": [2, 10], "anthropic.claude-sonnet-5": [2, 10], "anthropic.claude-opus-5-5": [4, 20], "anthropic.claude-fable-5-1": [10, 50], "anthropic.claude-opus-5": [5, 25] };
-const FALLBACK: Record<string, string | undefined> = { "anthropic.claude-fable-5-1": "anthropic.claude-opus-5-5", "anthropic.claude-opus-5-5": "anthropic.claude-opus-5" };
+const PRICES: Record<string, [number, number]> = { "anthropic.claude-sonnet-5-5": [2, 10], "anthropic.claude-sonnet-5": [2, 10], "anthropic.claude-opus-5-5": [4, 20], "anthropic.claude-fable-5-2": [8, 40], "anthropic.claude-fable-5-1": [10, 50], "anthropic.claude-opus-5": [5, 25] };
+const FALLBACK: Record<string, string | undefined> = { "anthropic.claude-fable-5-2": "anthropic.claude-fable-5-1", "anthropic.claude-fable-5-1": "anthropic.claude-opus-5-5", "anthropic.claude-opus-5-5": "anthropic.claude-opus-5" };
 
 const AGREEMENTS = [
   { id: "aws-baa", vendor: "Amazon Web Services", title: "AWS Business Associate Addendum", since: "2026-09-22", status: "Accepted by the account owner on September 22, 2026", reference: "AWS Artifact (account 148274106093), Agreements, AWS Business Associate Addendum", url: "https://console.aws.amazon.com/artifact/home#/agreements", note: "Covers the HIPAA-eligible AWS services the assistant runs on (Appendix A of the risk analysis)." },

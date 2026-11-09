@@ -16,14 +16,14 @@ const risks = [
   ["R13", "Data kept longer than needed", "Conversations, uploaded files and their transcriptions are deleted automatically after 30 days; users can delete a conversation at any time; project knowledge files are removed when the project is deleted", "Low", "Low", "Low", "None."],
   ["R14", "Service outage", "Multi-availability-zone deployment; health checks and alarms with email notification; automatic fallback between models when one is unavailable; the clinic's manual processes remain available", "Medium", "Low", "Low", "Downtime procedure in Policy P8."],
   ["R15", "Insider copies PHI out of the system", "Every conversation and file access is attributable to a named user; audit log; minimum-necessary training; sanctions policy", "Medium", "Medium", "Medium", "Accepted with monitoring: weekly audit review, sanctions applied when warranted. Owner: Privacy Officer."],
-  ["R16", "Vendor retains data", "Anthropic retains inputs and outputs for 30 days under the BAA safeguards (required for Claude Fable 5.1) and does not train on them; AWS retains nothing beyond the clinic's own storage", "Low", "Low", "Low", "Documented here; no action."],
+  ["R16", "Vendor retains data", "Anthropic retains inputs and outputs for 30 days under the BAA safeguards (required for Claude Fable 5.2) and does not train on them; AWS retains nothing beyond the clinic's own storage", "Low", "Low", "Low", "Documented here; no action."],
 ];
 const children = [
   ...titleBlock("HIPAA Security Risk Analysis", "Helixona Assistant (ai.helixona.com)", [
     ["Document", "Security Risk Analysis, 45 CFR 164.308(a)(1)(ii)(A)"],
     ["System", "Helixona Assistant: internal AI assistant for clinic staff"],
     ["Covered entity", "Helixona, Irvine, California"],
-    ["Version and date", "1.7, October 2, 2026"],
+    ["Version and date", "1.8, November 9, 2026"],
     ["Prepared by", "[Name], Security Officer"],
     ["Next review", "September 2027, or after any major change to the system"],
   ]),
@@ -42,7 +42,7 @@ const children = [
     ["Database", "Conversations, messages, projects, sessions, audit events, usage", "Amazon DynamoDB, encrypted with the clinic's KMS key, point-in-time recovery"],
     ["File storage", "Uploaded PDF, Excel, CSV, TXT and MD files; text transcriptions of long PDFs; project knowledge files", "Amazon S3, encrypted with the clinic's KMS key, versioned, public access blocked"],
     ["Secrets", "API key, session secret, identity client secret", "AWS Secrets Manager, KMS-encrypted"],
-    ["AI model", "Generates responses from the conversation and attached documents", "Anthropic Claude API (Sonnet 5.5, Opus 5.5, Fable 5.1; the previous Sonnet and Opus only as fallbacks) under the clinic's BAA with HIPAA readiness enabled"],
+    ["AI model", "Generates responses from the conversation and attached documents", "Anthropic Claude API (Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.2; the previous Sonnet, Opus and Fable only as fallbacks) under the clinic's BAA with HIPAA readiness enabled"],
     ["Monitoring", "Application logs without content, CloudTrail, WAF logs, alarms, backups", "Amazon CloudWatch, AWS CloudTrail, AWS Backup"],
   ], [2000, 3800, 3560]),
   spacer(),
@@ -114,7 +114,7 @@ const children = [
   ], [2000, 3000, 2400, 1960]),
   spacer(),
   h1("Appendix C. Change history"),
-  table(["Version", "Date", "Change", "Author"], [["1.0", "September 16, 2026", "Initial analysis", "[Name]"], ["1.1", "September 22, 2026", "AWS Business Associate Addendum accepted; remediation item closed", "[Name]"], ["1.2", "September 22, 2026", "Opus model updated to Claude Opus 5.5 (same agreement and safeguards)", "[Name]"], ["1.3", "September 28, 2026", "Long PDFs read page by page: text transcriptions stored with the file under the same encryption and retention; up to 20 files and 100 MB per file", "[Name]"], ["1.4", "September 28, 2026", "Sonnet model updated to Claude Sonnet 5.5; existing conversations move to the newest model of their line (same agreement and safeguards)", "[Name]"], ["1.5", "September 28, 2026", "Excel workbooks: .xlsx attachments read on the server (values only); workbooks built in the browser from the attachment's original rows, each fetch audited without content", "[Name]"], ["1.6", "September 29, 2026", "Import from Claude: a Claude.ai export may land in a project shared with the whole team (\"Backup Claude\"); imported chats may be kept beyond the 30-day retention as a backup, deleted by hand and reviewed yearly", "[Name]"], ["1.7", "October 2, 2026", "Spreadsheets: the rows as the model reads them are kept next to the file (same encryption and retention); a file too long for one conversation is cut, and the model is told how many rows are left out", "[Name]"]], [1200, 2200, 4200, 1760]),
+  table(["Version", "Date", "Change", "Author"], [["1.0", "September 16, 2026", "Initial analysis", "[Name]"], ["1.1", "September 22, 2026", "AWS Business Associate Addendum accepted; remediation item closed", "[Name]"], ["1.2", "September 22, 2026", "Opus model updated to Claude Opus 5.5 (same agreement and safeguards)", "[Name]"], ["1.3", "September 28, 2026", "Long PDFs read page by page: text transcriptions stored with the file under the same encryption and retention; up to 20 files and 100 MB per file", "[Name]"], ["1.4", "September 28, 2026", "Sonnet model updated to Claude Sonnet 5.5; existing conversations move to the newest model of their line (same agreement and safeguards)", "[Name]"], ["1.5", "September 28, 2026", "Excel workbooks: .xlsx attachments read on the server (values only); workbooks built in the browser from the attachment's original rows, each fetch audited without content", "[Name]"], ["1.6", "September 29, 2026", "Import from Claude: a Claude.ai export may land in a project shared with the whole team (\"Backup Claude\"); imported chats may be kept beyond the 30-day retention as a backup, deleted by hand and reviewed yearly", "[Name]"], ["1.7", "October 2, 2026", "Spreadsheets: the rows as the model reads them are kept next to the file (same encryption and retention); a file too long for one conversation is cut, and the model is told how many rows are left out", "[Name]"], ["1.8", "November 9, 2026", "Fable model updated to Claude Fable 5.2 (same agreement, 30-day retention requirement and safeguards; Fable 5.1 kept only as a fallback); Haiku 5.5 added", "[Name]"]], [1200, 2200, 4200, 1760]),
 ];
 module.exports = {
   slug: "risk-analysis",

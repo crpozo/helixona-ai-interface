@@ -11,9 +11,9 @@ describe("catálogo", () => {
       haiku: "anthropic.claude-haiku-5-5",
       sonnet: "anthropic.claude-sonnet-5-5",
       opus: "anthropic.claude-opus-5-5",
-      fable: "anthropic.claude-fable-5-1",
+      fable: "anthropic.claude-fable-5-2",
     });
-    expect(DEFAULT_CATALOG.fallbackModels.map((m) => m.modelId)).toEqual(["anthropic.claude-sonnet-5", "anthropic.claude-opus-5"]);
+    expect(DEFAULT_CATALOG.fallbackModels.map((m) => m.modelId)).toEqual(["anthropic.claude-sonnet-5", "anthropic.claude-opus-5", "anthropic.claude-fable-5-1"]);
     const sonnet = DEFAULT_CATALOG.models.find((m) => m.alias === "sonnet")!;
     expect(DEFAULT_CATALOG.models.find((m) => m.alias === "haiku")!.refusalFallbacks).toEqual(["anthropic.claude-sonnet-5-5"]);
     expect(sonnet.refusalFallbacks).toEqual(["anthropic.claude-sonnet-5"]);
@@ -31,6 +31,7 @@ describe("catálogo", () => {
   });
   it("estima costo con precios del modelo servido, incluido un modelo solo de respaldo", () => {
     const u = { inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+    expect(estimateUsd(DEFAULT_CATALOG, "anthropic.claude-fable-5-2", u)).toBe(8);
     expect(estimateUsd(DEFAULT_CATALOG, "anthropic.claude-fable-5-1", u)).toBe(10);
     expect(estimateUsd(DEFAULT_CATALOG, "anthropic.claude-opus-5-5", u)).toBe(4);
     expect(estimateUsd(DEFAULT_CATALOG, "anthropic.claude-opus-5", u)).toBe(5);

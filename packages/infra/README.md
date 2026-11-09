@@ -15,7 +15,7 @@ Infraestructura AWS (CDK v2, TypeScript) de la interfaz Claude/Bedrock de la cl�
 ## Prerrequisitos (antes de cualquier PHI)
 
 1. **BAA de AWS aceptado en AWS Artifact** en la cuenta de producción (titular: la clínica). Sin BAA no se despliega en producción.
-2. **Acceso a modelos habilitado** en Bedrock (us-east-1) para `anthropic.claude-sonnet-5-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-opus-5-5`, `anthropic.claude-opus-5` y `anthropic.claude-fable-5-1`.
+2. **Acceso a modelos habilitado** en Bedrock (us-east-1) para `anthropic.claude-sonnet-5-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-opus-5-5`, `anthropic.claude-opus-5`, `anthropic.claude-fable-5-2` y `anthropic.claude-fable-5-1`.
 3. **Certificado ACM** en `us-east-1` para el dominio (sirve para CloudFront y para el ALB, ya que todo se despliega en `us-east-1`). Sin `certificateArn` el ALB escucha en HTTP 80: solo para entornos sin PHI (ver «Sin dominio propio» más abajo).
 4. **Dominio** (`domainName`, `appBaseUrl`) y registro DNS apuntando a la distribución de CloudFront tras el despliegue.
 5. Cuenta bootstrapeada (`cdk bootstrap aws://<cuenta>/us-east-1`) y rol OIDC para GitHub Actions (`AWS_DEPLOY_ROLE_ARN`).
@@ -85,7 +85,7 @@ aws cognito-idp admin-add-user-to-group --user-pool-id "$POOL_ID" --username adm
 
 ## Verificaciones pendientes (decisiones de riesgo, no bloquean el synth)
 
-- **Retención de Fable 5.1 en Bedrock**: confirmar por escrito (BAA / documentación del modelo) que no hay retención ni entrenamiento con los prompts; registrarlo en el análisis de riesgos.
+- **Retención de Fable 5.2 en Bedrock**: confirmar por escrito (BAA / documentación del modelo) que no hay retención ni entrenamiento con los prompts; registrarlo en el análisis de riesgos.
 - **PrivateLink para Mantle** (`bedrock-mantle.<region>.api.aws`): el VPC endpoint desplegado es `bedrock-runtime`. Si Mantle no tiene PrivateLink, desplegar con `enableNat=true` (NAT Gateway + egreso 443) y acotar el egreso cuando se conozcan los rangos.
 - **Acciones IAM de Mantle**: el rol de tarea permite `bedrock:InvokeModel*` sobre los foundation-models del catálogo y `inference-profile/us.anthropic.*`. Verificar si Mantle exige ARNs o acciones adicionales.
 - **Core Rule Set en `/api/conversations*`**: implementado como exclusión por scope-down (no `count`) para no registrar fragmentos de texto clínico en los logs de WAF. Revisar con la clínica.

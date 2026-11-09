@@ -3,13 +3,13 @@
 Estado: propuesta para discusión (fase "idea"). Fecha: 2026-09-12.
 Autor: Helixona, con apoyo de un panel de diseño automatizado (5 propuestas independientes, 8 críticas adversariales, síntesis).
 
-Pedido original: interfaz web propia, con usuario y contraseña, para que los empleados de la clínica usen Claude Fable 5.1 (esfuerzo `medium`) a través de Amazon Bedrock y, si Fable no se puede usar, Claude Opus 5; todo bajo HIPAA y protegiendo la información de pacientes (PHI).
+Pedido original: interfaz web propia, con usuario y contraseña, para que los empleados de la clínica usen Claude Fable 5.2 (esfuerzo `medium`) a través de Amazon Bedrock y, si Fable no se puede usar, Claude Opus 5; todo bajo HIPAA y protegiendo la información de pacientes (PHI).
 
 ---
 
 ## 1. Veredicto
 
-**La idea es correcta y es la vía que recomendamos**: Amazon Bedrock + una aplicación web propia y deliberadamente pequeña + Amazon Cognito para la identidad. Es hoy el único camino autoservicio y verificable para usar Fable 5.1 con PHI, con la clínica como dueña de sus datos, su retención y su auditoría.
+**La idea es correcta y es la vía que recomendamos**: Amazon Bedrock + una aplicación web propia y deliberadamente pequeña + Amazon Cognito para la identidad. Es hoy el único camino autoservicio y verificable para usar Fable 5.2 con PHI, con la clínica como dueña de sus datos, su retención y su auditoría.
 
 Cuatro matices que cambian el diseño respecto al pedido literal:
 

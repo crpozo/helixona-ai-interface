@@ -56,7 +56,7 @@ documents only. No real patient information.**
    Nothing in the application needs to change: every API feature the assistant uses (Messages API,
    streaming, adaptive thinking, effort, prompt caching, PDFs sent inline) is on Anthropic's list of
    HIPAA-eligible features. Long PDFs are read with the same Messages API, a few pages per request;
-   the Files API is not used. Claude Fable 5.1 requires 30-day retention, which HIPAA readiness
+   the Files API is not used. Claude Fable 5.2 requires 30-day retention, which HIPAA readiness
    allows; zero data retention is not needed and not required.
 
 3. **Vendor BAA.** If the IT vendor keeps administrator access to the AWS account, the Claude
@@ -164,7 +164,7 @@ HIPAA is mostly about how the organization operates. The clinic needs, at minimu
   after the retention period (chats imported from Claude.ai as a backup are kept until deleted by
   hand).
 - **At Anthropic:** prompts and responses are processed under the BAA and Anthropic's HIPAA
-  readiness safeguards (30-day retention for Claude Fable 5.1). Anthropic does not train on this
+  readiness safeguards (30-day retention for Claude Fable 5.2). Anthropic does not train on this
   data.
 - **Never:** application logs, audit records, CloudWatch metrics, WAF logs (the paths that carry
   free text in the body, `/api/conversations`, `/api/import/` and `/api/projects`, are excluded
@@ -429,7 +429,7 @@ cashed and a tab of the checks never cashed".
 ## Models
 
 Each choice in the model picker always points to the newest model of its line: Claude Haiku 5.5, Claude Sonnet 5.5,
-Claude Opus 5.5 and Claude Fable 5.1. When Anthropic releases a newer one, the catalog changes in one
+Claude Opus 5.5 and Claude Fable 5.2. When Anthropic releases a newer one, the catalog changes in one
 place and existing conversations move to it on their next message. The previous generation (Claude
 Sonnet 5, Claude Opus 5) is used only as a fallback: when the newest model's safety classifier
 declines a clinical question by mistake, or while a new model is not yet enabled for the clinic's

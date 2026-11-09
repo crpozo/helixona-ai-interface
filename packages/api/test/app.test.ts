@@ -92,7 +92,7 @@ describe("API", () => {
     const created = await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie }, payload: { modelAlias: "fable" } });
     expect(created.statusCode).toBe(201);
     const conv = created.json();
-    expect(conv.modelId).toBe("anthropic.claude-fable-5-1");
+    expect(conv.modelId).toBe("anthropic.claude-fable-5-2");
     expect(conv.title).toMatch(/^Conversation /);
 
     const turn = await app.inject({ method: "POST", url: `/api/conversations/${conv.id}/messages`, headers: { ...H, cookie }, payload: { text: "Hola, redacta una carta" } });
@@ -103,7 +103,7 @@ describe("API", () => {
     expect(events.some((e) => e.event === "text_delta")).toBe(true);
     const done = events.at(-1)!;
     expect(done.event).toBe("done");
-    expect(done.data["model"]).toBe("anthropic.claude-fable-5-1");
+    expect(done.data["model"]).toBe("anthropic.claude-fable-5-2");
     expect((done.data["usage"] as { estimatedUsd: number }).estimatedUsd).toBeGreaterThan(0);
 
     const detail = await app.inject({ method: "GET", url: `/api/conversations/${conv.id}`, headers: { cookie } });

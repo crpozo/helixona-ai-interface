@@ -59,7 +59,7 @@ export const CatalogSchema = z.object({
 export type Catalog = z.infer<typeof CatalogSchema>;
 
 /**
- * Model policy: each alias always points to the newest model of its line (Sonnet, Opus, Fable), and a
+ * Model policy: each alias always points to the newest model of its line (Haiku, Sonnet, Opus, Fable), and a
  * conversation follows its alias (see currentModelId), so a new release is one line here. The previous
  * generation stays only as a fallback, for a classifier false positive or while a new model is not
  * yet enabled for the organization.
@@ -80,11 +80,14 @@ export const DEFAULT_CATALOG: Catalog = CatalogSchema.parse({
     // broader than Opus 5's (bio joins cyber), so a medical false positive falls back to Opus 5. Opus 5
     // also covers availability until every organization has access to the new model.
     { alias: "opus", modelId: "anthropic.claude-opus-5-5", label: "Opus 5.5", description: "Recommended balance for everyday work", costFactor: 2, priceInPerM: 4, priceOutPerM: 20, priceCacheReadPerM: 0.2, priceCacheWritePerM: 5, refusalFallbacks: ["anthropic.claude-opus-5"], availabilityFallbacks: ["anthropic.claude-opus-5"] },
-    { alias: "fable", modelId: "anthropic.claude-fable-5-1", label: "Fable 5.1", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 5, priceInPerM: 10, priceOutPerM: 50, priceCacheReadPerM: 0.25, priceCacheWritePerM: 12.5, refusalFallbacks: ["anthropic.claude-opus-5-5"], availabilityFallbacks: ["anthropic.claude-opus-5-5"] },
+    // Claude Fable 5.2: the current Fable, cheaper than 5.1 ($8 / $40). Its history-editing check applies to
+    // every account; the provider already asks for mismatched thinking blocks to be dropped, not refused.
+    { alias: "fable", modelId: "anthropic.claude-fable-5-2", label: "Fable 5.2", description: "Maximum capability for difficult tasks and long documents (slower and more expensive)", costFactor: 4, priceInPerM: 8, priceOutPerM: 40, priceCacheReadPerM: 0.2, priceCacheWritePerM: 10, refusalFallbacks: ["anthropic.claude-opus-5-5"], availabilityFallbacks: ["anthropic.claude-fable-5-1", "anthropic.claude-opus-5-5"] },
   ],
   fallbackModels: [
     { modelId: "anthropic.claude-sonnet-5", label: "Sonnet 5", priceInPerM: 2, priceOutPerM: 10, priceCacheReadPerM: 0.2, priceCacheWritePerM: 2.5 },
     { modelId: "anthropic.claude-opus-5", label: "Opus 5", priceInPerM: 5, priceOutPerM: 25, priceCacheReadPerM: 0.5, priceCacheWritePerM: 6.25 },
+    { modelId: "anthropic.claude-fable-5-1", label: "Fable 5.1", priceInPerM: 10, priceOutPerM: 50, priceCacheReadPerM: 0.25, priceCacheWritePerM: 12.5 },
   ],
 });
 
