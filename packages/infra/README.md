@@ -125,6 +125,6 @@ tarea **no** tiene permisos de Bedrock. Tras el primer despliegue del Foundation
 Con `-c llmMode=bedrock` (o la variable `LLM_MODE` del repositorio en GitHub) se vuelve a Bedrock: sin NAT,
 sin clave y con la política de Bedrock en el rol de la tarea.
 
-## Modelos de OpenAI (opcional)
+## Modelos de OpenAI (vía Amazon Bedrock)
 
-El secreto `helixona-<stage>-openai-api-key` se crea con un marcador (`REPLACE_ME_WITH_OPENAI_API_KEY`). Mientras lo tenga, los modelos de OpenAI no se ofrecen. Para habilitarlos: firmar antes el BAA con OpenAI (ver `docs/HIPAA.md`), pegar la clave en el secreto desde la consola de AWS y reiniciar el servicio (o volver a desplegar). Para deshabilitarlos, restaurar el marcador y reiniciar.
+Con `OPENAI_VIA_BEDROCK=true` (por defecto en el stack) la app ofrece GPT-6 Astra, GPT-6.1 Sol, GPT-6.1 Terra y GPT-6 Luna a través del endpoint compatible con OpenAI de Bedrock, firmando con el rol de la tarea. El rol sólo puede invocar esos modelos. Si un modelo responde "access denied", abrirlo una vez en la consola de Bedrock (Model catalog, Open in playground) con una cuenta administradora. El secreto `helixona-<stage>-openai-api-key` queda con su marcador: sólo se usaría para la API directa de OpenAI, que exige un BAA propio con OpenAI.
