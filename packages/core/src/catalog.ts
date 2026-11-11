@@ -105,10 +105,22 @@ export const OPENAI_MODELS: CatalogModel[] = [
   { alias: "gpt-astra", modelId: "openai.gpt-6-astra", label: "GPT-6 Astra", description: "OpenAI's most capable model for difficult tasks (slower and more expensive)", costFactor: 5, priceInPerM: 10, priceOutPerM: 50, priceCacheReadPerM: 1, priceCacheWritePerM: 10, refusalFallbacks: [], availabilityFallbacks: ["openai.gpt-6.1-sol"], roles: ["staff", "admin"] },
 ];
 
-/** The catalog with OpenAI's models after the Claude ones (the default model does not change). */
-export function withOpenAi(catalog: Catalog): Catalog {
+/**
+ * The catalog with OpenAI's models after the Claude ones (the default model does not change).
+ * `via: "bedrock"`: the models are served by Amazon Bedrock through its US cross-Region profiles,
+ * which cost 10% more than OpenAI's list prices.
+ */
+export function withOpenAi(catalog: Catalog, via: "openai" | "bedrock" = "openai"): Catalog {
   const have = new Set(catalog.models.map((m) => m.alias));
-  return CatalogSchema.parse({ ...catalog, models: [...catalog.models, ...OPENAI_MODELS.filter((m) => !have.has(m.alias))] });
+  const k = via === "bedrock" ? 1.1 : 1;
+  const price = (n: number) => Math.round(n * k * 1e6) / 1e6;
+  const models = OPENAI_MODELS.filter((m) => !have.has(m.alias)).map((m) => ({ ...m, priceInPerM: price(m.priceInPerM), priceOutPerM: price(m.priceOutPerM), priceCacheReadPerM: price(m.priceCacheReadPerM), priceCacheWritePerM: price(m.priceCacheWritePerM) }));
+  return CatalogSchema.parse({ ...catalog, models: [...catalog.models, ...models] });
+}
+
+/** The id Amazon Bedrock takes for an OpenAI model: its US cross-Region inference profile. */
+export function bedrockOpenAiModelId(catalogModelId: string): string {
+  return `us.${catalogModelId}`;
 }
 
 /** A model served by OpenAI (its id carries the `openai.` prefix). */

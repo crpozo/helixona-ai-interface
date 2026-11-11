@@ -9,8 +9,11 @@ import type { LlmProvider, StreamHandle, StreamParams } from "./provider.js";
  * request into OpenAI's Responses API and the answer back, so the router, the tools and the stored
  * history do not know which vendor answered.
  *
- * The API is called over plain HTTPS (`POST /v1/responses`, server-sent events): OpenAI's SDK pulls
- * in dependencies that clash with the AWS SDK's, and this needs one endpoint.
+ * The API is called over plain HTTPS (`POST …/responses`, server-sent events): OpenAI's SDK pulls
+ * in dependencies that clash with the AWS SDK's, and this needs one endpoint. Two ways in:
+ *  - Amazon Bedrock's OpenAI-compatible endpoint (`bedrock-runtime…/openai/v1`), signed with the
+ *    task's AWS credentials: the models run inside AWS, under the clinic's AWS agreement. Preferred.
+ *  - OpenAI's own API with an organization key, which needs the clinic's own agreement with OpenAI.
  *
  * Catalog ids carry the `openai.` prefix (`openai.gpt-6-astra`); the API takes the bare id.
  * Requests are sent with `store: false`: nothing is kept as application state at OpenAI.
@@ -63,21 +66,38 @@ class HttpStatusError extends Error {
   }
 }
 
-/** `POST /v1/responses` with `stream: true`, parsed from server-sent events. */
+/** OpenAI's own endpoint, with the organization's API key. */
 export function httpTransport(apiKey: string, timeoutMs: number, baseUrl = "https://api.openai.com/v1", fetchImpl: typeof fetch = fetch): ResponsesTransport {
+  return sseTransport({ url: `${baseUrl}/responses`, timeoutMs, fetchImpl, headers: async () => ({ authorization: `Bearer ${apiKey}` }) });
+}
+
+export interface SseTransportOptions {
+  /** The Responses endpoint (`…/responses`). */
+  url: string;
+  timeoutMs: number;
+  /** Authentication headers for this exact body (a bearer key, or a request signature). */
+  headers: (url: string, body: string) => Promise<Record<string, string>>;
+  fetchImpl?: typeof fetch;
+}
+
+/** `POST …/responses` with `stream: true`, parsed from server-sent events. */
+export function sseTransport(opts: SseTransportOptions): ResponsesTransport {
+  const fetchImpl = opts.fetchImpl ?? fetch;
   return async function* (body, signal) {
-    const timeout = AbortSignal.timeout(timeoutMs);
-    const res = await fetchImpl(`${baseUrl}/responses`, {
+    const timeout = AbortSignal.timeout(opts.timeoutMs);
+    const payload = JSON.stringify(body);
+    const res = await fetchImpl(opts.url, {
       method: "POST",
-      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", accept: "text/event-stream" },
-      body: JSON.stringify(body),
+      headers: { "content-type": "application/json", accept: "text/event-stream", ...(await opts.headers(opts.url, payload)) },
+      body: payload,
       signal: AbortSignal.any([signal, timeout]),
     });
     if (!res.ok || !res.body) {
       // Only the error code is read: the provider's message may quote the request.
       let code = "";
       try {
-        code = String(((await res.json()) as { error?: { code?: string | null; type?: string } }).error?.code ?? "");
+        const parsed = (await res.json()) as { error?: { code?: string | null; type?: string }; __type?: string };
+        code = String(parsed.error?.code ?? parsed.error?.type ?? parsed.__type ?? "").slice(0, 80);
       } catch {
         /* no JSON body */
       }
@@ -172,7 +192,7 @@ export function toResponsesInput(messages: BetaMessageParam[]): ResponseInputIte
 }
 
 /** The request body for one round. */
-export function buildResponsesBody(params: StreamParams, conversationId?: string): ResponsesBody {
+export function buildResponsesBody(params: StreamParams, conversationId?: string, wireModel: (catalogId: string) => string = (id) => id.slice(OPENAI_PREFIX.length)): ResponsesBody {
   const instructions = params.system.map((b) => b.text).filter(Boolean).join("\n\n");
   const tools = (params.tools ?? []).flatMap((t) => {
     const tool = t as { name?: string; description?: string; input_schema?: Record<string, unknown> };
@@ -181,7 +201,7 @@ export function buildResponsesBody(params: StreamParams, conversationId?: string
     return [{ type: "function" as const, name: tool.name, description: tool.description ?? "", parameters: tool.input_schema, strict: false }];
   });
   return {
-    model: params.model.slice(OPENAI_PREFIX.length),
+    model: wireModel(params.model),
     stream: true,
     store: false,
     ...(instructions ? { instructions } : {}),
@@ -199,7 +219,7 @@ function translateError(e: unknown): unknown {
   if (e instanceof HttpStatusError) {
     // The account is out of credit: every model fails the same way, the people who run it must act.
     if (e.code === "insufficient_quota" || e.code === "billing_hard_limit_reached") return APIError.generate(400, undefined, "billing: the OpenAI account has no credit left or its billing is blocked", new Headers());
-    const about = e.code === "model_not_found" || e.status === 404 ? "model does not exist or is not enabled for this organization" : e.status === 401 ? "invalid API key" : e.status === 403 ? "permission denied" : e.status === 429 ? "rate limit" : e.status >= 500 ? "server error" : "invalid request";
+    const about = /AccessDenied/i.test(e.code) ? "access denied: the model is not enabled for this account or the role lacks permission" : /Throttling/i.test(e.code) ? "rate limit" : e.code === "model_not_found" || e.status === 404 ? "model does not exist or is not enabled for this organization" : e.status === 401 ? "invalid API key" : e.status === 403 ? "permission denied" : e.status === 429 ? "rate limit" : e.status >= 500 ? "server error" : "invalid request";
     return APIError.generate(e.status, undefined, `openai: ${about}${e.code ? ` (${e.code})` : ""}`, new Headers());
   }
   if (e instanceof APIError) return e;
@@ -217,7 +237,10 @@ function failure(code: string | null | undefined, message: string | undefined): 
 }
 
 export interface OpenAiProviderOptions {
-  apiKey: string;
+  /** OpenAI's API key; not needed when a `transport` is given (Amazon Bedrock signs with the task role). */
+  apiKey?: string;
+  /** The model id on the wire for a catalog id. Default: the id without `openai.` (OpenAI's own API). */
+  wireModel?: (catalogId: string) => string;
   timeoutMs?: number;
   logger?: SafeLogger;
   /** For tests: what posts the body and yields the events. */
@@ -227,10 +250,13 @@ export interface OpenAiProviderOptions {
 export class OpenAiProvider implements LlmProvider {
   private readonly transport: ResponsesTransport;
   private readonly log: SafeLogger;
+  private readonly wireModel: ((catalogId: string) => string) | undefined;
 
   constructor(opts: OpenAiProviderOptions) {
     this.log = opts.logger ?? noopLogger;
-    this.transport = opts.transport ?? httpTransport(opts.apiKey, opts.timeoutMs ?? 600_000);
+    if (!opts.transport && !opts.apiKey) throw new Error("openai: an API key or a transport is required");
+    this.transport = opts.transport ?? httpTransport(opts.apiKey!, opts.timeoutMs ?? 600_000);
+    this.wireModel = opts.wireModel;
   }
 
   stream(params: StreamParams, opts: { signal: AbortSignal; conversationId: string }): StreamHandle {
@@ -239,7 +265,7 @@ export class OpenAiProvider implements LlmProvider {
     if (opts.signal.aborted) controller.abort();
     else opts.signal.addEventListener("abort", onAbort, { once: true });
 
-    const body = buildResponsesBody(params, opts.conversationId);
+    const body = buildResponsesBody(params, opts.conversationId, this.wireModel);
     const transport = this.transport;
     const log = this.log;
     let resolveFinal!: (m: BetaMessage) => void;

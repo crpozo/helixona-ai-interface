@@ -34,7 +34,9 @@ const Env = z.object({
   /** Administrators, by email (comma-separated), who see the billing view: usage by month and the credits left. */
   BILLING_VIEWER_EMAILS: z.string().default(""),
   ANTHROPIC_AWS_WORKSPACE_ID: z.string().optional(),
-  /** OpenAI API key: when set (not the placeholder), OpenAI's models are offered next to the Claude ones. Only after the clinic's BAA with OpenAI is in place. */
+  /** "true": OpenAI's models are offered next to the Claude ones, served by Amazon Bedrock with the task role (needs AWS_REGION; covered by the AWS agreement). */
+  OPENAI_VIA_BEDROCK: z.enum(["true", "false"]).default("false"),
+  /** OpenAI API key, for OpenAI's own API instead of Bedrock: only after the clinic's BAA with OpenAI is in place. Ignored when OPENAI_VIA_BEDROCK is true. */
   OPENAI_API_KEY: z.string().optional(),
   MODEL_CATALOG_JSON: z.string().optional(),
   /** JSON `{ default: [aliases for staff], users: { "email": [aliases] } }`; administrators get every model unless named. */

@@ -991,6 +991,41 @@ describe("OpenAI models", () => {
     expect(await aliases({})).toEqual(["haiku", "sonnet", "opus", "fable"]);
     expect(await aliases({ OPENAI_API_KEY: "REPLACE_ME_WITH_OPENAI_API_KEY" })).toEqual(["haiku", "sonnet", "opus", "fable"]);
     expect(await aliases({ OPENAI_API_KEY: "sk-test-key" })).toEqual(["haiku", "sonnet", "opus", "fable", "gpt-luna", "gpt-terra", "gpt-sol", "gpt-astra"]);
+    // Served by Amazon Bedrock: no key needed, a Region is, and the prices are Bedrock's (10% over OpenAI's list).
+    expect(await aliases({ OPENAI_VIA_BEDROCK: "true" })).toEqual(["haiku", "sonnet", "opus", "fable"]);
+    const viaBedrock = (await createDeps({ ...ENV, OPENAI_VIA_BEDROCK: "true", AWS_REGION: "us-east-1" })).catalog;
+    expect(viaBedrock.models.map((m) => m.alias)).toEqual(["haiku", "sonnet", "opus", "fable", "gpt-luna", "gpt-terra", "gpt-sol", "gpt-astra"]);
+    expect(viaBedrock.models.find((m) => m.alias === "gpt-astra")).toMatchObject({ modelId: "openai.gpt-6-astra", priceInPerM: 11, priceOutPerM: 55, priceCacheReadPerM: 1.1 });
+  });
+
+  it("on Bedrock the request is signed with the AWS credentials and names the US inference profile", async () => {
+    const { bedrockOpenAiTransport } = await import("../src/bedrock-openai.js");
+    const { OpenAiProvider, bedrockOpenAiModelId } = await import("@helixona/core");
+    const saved = { id: process.env.AWS_ACCESS_KEY_ID, secret: process.env.AWS_SECRET_ACCESS_KEY, token: process.env.AWS_SESSION_TOKEN };
+    process.env.AWS_ACCESS_KEY_ID = "AKIATESTTESTTESTTEST";
+    process.env.AWS_SECRET_ACCESS_KEY = "test-secret-not-real";
+    delete process.env.AWS_SESSION_TOKEN;
+    try {
+      let seen: { url: string; headers: Record<string, string>; body: Record<string, unknown> } | null = null;
+      const fetchImpl = (async (url: string, init: RequestInit) => {
+        seen = { url, headers: init.headers as Record<string, string>, body: JSON.parse(String(init.body)) };
+        const sse = 'data: {"type":"response.output_text.delta","delta":"Hi"}\n\ndata: {"type":"response.completed","response":{"id":"r","usage":{"input_tokens":3,"output_tokens":1}}}\n\n';
+        return new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
+      }) as never;
+      const provider = new OpenAiProvider({ transport: bedrockOpenAiTransport("us-east-1", 5_000, fetchImpl), wireModel: bedrockOpenAiModelId });
+      const stream = provider.stream({ model: "openai.gpt-6.1-sol", maxTokens: 1000, effort: "medium", system: [], messages: [{ role: "user", content: "hello" }] }, { signal: new AbortController().signal, conversationId: "c" });
+      for await (const _ of stream) void _;
+      expect((await stream.finalMessage()).content).toEqual([{ type: "text", text: "Hi", citations: null }]);
+      expect(seen!.url).toBe("https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/responses");
+      expect(seen!.body).toMatchObject({ model: "us.openai.gpt-6.1-sol", store: false, stream: true });
+      expect(seen!.headers["authorization"]).toMatch(/^AWS4-HMAC-SHA256 Credential=AKIATESTTESTTESTTEST\/\d{8}\/us-east-1\/bedrock\/aws4_request, SignedHeaders=.*host.*x-amz-date/);
+      expect(seen!.headers["x-amz-content-sha256"]).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      for (const [k, v] of [["AWS_ACCESS_KEY_ID", saved.id], ["AWS_SECRET_ACCESS_KEY", saved.secret], ["AWS_SESSION_TOKEN", saved.token]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
   });
 
   it("a conversation runs on one, and the policy's \"*\" gives a person every model while staff keep their default", async () => {

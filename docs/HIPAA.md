@@ -299,30 +299,36 @@ and no audit event is written: the copy is equivalent to selecting the text on s
 file may contain PHI, so the policies document asks that it be pasted into the record and then
 deleted, and never kept on the desktop, in email or in a personal drive.
 
-## OpenAI models (optional, off until an agreement is in place)
+## OpenAI models (served by Amazon Bedrock)
 
-The assistant can offer OpenAI's current models (GPT-6 Astra, GPT-6.1 Sol, GPT-6.1 Terra, GPT-6 Luna)
-in the same model list as the Claude ones. They are **off by default**: they appear only when the
-secret `helixona-<stage>-openai-api-key` in AWS Secrets Manager holds a real key instead of its
-placeholder (the service reads it at start, so a new deployment or a service restart picks it up).
+The assistant offers OpenAI's current models (GPT-6 Astra, GPT-6.1 Sol, GPT-6.1 Terra, GPT-6 Luna) in
+the same model list as the Claude ones. They are served by **Amazon Bedrock**, inside the clinic's AWS
+account, not by OpenAI's own API:
 
-**Before putting a key there**, the clinic must have with OpenAI what it has with Anthropic:
+- The service calls Bedrock's OpenAI-compatible endpoint in us-east-1
+  (`bedrock-runtime.us-east-1.amazonaws.com/openai/v1/responses`) with the models' US cross-Region
+  inference profiles (`us.openai.gpt-6…`), so requests are processed in US Regions only.
+- Requests are signed with the service's own IAM role (no API key exists). The role may only invoke
+  those models.
+- Amazon Bedrock is on the AWS HIPAA Eligible Services list and is covered by the clinic's AWS Business
+  Associate Addendum. AWS states that model providers have no access to customer prompts and
+  completions on Bedrock. No separate agreement with OpenAI is needed for this path.
+- Every request is sent with `store: false`: Bedrock retains nothing from the request or the response.
+- OpenAI's hosted tools (web search, file search) are not used. Failures are logged by code only.
 
-1. An executed OpenAI Business Associate and Healthcare Addendum, and the organization provisioned by
-   OpenAI for PHI (their data-controls guide describes the retention configurations that make the
-   BAA-eligible endpoints usable for PHI). Without it, sending patient information to OpenAI is a
-   HIPAA violation, whatever the application does.
-2. The agreement recorded in the risk analysis (Appendix B) with its date.
-3. A key created in a project of that organization, pasted into Secrets Manager by hand. It never
-   passes through chat, the repository or CI.
+Conversations, files, audit and retention work exactly as with Claude. Who may use these models
+follows the per-person model policy (Administration, Users, Models). Their cost is billed by AWS, so
+it is not part of the Billing tab (which mirrors the Anthropic console); the Usage tab's estimates
+include it, at Bedrock's prices.
 
-What the application does on its side: requests go to OpenAI's Responses API over TLS with
-`store: false` (no application state kept at OpenAI), only the model call leaves the clinic's account,
-and conversations, files, audit and retention work exactly as with Claude. OpenAI's web search and
-other hosted tools are not used. Failures are logged by code only, never with OpenAI's message text.
-Who may use these models follows the same per-person model policy (Administration, Users, Models).
-OpenAI's spend is billed by OpenAI and is not part of the Billing tab, which mirrors the Anthropic
-console; the Usage tab's estimates do include it.
+First use: Bedrock enables a third-party model for the account the first time an authorized
+administrator uses it. If a model answers "access denied" in the assistant, open it once in the
+Bedrock console (Model catalog, the model, "Open in playground") with an administrator account.
+
+An alternative path exists and is off: OpenAI's own API with an organization key in the secret
+`helixona-<stage>-openai-api-key` (used only when `OPENAI_VIA_BEDROCK` is not `true`). That path sends
+data to OpenAI and requires an executed OpenAI Business Associate Agreement first; leave the secret
+on its placeholder.
 
 ## Packages
 

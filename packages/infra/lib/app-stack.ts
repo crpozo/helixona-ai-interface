@@ -205,6 +205,8 @@ export class AppStack extends cdk.Stack {
         // The version the server reports (/api/health): a page left open notices a deploy and asks to reload.
         APP_VERSION: cfg.imageTag,
         BILLING_VIEWER_EMAILS: cfg.billingViewerEmails,
+        // OpenAI's models, served by Amazon Bedrock with the task role (covered by the AWS agreement).
+        OPENAI_VIA_BEDROCK: 'true',
         // Who may use which models (administrators can adjust a person from the Administration page).
         MODEL_ACCESS: cfg.modelAccess,
         AWS_REGION: this.region,
@@ -503,6 +505,20 @@ export class AppStack extends cdk.Stack {
         }),
       );
     }
+
+    // OpenAI's models on Amazon Bedrock (its OpenAI-compatible endpoint, signed with this role): the
+    // `us.` cross-Region profiles and the foundation models behind them in the US Regions. Nothing else
+    // on Bedrock is granted.
+    this.taskRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'BedrockInvokeOpenAiModels',
+        actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+        resources: [
+          `arn:${partition}:bedrock:us-*::foundation-model/openai.gpt-6*`,
+          `arn:${partition}:bedrock:${region}:${account}:inference-profile/us.openai.gpt-6*`,
+        ],
+      }),
+    );
 
     const rwActions = [
       'dynamodb:GetItem',

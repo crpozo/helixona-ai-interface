@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { CircuitBreaker, createSafeLogger, FakeProvider, ModelRouter, OpenAiProvider, parseCatalog, RoutedProvider, SdkProvider, withOpenAi } from "@helixona/core";
+import { bedrockOpenAiModelId, CircuitBreaker, createSafeLogger, FakeProvider, ModelRouter, OpenAiProvider, parseCatalog, RoutedProvider, SdkProvider, withOpenAi } from "@helixona/core";
+import { bedrockOpenAiTransport } from "./bedrock-openai.js";
 import { buildApp } from "./app.js";
 import { drainTurns } from "./routes/chat.js";
 import { loadConfig } from "./config.js";
@@ -18,9 +19,11 @@ import type { Deps } from "./deps.js";
 export async function createDeps(env: NodeJS.ProcessEnv = process.env): Promise<Deps> {
   const config = loadConfig(env);
   const log = createSafeLogger({ level: config.LOG_LEVEL, strict: config.NODE_ENV !== "production" });
-  // OpenAI's models join the catalog only when the server holds an OpenAI key (Secrets Manager).
-  const openAiKey = isConfiguredKey(config.OPENAI_API_KEY) ? config.OPENAI_API_KEY : null;
-  const catalog = openAiKey ? withOpenAi(parseCatalog(config.MODEL_CATALOG_JSON)) : parseCatalog(config.MODEL_CATALOG_JSON);
+  // OpenAI's models join the catalog when they are served by Amazon Bedrock (the task role, under the
+  // AWS agreement) or, failing that, when the server holds an OpenAI key of its own.
+  const openAiBedrock = config.OPENAI_VIA_BEDROCK === "true" && !!config.AWS_REGION;
+  const openAiKey = !openAiBedrock && isConfiguredKey(config.OPENAI_API_KEY) ? config.OPENAI_API_KEY : null;
+  const catalog = openAiBedrock ? withOpenAi(parseCatalog(config.MODEL_CATALOG_JSON), "bedrock") : openAiKey ? withOpenAi(parseCatalog(config.MODEL_CATALOG_JSON)) : parseCatalog(config.MODEL_CATALOG_JSON);
   if (config.EFFORT) catalog.effort = config.EFFORT;
   const repos = config.STORE_MODE === "memory"
     ? memoryRepos()
@@ -34,7 +37,9 @@ export async function createDeps(env: NodeJS.ProcessEnv = process.env): Promise<
     ? new FakeProvider({ refusalFallbacks: Object.fromEntries(catalog.models.map((m) => [m.modelId, m.refusalFallbacks])), delayMs: config.FAKE_DELAY_MS })
     : new RoutedProvider(
         new SdkProvider({ mode: config.LLM_MODE, catalog, awsRegion: config.AWS_REGION, apiKey: config.ANTHROPIC_API_KEY, workspaceId: config.ANTHROPIC_AWS_WORKSPACE_ID, timeoutMs: config.LLM_TIMEOUT_MS, logger: log }),
-        openAiKey ? new OpenAiProvider({ apiKey: openAiKey, timeoutMs: config.LLM_TIMEOUT_MS, logger: log }) : null,
+        openAiBedrock
+          ? new OpenAiProvider({ transport: bedrockOpenAiTransport(config.AWS_REGION!, config.LLM_TIMEOUT_MS), wireModel: bedrockOpenAiModelId, logger: log })
+          : openAiKey ? new OpenAiProvider({ apiKey: openAiKey, timeoutMs: config.LLM_TIMEOUT_MS, logger: log }) : null,
       );
   const router = new ModelRouter({ catalog, provider, breaker: new CircuitBreaker(), logger: log, maxTokens: config.MAX_TOKENS, thinkingDisplay: config.THINKING_DISPLAY, firstEventTimeoutMs: config.FIRST_EVENT_TIMEOUT_MS, contextLimitTokens: config.CONTEXT_LIMIT_TOKENS, adminContact: config.ADMIN_CONTACT });
   const systemPrompt = loadSystemPrompt(config.SYSTEM_PROMPT_FILE, new URL("..", import.meta.url).pathname);

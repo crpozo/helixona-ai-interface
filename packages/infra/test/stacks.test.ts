@@ -168,6 +168,13 @@ describe('AppStack', () => {
         }),
       ],
     });
+    // OpenAI's models come from Amazon Bedrock with the task role: only those models, only invoke.
+    expect(JSON.stringify(appT.toJSON())).toContain('"Name":"OPENAI_VIA_BEDROCK","Value":"true"');
+    appT.hasResourceProperties('AWS::IAM::Policy', {
+      PolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([Match.objectLike({ Sid: 'BedrockInvokeOpenAiModels', Action: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'], Effect: 'Allow' })]),
+      }),
+    });
     // The model policy: the people with the larger models by name, everyone else on the economical ones.
     const policy = JSON.parse((JSON.stringify(appT.toJSON()).match(/"Name":"MODEL_ACCESS","Value":"((?:[^"\\]|\\.)*)"/) ?? [])[1]!.replace(/\\"/g, '"'));
     expect(policy).toEqual({ default: ['haiku', 'sonnet'], users: { 'tom@helixona.com': ['*'], 'cassandra@helixona.com': ['*'], 'vignesh@helixona.com': ['haiku', 'sonnet', 'opus'] } });
