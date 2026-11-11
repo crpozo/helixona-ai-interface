@@ -74,8 +74,13 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
+      # The browser itself is required. Its system packages (fonts, libraries) come from Ubuntu's
+      # mirrors, which the runner image already largely carries: they are attempted with a time limit
+      # and a mirror outage does not fail the deployment (the end-to-end tests still decide).
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: |
+          npx playwright install chromium
+          timeout 180 npx playwright install-deps chromium || echo "::warning::System packages for Chromium could not be installed (Ubuntu mirror unreachable); using what the runner image has."
 
       - name: End-to-end tests
         run: npm run e2e
