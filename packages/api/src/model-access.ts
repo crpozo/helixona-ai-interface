@@ -6,7 +6,8 @@ import type { Deps } from "./deps.js";
  * administrator can override it per person from the Administration page; overrides live in the
  * settings table under `model-access`, keyed by lower-case email (no PHI). Resolution, per person:
  * administrator override → policy entry for the email → every model for administrators → the policy
- * default. Whatever the result, a model the person's role does not have is never offered.
+ * default. In the policy, `"*"` stands for every model. Whatever the result, a model the person's role
+ * does not have is never offered.
  */
 export interface ModelAccessPolicy {
   /** Aliases staff get unless named below; null = every model their role has (no policy configured). */
@@ -44,13 +45,14 @@ export interface ResolvedAccess { aliases: string[]; source: ModelAccessSource }
 /** The aliases a person may use, before the role filter. */
 export function resolveAccess(policy: ModelAccessPolicy, overrides: ModelAccessOverrides | null, email: string, roles: readonly Role[], catalog: Catalog): ResolvedAccess {
   const key = email.trim().toLowerCase();
+  const all = catalog.models.map((m) => m.alias);
   const override = overrides?.users[key];
   if (override) return { aliases: override, source: "override" };
+  // "*" in the policy: every model of the catalog, including ones added later.
   const named = policy.users[key];
-  if (named) return { aliases: named, source: "policy" };
-  const all = catalog.models.map((m) => m.alias);
+  if (named) return { aliases: named.includes("*") ? all : named, source: "policy" };
   if (roles.includes("admin")) return { aliases: all, source: "admin" };
-  return { aliases: policy.default ?? all, source: "default" };
+  return { aliases: !policy.default || policy.default.includes("*") ? all : policy.default, source: "default" };
 }
 
 export async function loadOverrides(deps: Deps): Promise<ModelAccessOverrides | null> {

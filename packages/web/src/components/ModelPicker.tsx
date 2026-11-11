@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, Fragment } from "react";
 import { createPortal } from "react-dom";
 import type { CatalogModel } from "../lib/types";
 import { Icon } from "./Icon";
@@ -17,6 +17,11 @@ interface Props {
  * The model picker, like Claude's: a quiet button with the model's name, and a list with each model's
  * name and a short line on what it is for (which also says whether it is cheap or expensive).
  */
+/** Who serves a model, from its id: shown as a heading when the list mixes vendors. */
+function vendorOf(m: { modelId: string }): string {
+  return m.modelId.startsWith("openai.") ? "OpenAI" : "Claude";
+}
+
 export function ModelPicker({ id, label, models, value, onChange, disabled, title }: Props) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; up: boolean } | null>(null);
@@ -56,6 +61,7 @@ export function ModelPicker({ id, label, models, value, onChange, disabled, titl
     };
   }, [open]);
 
+  const vendors = new Set(models.map(vendorOf)).size;
   return (
     <>
       <button ref={btn} id={id} type="button" className={`model-switch${open ? " open" : ""}`} aria-label={`${label}: ${current?.label ?? ""}`} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} title={title} onClick={() => setOpen((v) => !v)}>
@@ -66,9 +72,15 @@ export function ModelPicker({ id, label, models, value, onChange, disabled, titl
         pos &&
         createPortal(
           <div ref={menu} className="row-menu model-menu" role="listbox" aria-label={label} style={{ top: pos.top, left: pos.left, minWidth: 320 }}>
-            {models.map((m) => (
+            {models.map((m, i) => (
+              <Fragment key={m.alias}>
+              {/* A heading where the vendor changes, when the list holds more than one. */}
+              {vendors > 1 && (i === 0 || vendorOf(models[i - 1]!) !== vendorOf(m)) && (
+                <div className="model-group" role="presentation">
+                  {vendorOf(m)}
+                </div>
+              )}
               <button
-                key={m.alias}
                 type="button"
                 role="option"
                 aria-selected={m.alias === value}
@@ -84,6 +96,7 @@ export function ModelPicker({ id, label, models, value, onChange, disabled, titl
                 </span>
                 {m.alias === value && <span className="model-option-check" aria-hidden="true">✓</span>}
               </button>
+              </Fragment>
             ))}
           </div>,
           document.body,

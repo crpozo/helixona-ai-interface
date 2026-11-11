@@ -7,6 +7,7 @@ export * from "./types.js";
 export * from "./llm/provider.js";
 export * from "./llm/bedrock-provider.js";
 export * from "./llm/sdk-provider.js";
+export * from "./llm/openai-provider.js";
 export * from "./llm/fake-provider.js";
 export * from "./llm/router.js";
 export * from "./training.js";

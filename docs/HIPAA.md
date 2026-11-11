@@ -299,6 +299,31 @@ and no audit event is written: the copy is equivalent to selecting the text on s
 file may contain PHI, so the policies document asks that it be pasted into the record and then
 deleted, and never kept on the desktop, in email or in a personal drive.
 
+## OpenAI models (optional, off until an agreement is in place)
+
+The assistant can offer OpenAI's current models (GPT-6 Astra, GPT-6.1 Sol, GPT-6.1 Terra, GPT-6 Luna)
+in the same model list as the Claude ones. They are **off by default**: they appear only when the
+secret `helixona-<stage>-openai-api-key` in AWS Secrets Manager holds a real key instead of its
+placeholder (the service reads it at start, so a new deployment or a service restart picks it up).
+
+**Before putting a key there**, the clinic must have with OpenAI what it has with Anthropic:
+
+1. An executed OpenAI Business Associate and Healthcare Addendum, and the organization provisioned by
+   OpenAI for PHI (their data-controls guide describes the retention configurations that make the
+   BAA-eligible endpoints usable for PHI). Without it, sending patient information to OpenAI is a
+   HIPAA violation, whatever the application does.
+2. The agreement recorded in the risk analysis (Appendix B) with its date.
+3. A key created in a project of that organization, pasted into Secrets Manager by hand. It never
+   passes through chat, the repository or CI.
+
+What the application does on its side: requests go to OpenAI's Responses API over TLS with
+`store: false` (no application state kept at OpenAI), only the model call leaves the clinic's account,
+and conversations, files, audit and retention work exactly as with Claude. OpenAI's web search and
+other hosted tools are not used. Failures are logged by code only, never with OpenAI's message text.
+Who may use these models follows the same per-person model policy (Administration, Users, Models).
+OpenAI's spend is billed by OpenAI and is not part of the Billing tab, which mirrors the Anthropic
+console; the Usage tab's estimates do include it.
+
 ## Packages
 
 On request ("summarize these and give me a package with the originals"), the assistant builds a

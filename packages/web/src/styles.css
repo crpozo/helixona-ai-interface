@@ -3982,3 +3982,16 @@ td {
 .table-scroll.sticky-actions .table-scroll-body.more-right::after {
   display: none; /* the pinned column already marks the edge */
 }
+
+/* Model picker: a small heading where the vendor changes (Claude, OpenAI). */
+.model-group {
+  padding: 0.45rem 0.65rem 0.2rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.model-group:not(:first-child) {
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--border);
+}

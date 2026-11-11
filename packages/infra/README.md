@@ -124,3 +124,7 @@ tarea **no** tiene permisos de Bedrock. Tras el primer despliegue del Foundation
 
 Con `-c llmMode=bedrock` (o la variable `LLM_MODE` del repositorio en GitHub) se vuelve a Bedrock: sin NAT,
 sin clave y con la política de Bedrock en el rol de la tarea.
+
+## Modelos de OpenAI (opcional)
+
+El secreto `helixona-<stage>-openai-api-key` se crea con un marcador (`REPLACE_ME_WITH_OPENAI_API_KEY`). Mientras lo tenga, los modelos de OpenAI no se ofrecen. Para habilitarlos: firmar antes el BAA con OpenAI (ver `docs/HIPAA.md`), pegar la clave en el secreto desde la consola de AWS y reiniciar el servicio (o volver a desplegar). Para deshabilitarlos, restaurar el marcador y reiniciar.

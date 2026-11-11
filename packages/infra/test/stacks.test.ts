@@ -32,6 +32,7 @@ beforeAll(() => {
     cognitoClientSecret: f.cognitoClientSecret,
     anthropicApiKeySecret: f.anthropicApiKeySecret,
     anthropicAdminApiKeySecret: f.anthropicAdminApiKeySecret,
+    openAiApiKeySecret: f.openAiApiKeySecret,
     apiRepository: f.apiRepository,
     userPool: a.userPool,
     userPoolClient: a.userPoolClient,
@@ -163,13 +164,13 @@ describe('AppStack', () => {
             { Name: 'MAX_ATTACHMENTS_PER_MESSAGE', Value: '20' },
             { Name: 'READER_MODEL_ALIAS', Value: 'sonnet' },
           ]),
-          Secrets: Match.arrayWith([Match.objectLike({ Name: 'SESSION_SECRET' }), Match.objectLike({ Name: 'COGNITO_CLIENT_SECRET' }), Match.objectLike({ Name: 'ANTHROPIC_API_KEY' }), Match.objectLike({ Name: 'ANTHROPIC_ADMIN_API_KEY' })]),
+          Secrets: Match.arrayWith([Match.objectLike({ Name: 'SESSION_SECRET' }), Match.objectLike({ Name: 'COGNITO_CLIENT_SECRET' }), Match.objectLike({ Name: 'ANTHROPIC_API_KEY' }), Match.objectLike({ Name: 'ANTHROPIC_ADMIN_API_KEY' }), Match.objectLike({ Name: 'OPENAI_API_KEY' })]),
         }),
       ],
     });
     // The model policy: the people with the larger models by name, everyone else on the economical ones.
     const policy = JSON.parse((JSON.stringify(appT.toJSON()).match(/"Name":"MODEL_ACCESS","Value":"((?:[^"\\]|\\.)*)"/) ?? [])[1]!.replace(/\\"/g, '"'));
-    expect(policy).toEqual({ default: ['haiku', 'sonnet'], users: { 'tom@helixona.com': ['haiku', 'sonnet', 'opus', 'fable'], 'cassandra@helixona.com': ['haiku', 'sonnet', 'opus', 'fable'], 'vignesh@helixona.com': ['haiku', 'sonnet', 'opus'] } });
+    expect(policy).toEqual({ default: ['haiku', 'sonnet'], users: { 'tom@helixona.com': ['*'], 'cassandra@helixona.com': ['*'], 'vignesh@helixona.com': ['haiku', 'sonnet', 'opus'] } });
   });
 
   it('la política del rol de tarea no permite Update/Delete sobre la tabla audit', () => {
@@ -265,6 +266,7 @@ describe('ObservabilityStack (CloudTrail)', () => {
       cognitoClientSecret: f.cognitoClientSecret,
       anthropicApiKeySecret: f.anthropicApiKeySecret,
     anthropicAdminApiKeySecret: f.anthropicAdminApiKeySecret,
+    openAiApiKeySecret: f.openAiApiKeySecret,
       apiRepository: f.apiRepository,
       userPool: a.userPool,
       userPoolClient: a.userPoolClient,
@@ -321,6 +323,7 @@ describe('Custom domain (certificateArn)', () => {
       cognitoClientSecret: f.cognitoClientSecret,
       anthropicApiKeySecret: f.anthropicApiKeySecret,
     anthropicAdminApiKeySecret: f.anthropicAdminApiKeySecret,
+    openAiApiKeySecret: f.openAiApiKeySecret,
       apiRepository: f.apiRepository,
       userPool: a.userPool,
       userPoolClient: a.userPoolClient,

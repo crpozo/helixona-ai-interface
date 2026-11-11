@@ -92,6 +92,31 @@ export const DEFAULT_CATALOG: Catalog = CatalogSchema.parse({
 });
 
 /**
+ * OpenAI's current models, offered next to the Claude ones only when the server has an OpenAI API key
+ * (see `withOpenAi`). Ids carry the `openai.` prefix; prices are OpenAI's standard rates per million
+ * tokens for prompts up to 272K tokens (longer prompts cost more; the estimate here uses these rates).
+ * OpenAI does not charge extra to write the prompt cache. A busy model falls back to the next one
+ * down within OpenAI, never to another vendor.
+ */
+export const OPENAI_MODELS: CatalogModel[] = [
+  { alias: "gpt-luna", modelId: "openai.gpt-6-luna", label: "GPT-6 Luna", description: "OpenAI's fastest and cheapest: quick questions and simple edits", costFactor: 0.05, priceInPerM: 0.1, priceOutPerM: 0.5, priceCacheReadPerM: 0.01, priceCacheWritePerM: 0.1, refusalFallbacks: [], availabilityFallbacks: [], roles: ["staff", "admin"] },
+  { alias: "gpt-terra", modelId: "openai.gpt-6.1-terra", label: "GPT-6.1 Terra", description: "OpenAI's efficient model: images, screenshots and everyday drafts", costFactor: 0.5, priceInPerM: 1, priceOutPerM: 5, priceCacheReadPerM: 0.05, priceCacheWritePerM: 1, refusalFallbacks: [], availabilityFallbacks: ["openai.gpt-6-luna"], roles: ["staff", "admin"] },
+  { alias: "gpt-sol", modelId: "openai.gpt-6.1-sol", label: "GPT-6.1 Sol", description: "OpenAI's balanced model for everyday work", costFactor: 1, priceInPerM: 2, priceOutPerM: 10, priceCacheReadPerM: 0.1, priceCacheWritePerM: 2, refusalFallbacks: [], availabilityFallbacks: ["openai.gpt-6.1-terra"], roles: ["staff", "admin"] },
+  { alias: "gpt-astra", modelId: "openai.gpt-6-astra", label: "GPT-6 Astra", description: "OpenAI's most capable model for difficult tasks (slower and more expensive)", costFactor: 5, priceInPerM: 10, priceOutPerM: 50, priceCacheReadPerM: 1, priceCacheWritePerM: 10, refusalFallbacks: [], availabilityFallbacks: ["openai.gpt-6.1-sol"], roles: ["staff", "admin"] },
+];
+
+/** The catalog with OpenAI's models after the Claude ones (the default model does not change). */
+export function withOpenAi(catalog: Catalog): Catalog {
+  const have = new Set(catalog.models.map((m) => m.alias));
+  return CatalogSchema.parse({ ...catalog, models: [...catalog.models, ...OPENAI_MODELS.filter((m) => !have.has(m.alias))] });
+}
+
+/** A model served by OpenAI (its id carries the `openai.` prefix). */
+export function isOpenAiModelId(modelId: string): boolean {
+  return modelId.startsWith("openai.");
+}
+
+/**
  * Maps a model id as reported by a provider back to the catalog id. The catalog uses Bedrock-style
  * ids (`anthropic.claude-sonnet-5-5`); the Anthropic API reports `claude-sonnet-5-5` and Bedrock may
  * report a region-prefixed inference profile (`us.anthropic.…`). Unknown ids are returned as-is.

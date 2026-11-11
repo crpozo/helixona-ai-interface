@@ -982,3 +982,33 @@ describe("Packages", () => {
     await app.close();
   });
 });
+
+describe("OpenAI models", () => {
+  const ENV = { NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", WEB_DIST: "/nonexistent" };
+  it("are offered only when the server holds an OpenAI key; the placeholder does not count", async () => {
+    const { createDeps } = await import("../src/server.js");
+    const aliases = async (extra: Record<string, string>) => (await createDeps({ ...ENV, ...extra })).catalog.models.map((m) => m.alias);
+    expect(await aliases({})).toEqual(["haiku", "sonnet", "opus", "fable"]);
+    expect(await aliases({ OPENAI_API_KEY: "REPLACE_ME_WITH_OPENAI_API_KEY" })).toEqual(["haiku", "sonnet", "opus", "fable"]);
+    expect(await aliases({ OPENAI_API_KEY: "sk-test-key" })).toEqual(["haiku", "sonnet", "opus", "fable", "gpt-luna", "gpt-terra", "gpt-sol", "gpt-astra"]);
+  });
+
+  it("a conversation runs on one, and the policy's \"*\" gives a person every model while staff keep their default", async () => {
+    const { createDeps } = await import("../src/server.js");
+    const deps = await createDeps({ ...ENV, TRAINING_REQUIRED: "false", AUTO_TITLE: "false", OPENAI_API_KEY: "sk-test-key", MODEL_ACCESS: JSON.stringify({ default: ["haiku", "sonnet"], users: { "tom@dev.local": ["*"] } }) });
+    const app = await buildApp(deps);
+    const avail = async (cookie: string) => (await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().catalog.models.filter((m: { available: boolean }) => m.available).map((m: { alias: string }) => m.alias);
+    const ana = await login(app, "ana");
+    expect(await avail(ana.cookie)).toEqual(["haiku", "sonnet"]);
+    expect((await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: ana.cookie }, payload: { modelAlias: "gpt-sol" } })).statusCode).toBe(400);
+    const tom = await login(app, "tom");
+    expect(await avail(tom.cookie)).toEqual(["haiku", "sonnet", "opus", "fable", "gpt-luna", "gpt-terra", "gpt-sol", "gpt-astra"]);
+    const conv = (await app.inject({ method: "POST", url: "/api/conversations", headers: { ...H, cookie: tom.cookie }, payload: { modelAlias: "gpt-sol" } })).json();
+    expect(conv.modelId).toBe("openai.gpt-6.1-sol");
+    const turn = await app.inject({ method: "POST", url: `/api/conversations/${conv.id}/messages`, headers: { ...H, cookie: tom.cookie }, payload: { text: "hello" } });
+    expect(turn.statusCode, turn.body.slice(0, 300)).toBe(200);
+    const done = parseSse(turn.body).find((e) => e.event === "done");
+    expect(done?.data["model"], turn.body.slice(0, 400)).toBe("openai.gpt-6.1-sol");
+    await app.close();
+  });
+});

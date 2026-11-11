@@ -105,8 +105,9 @@ export function loadConfig(app: cdk.App): DeployConfig {
     modelAccess: str(app, 'modelAccess', JSON.stringify({
       default: ['haiku', 'sonnet'],
       users: {
-        'tom@helixona.com': ['haiku', 'sonnet', 'opus', 'fable'],
-        'cassandra@helixona.com': ['haiku', 'sonnet', 'opus', 'fable'],
+        // Every model, including ones added later (OpenAI's, once its key is in Secrets Manager).
+        'tom@helixona.com': ['*'],
+        'cassandra@helixona.com': ['*'],
         'vignesh@helixona.com': ['haiku', 'sonnet', 'opus'],
       },
     })),

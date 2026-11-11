@@ -12,7 +12,7 @@ export const ALLOWED_LOG_KEYS = new Set([
   "inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "estimatedUsd", "latencyMs",
   "status", "errorClass", "errorCode", "route", "method", "durationMs", "count", "day", "action",
   "breakerState", "attempt", "reason", "version", "port", "mode", "role", "userAgentHash", "ip",
-  "pages", "chunks",
+  "pages", "chunks", "ms", "estimatedInputTokens", "documents", "bytes",
 ]);
 
 export const FORBIDDEN_LOG_KEYS = new Set([

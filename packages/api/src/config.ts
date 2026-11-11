@@ -34,6 +34,8 @@ const Env = z.object({
   /** Administrators, by email (comma-separated), who see the billing view: usage by month and the credits left. */
   BILLING_VIEWER_EMAILS: z.string().default(""),
   ANTHROPIC_AWS_WORKSPACE_ID: z.string().optional(),
+  /** OpenAI API key: when set (not the placeholder), OpenAI's models are offered next to the Claude ones. Only after the clinic's BAA with OpenAI is in place. */
+  OPENAI_API_KEY: z.string().optional(),
   MODEL_CATALOG_JSON: z.string().optional(),
   /** JSON `{ default: [aliases for staff], users: { "email": [aliases] } }`; administrators get every model unless named. */
   MODEL_ACCESS: z.string().optional(),

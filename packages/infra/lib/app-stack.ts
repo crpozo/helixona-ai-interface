@@ -31,6 +31,7 @@ export interface AppStackProps extends cdk.StackProps {
   readonly cognitoClientSecret: secretsmanager.ISecret;
   readonly anthropicApiKeySecret: secretsmanager.ISecret;
   readonly anthropicAdminApiKeySecret: secretsmanager.ISecret;
+  readonly openAiApiKeySecret: secretsmanager.ISecret;
   readonly apiRepository: ecr.IRepository;
   readonly userPool: cognito.IUserPool;
   readonly userPoolClient: cognito.IUserPoolClient;
@@ -131,6 +132,7 @@ export class AppStack extends cdk.Stack {
     const cognitoClientSecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'CognitoClientSecretRef', props.cognitoClientSecret.secretArn);
     const anthropicApiKeySecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'AnthropicApiKeySecretRef', props.anthropicApiKeySecret.secretArn);
     const anthropicAdminApiKeySecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'AnthropicAdminApiKeySecretRef', props.anthropicAdminApiKeySecret.secretArn);
+    const openAiApiKeySecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'OpenAiApiKeySecretRef', props.openAiApiKeySecret.secretArn);
 
     // Bug reports from the sidebar: the API publishes them to this topic and the maintainer's inbox is
     // subscribed (SNS asks that address to confirm once). Its own key: the PHI key stays with the data.
@@ -240,6 +242,7 @@ export class AppStack extends cdk.Stack {
         COGNITO_CLIENT_SECRET: ecs.Secret.fromSecretsManager(cognitoClientSecretRef),
         ...(cfg.llmMode === 'anthropic' ? { ANTHROPIC_API_KEY: ecs.Secret.fromSecretsManager(anthropicApiKeySecretRef) } : {}),
         ANTHROPIC_ADMIN_API_KEY: ecs.Secret.fromSecretsManager(anthropicAdminApiKeySecretRef),
+        OPENAI_API_KEY: ecs.Secret.fromSecretsManager(openAiApiKeySecretRef),
       },
     });
     // Sistema de archivos de solo lectura: /tmp escribible para Node.

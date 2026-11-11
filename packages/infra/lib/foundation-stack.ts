@@ -39,6 +39,7 @@ export class FoundationStack extends cdk.Stack {
   readonly cognitoClientSecret: secretsmanager.Secret;
   readonly anthropicApiKeySecret: secretsmanager.Secret;
   readonly anthropicAdminApiKeySecret: secretsmanager.Secret;
+  readonly openAiApiKeySecret: secretsmanager.Secret;
   readonly apiRepository: ecr.Repository;
 
   constructor(scope: Construct, id: string, props: FoundationStackProps) {
@@ -273,6 +274,17 @@ export class FoundationStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
+    // OpenAI API key (OPENAI_API_KEY). Optional: while it holds the placeholder, OpenAI's models are not
+    // offered. Fill it in by hand, and only once the clinic's Business Associate Agreement with OpenAI
+    // is executed and the organization is provisioned for PHI (it never passes through the repository or CI).
+    this.openAiApiKeySecret = new secretsmanager.Secret(this, 'OpenAiApiKeySecret', {
+      secretName: resourceName(stage, 'openai-api-key'),
+      description: 'OpenAI API key (OPENAI_API_KEY): enables the OpenAI models in the assistant. Optional; fill in by hand only after the BAA with OpenAI is in place.',
+      encryptionKey: this.phiKey,
+      secretStringValue: cdk.SecretValue.unsafePlainText('REPLACE_ME_WITH_OPENAI_API_KEY'),
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     // ---------------------------------------------------------------- ECR
     // El repositorio vive aquí (y no en AppStack) para poder hacer build+push de la imagen antes
     // del primer despliegue del servicio Fargate. `cdk synth` no necesita Docker.
@@ -316,7 +328,7 @@ export class FoundationStack extends cdk.Stack {
         { id: 'HIPAA.Security-DynamoDBAutoScalingEnabled', reason: 'Tabla on-demand (PAY_PER_REQUEST); el autoscaling de capacidad no aplica.' },
       ]);
     }
-    for (const secret of [this.sessionSecret, this.cognitoClientSecret, this.anthropicApiKeySecret, this.anthropicAdminApiKeySecret]) {
+    for (const secret of [this.sessionSecret, this.cognitoClientSecret, this.anthropicApiKeySecret, this.anthropicAdminApiKeySecret, this.openAiApiKeySecret]) {
       NagSuppressions.addResourceSuppressions(secret, [
         { id: 'AwsSolutions-SMG4', reason: 'Rotación manual documentada: rotar SESSION_SECRET invalida todas las sesiones, el client secret lo emite Cognito y la clave de Anthropic se rota desde console.anthropic.com; no hay lambda de rotación.' },
         { id: 'HIPAA.Security-SecretsManagerRotationEnabled', reason: 'Rotación manual documentada (ver README); rotación automática no aplicable a estos valores.' },
