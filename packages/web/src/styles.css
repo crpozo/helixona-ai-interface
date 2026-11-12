@@ -3983,15 +3983,28 @@ td {
   display: none; /* the pinned column already marks the edge */
 }
 
-/* Model picker: a small heading where the vendor changes (Claude, OpenAI). */
-.model-group {
-  padding: 0.45rem 0.65rem 0.2rem;
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
+/* Model picker: one tab per vendor (Claude, OpenAI) above a short list. */
+.model-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  margin: 0.1rem 0.1rem 0.35rem;
+  border-radius: 10px;
+  background: var(--surface-2);
 }
-.model-group:not(:first-child) {
-  margin-top: 0.25rem;
-  border-top: 1px solid var(--border);
+.model-tab {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.model-tab.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--brand-line-gold);
 }

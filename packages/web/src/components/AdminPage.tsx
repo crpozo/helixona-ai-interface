@@ -628,7 +628,7 @@ function ModelErrors({ me, userName }: { me: Me; userName: (id: string) => strin
                   <td>{i.model ? modelLabel(me.catalog.models, i.model) : "–"}</td>
                   <td>{kindLabel(i.meta?.kind)}</td>
                   <td className="muted">
-                    {[i.meta?.detail ? detailLabel(i.meta.detail) : null, i.meta?.status != null ? `HTTP ${String(i.meta.status)}` : null, String(i.meta?.errorClass ?? "")].filter(Boolean).join(" · ")}
+                    {[i.meta?.detail ? detailLabel(i.meta.detail) : null, i.meta?.status != null ? `HTTP ${String(i.meta.status)}` : null, i.meta?.errorCode ? String(i.meta.errorCode) : null, String(i.meta?.errorClass ?? "")].filter(Boolean).join(" · ")}
                   </td>
                 </tr>
               ))}

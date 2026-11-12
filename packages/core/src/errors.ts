@@ -13,7 +13,7 @@ import {
  * - aborted: cancelado por el cliente o por el timeout de primer evento propio.
  */
 export type ErrorKind = "availability" | "config" | "billing" | "bug" | "auth" | "aborted" | "unknown";
-export interface ClassifiedError { kind: ErrorKind; errorClass: string; status: number | null; fallback: boolean; alarm: boolean; breakerMs: number; detail?: ErrorDetail }
+export interface ClassifiedError { kind: ErrorKind; errorClass: string; status: number | null; fallback: boolean; alarm: boolean; breakerMs: number; detail?: ErrorDetail; /** The provider's own error code, when its message ends with one in parentheses (a code, never text). */ errorCode?: string }
 /** What the provider's message said, reduced to a code (the message itself is never stored). */
 export type ErrorDetail = "spend_limit" | "organization_disabled" | "model_not_found" | "no_access" | "retention" | "billing" | "rate_limit" | "overloaded";
 
@@ -42,7 +42,8 @@ export class FirstEventTimeoutError extends Error {
 export function classifyError(err: unknown): ClassifiedError {
   const base = (kind: ErrorKind, errorClass: string, status: number | null, fallback: boolean, alarm: boolean, breakerMs: number): ClassifiedError => {
     const detail = detailOf(status, safeMessage(err));
-    return { kind, errorClass, status, fallback, alarm, breakerMs, ...(detail ? { detail } : {}) };
+    const code = /\(([\w.:\-\[\]]{1,80})\)$/.exec(safeMessage(err))?.[1];
+    return { kind, errorClass, status, fallback, alarm, breakerMs, ...(detail ? { detail } : {}), ...(code ? { errorCode: code } : {}) };
   };
 
   if (err instanceof FirstEventTimeoutError) return base("availability", "FirstEventTimeoutError", null, true, false, 5 * 60_000);

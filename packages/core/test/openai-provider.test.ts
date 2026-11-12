@@ -58,7 +58,8 @@ describe("OpenAI request", () => {
       }),
       "01CONV",
     );
-    expect(body).toMatchObject({ model: "gpt-6.1-sol", stream: true, store: false, max_output_tokens: 64000, reasoning: { effort: "high" }, prompt_cache_key: "01CONV", instructions: "You are the clinic's assistant.\n\n# Project: Appeals" });
+    expect(body).toMatchObject({ model: "gpt-6.1-sol", stream: true, store: false, max_output_tokens: 64000, reasoning: { effort: "high" }, instructions: "You are the clinic's assistant.\n\n# Project: Appeals" });
+    expect(Object.keys(body).sort()).toEqual(["input", "instructions", "max_output_tokens", "model", "reasoning", "store", "stream", "tools"]); // nothing optional
     expect(body.tools).toEqual([{ type: "function", name: "read_zip_files", description: "Reads files", parameters: { type: "object", properties: { paths: { type: "array" } } }, strict: false }]);
     expect(body.input).toEqual([
       {
@@ -135,6 +136,17 @@ describe("OpenAI stream", () => {
       }
       throw new Error("expected a failure");
     };
+    // The provider's code and the offending field reach the classification; its message never does.
+    const invalid = async () => {
+      const f = (async () => new Response(JSON.stringify({ error: { code: "invalid_value", param: "reasoning.effort", message: "secret detail" } }), { status: 400 })) as never;
+      try {
+        await drain(new OpenAiProvider({ apiKey: "k", transport: httpTransport("k", 5_000, "https://example.test/v1", f) }), params());
+      } catch (e) {
+        return e;
+      }
+      throw new Error("expected a failure");
+    };
+    expect(classifyError(await invalid())).toMatchObject({ kind: "bug", status: 400, errorCode: "invalid_value:reasoning.effort" });
     const quota = await run(429, "insufficient_quota");
     expect(classifyError(quota)).toMatchObject({ kind: "billing", fallback: false });
     expect((quota as Error).message).not.toContain("secret detail");

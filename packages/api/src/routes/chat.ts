@@ -518,7 +518,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
       } else if (result.stopReason === "refusal") {
         await audit(deps, req, { action: "turn", conversationId: id, model: result.requestedModel, refusalCategory: result.refusalCategory, stopReason: "refusal", latencyMs });
       } else {
-        await audit(deps, req, { action: "turn_error", conversationId: id, model: result.requestedModel, latencyMs, meta: { errorClass: result.error?.errorClass ?? "unknown", kind: result.error?.kind ?? "unknown", partial: result.partial, ...(result.error?.status != null ? { status: result.error.status } : {}), ...(result.error?.detail ? { detail: result.error.detail } : {}) } });
+        await audit(deps, req, { action: "turn_error", conversationId: id, model: result.requestedModel, latencyMs, meta: { errorClass: result.error?.errorClass ?? "unknown", kind: result.error?.kind ?? "unknown", partial: result.partial, ...(result.error?.status != null ? { status: result.error.status } : {}), ...(result.error?.detail ? { detail: result.error.detail } : {}), ...(result.error?.errorCode ? { errorCode: result.error.errorCode } : {}) } });
       }
     } catch (e) {
       if (phase === "files" && (ac.signal.aborted || isAbort(e))) {
@@ -531,7 +531,7 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
       } else {
         await countReading().catch(() => undefined);
         deps.log.error("turn_unhandled", { conversationId: id, errorClass: e instanceof Error ? e.name : "unknown", requestId: req.requestId });
-        sse.send("error", { code: "internal", message: "The request could not be completed", retryable: true, partial: false });
+        sse.send("error", { code: "internal", message: "Something went wrong and the answer could not be completed. Click Retry; if it happens again, choose another model. Your message is kept.", retryable: true, partial: false });
       }
     } finally {
       await release();

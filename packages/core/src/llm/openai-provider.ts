@@ -96,8 +96,10 @@ export function sseTransport(opts: SseTransportOptions): ResponsesTransport {
       // Only the error code is read: the provider's message may quote the request.
       let code = "";
       try {
-        const parsed = (await res.json()) as { error?: { code?: string | null; type?: string }; __type?: string };
-        code = String(parsed.error?.code ?? parsed.error?.type ?? parsed.__type ?? "").slice(0, 80);
+        // The code and the name of the offending field only; never the message, which may quote the request.
+        const parsed = (await res.json()) as { error?: { code?: string | null; type?: string; param?: string | null }; __type?: string; code?: string };
+        const param = parsed.error?.param ? `:${String(parsed.error.param)}` : "";
+        code = `${String(parsed.error?.code ?? parsed.error?.type ?? parsed.__type ?? parsed.code ?? res.headers.get("x-amzn-errortype") ?? "")}${param}`.replace(/[^\w.:\-\[\]]/g, "_").slice(0, 80);
       } catch {
         /* no JSON body */
       }
@@ -192,7 +194,7 @@ export function toResponsesInput(messages: BetaMessageParam[]): ResponseInputIte
 }
 
 /** The request body for one round. */
-export function buildResponsesBody(params: StreamParams, conversationId?: string, wireModel: (catalogId: string) => string = (id) => id.slice(OPENAI_PREFIX.length)): ResponsesBody {
+export function buildResponsesBody(params: StreamParams, _conversationId?: string, wireModel: (catalogId: string) => string = (id) => id.slice(OPENAI_PREFIX.length)): ResponsesBody {
   const instructions = params.system.map((b) => b.text).filter(Boolean).join("\n\n");
   const tools = (params.tools ?? []).flatMap((t) => {
     const tool = t as { name?: string; description?: string; input_schema?: Record<string, unknown> };
@@ -208,9 +210,9 @@ export function buildResponsesBody(params: StreamParams, conversationId?: string
     input: toResponsesInput(params.messages),
     max_output_tokens: params.maxTokens,
     reasoning: { effort: params.effort },
-    ...(tools.length > 0 ? { tools, parallel_tool_calls: true } : {}),
-    // Same key for every request of a conversation: the unchanged start of the prompt is served from cache.
-    ...(conversationId && conversationId !== "title" ? { prompt_cache_key: conversationId.slice(0, 64) } : {}),
+    // Only what every Responses endpoint takes (OpenAI's own and Amazon Bedrock's): no optional
+    // tuning fields, which a compatible endpoint may reject. Parallel tool calls are the default.
+    ...(tools.length > 0 ? { tools } : {}),
   };
 }
 

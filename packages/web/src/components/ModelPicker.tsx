@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, Fragment } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CatalogModel } from "../lib/types";
 import { Icon } from "./Icon";
@@ -17,7 +17,7 @@ interface Props {
  * The model picker, like Claude's: a quiet button with the model's name, and a list with each model's
  * name and a short line on what it is for (which also says whether it is cheap or expensive).
  */
-/** Who serves a model, from its id: shown as a heading when the list mixes vendors. */
+/** Who serves a model, from its id: one tab per vendor when the list mixes them. */
 function vendorOf(m: { modelId: string }): string {
   return m.modelId.startsWith("openai.") ? "OpenAI" : "Claude";
 }
@@ -32,8 +32,10 @@ export function ModelPicker({ id, label, models, value, onChange, disabled, titl
   useLayoutEffect(() => {
     if (!open || !btn.current) return;
     const r = btn.current.getBoundingClientRect();
-    const width = 320;
-    const height = models.length * 56 + 16;
+    const width = 300;
+    // The menu shows one vendor at a time: its tallest list, plus the tabs when there are two.
+    const perVendor = Math.max(...["Claude", "OpenAI"].map((v) => models.filter((m) => vendorOf(m) === v).length));
+    const height = perVendor * 52 + 16 + (new Set(models.map(vendorOf)).size > 1 ? 44 : 0);
     const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
     // Above the button when it sits at the foot of the page (the composer), below otherwise.
     const up = r.bottom + 4 + height > window.innerHeight;
@@ -61,7 +63,13 @@ export function ModelPicker({ id, label, models, value, onChange, disabled, titl
     };
   }, [open]);
 
-  const vendors = new Set(models.map(vendorOf)).size;
+  const vendors = [...new Set(models.map(vendorOf))];
+  // The tab that is open: the current model's vendor each time the menu opens.
+  const [tab, setTab] = useState<string>(current ? vendorOf(current) : "Claude");
+  useEffect(() => {
+    if (open && current) setTab(vendorOf(current));
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = vendors.length > 1 ? models.filter((m) => vendorOf(m) === tab) : models;
   return (
     <>
       <button ref={btn} id={id} type="button" className={`model-switch${open ? " open" : ""}`} aria-label={`${label}: ${current?.label ?? ""}`} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} title={title} onClick={() => setOpen((v) => !v)}>
@@ -71,33 +79,37 @@ export function ModelPicker({ id, label, models, value, onChange, disabled, titl
       {open &&
         pos &&
         createPortal(
-          <div ref={menu} className="row-menu model-menu" role="listbox" aria-label={label} style={{ top: pos.top, left: pos.left, minWidth: 320 }}>
-            {models.map((m, i) => (
-              <Fragment key={m.alias}>
-              {/* A heading where the vendor changes, when the list holds more than one. */}
-              {vendors > 1 && (i === 0 || vendorOf(models[i - 1]!) !== vendorOf(m)) && (
-                <div className="model-group" role="presentation">
-                  {vendorOf(m)}
-                </div>
-              )}
-              <button
-                type="button"
-                role="option"
-                aria-selected={m.alias === value}
-                className={`model-option${m.alias === value ? " selected" : ""}`}
-                onClick={() => {
-                  setOpen(false);
-                  if (m.alias !== value) onChange(m.alias);
-                }}
-              >
-                <span className="model-option-text">
-                  <span className="model-option-name">{m.label}</span>
-                  <span className="model-option-desc">{m.description}</span>
-                </span>
-                {m.alias === value && <span className="model-option-check" aria-hidden="true">✓</span>}
-              </button>
-              </Fragment>
-            ))}
+          <div ref={menu} className="row-menu model-menu" style={{ top: pos.top, left: pos.left, width: 300 }}>
+            {vendors.length > 1 && (
+              <div className="model-tabs" role="tablist" aria-label="Model provider">
+                {vendors.map((v) => (
+                  <button key={v} type="button" role="tab" aria-selected={tab === v} className={`model-tab${tab === v ? " active" : ""}`} onClick={() => setTab(v)}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div role="listbox" aria-label={label}>
+              {shown.map((m) => (
+                <button
+                  key={m.alias}
+                  type="button"
+                  role="option"
+                  aria-selected={m.alias === value}
+                  className={`model-option${m.alias === value ? " selected" : ""}`}
+                  onClick={() => {
+                    setOpen(false);
+                    if (m.alias !== value) onChange(m.alias);
+                  }}
+                >
+                  <span className="model-option-text">
+                    <span className="model-option-name">{m.label}</span>
+                    <span className="model-option-desc">{m.description}</span>
+                  </span>
+                  {m.alias === value && <span className="model-option-check" aria-hidden="true">✓</span>}
+                </button>
+              ))}
+            </div>
           </div>,
           document.body,
         )}
