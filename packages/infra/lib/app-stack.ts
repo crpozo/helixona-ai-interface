@@ -512,11 +512,21 @@ export class AppStack extends cdk.Stack {
     this.taskRole.addToPolicy(
       new iam.PolicyStatement({
         sid: 'BedrockInvokeOpenAiModels',
-        actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+        actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream', 'bedrock:GetInferenceProfile'],
         resources: [
           `arn:${partition}:bedrock:us-*::foundation-model/openai.gpt-6*`,
           `arn:${partition}:bedrock:${region}:${account}:inference-profile/us.openai.gpt-6*`,
         ],
+      }),
+    );
+    // Creating a response on bedrock-runtime also authorizes `bedrock:InvokeModel` on the account's
+    // default project (AWS: "Using the Responses API on the bedrock-runtime endpoint"). The project
+    // alone runs nothing: the model itself must also be allowed, and only the OpenAI ones are (above).
+    this.taskRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'BedrockDefaultProjectForOpenAiModels',
+        actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+        resources: [`arn:${partition}:bedrock:${region}:${account}:project/default`],
       }),
     );
 

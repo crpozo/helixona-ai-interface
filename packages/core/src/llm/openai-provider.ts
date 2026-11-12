@@ -221,6 +221,8 @@ function translateError(e: unknown): unknown {
   if (e instanceof HttpStatusError) {
     // The account is out of credit: every model fails the same way, the people who run it must act.
     if (e.code === "insufficient_quota" || e.code === "billing_hard_limit_reached") return APIError.generate(400, undefined, "billing: the OpenAI account has no credit left or its billing is blocked", new Headers());
+    // Bedrock answers 401 `access_denied` when the role is recognized but not allowed: a permission, not a key.
+    if (/access_?denied/i.test(e.code)) return APIError.generate(403, undefined, `openai: access denied: the role lacks permission or the model is not enabled (${e.code})`, new Headers());
     const about = /AccessDenied/i.test(e.code) ? "access denied: the model is not enabled for this account or the role lacks permission" : /Throttling/i.test(e.code) ? "rate limit" : e.code === "model_not_found" || e.status === 404 ? "model does not exist or is not enabled for this organization" : e.status === 401 ? "invalid API key" : e.status === 403 ? "permission denied" : e.status === 429 ? "rate limit" : e.status >= 500 ? "server error" : "invalid request";
     return APIError.generate(e.status, undefined, `openai: ${about}${e.code ? ` (${e.code})` : ""}`, new Headers());
   }

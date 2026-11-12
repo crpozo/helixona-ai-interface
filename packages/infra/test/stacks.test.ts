@@ -172,7 +172,7 @@ describe('AppStack', () => {
     expect(JSON.stringify(appT.toJSON())).toContain('"Name":"OPENAI_VIA_BEDROCK","Value":"true"');
     appT.hasResourceProperties('AWS::IAM::Policy', {
       PolicyDocument: Match.objectLike({
-        Statement: Match.arrayWith([Match.objectLike({ Sid: 'BedrockInvokeOpenAiModels', Action: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'], Effect: 'Allow' })]),
+        Statement: Match.arrayWith([Match.objectLike({ Sid: 'BedrockInvokeOpenAiModels', Action: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream', 'bedrock:GetInferenceProfile'], Effect: 'Allow' }), Match.objectLike({ Sid: 'BedrockDefaultProjectForOpenAiModels', Effect: 'Allow' })]),
       }),
     });
     // The model policy: the people with the larger models by name, everyone else on the economical ones.
