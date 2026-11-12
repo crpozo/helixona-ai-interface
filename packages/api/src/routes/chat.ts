@@ -509,8 +509,9 @@ export function registerChatRoute(app: FastifyInstance, deps: Deps): void {
         const partialText = result.content.map((b) => (b.type === "text" ? b.text : "")).join("");
         await deps.repos.messages.append(storedUserMessage(now().toISOString()), ttl);
         let messageCount = seq + 1;
-        if (partialText) {
-          await deps.repos.messages.append({ id: assistantMessageId, conversationId: id, seq: seq + 2, role: "assistant", content: result.content, model: result.servedModel ?? conv.modelId, fallbackReason: result.fallbackReason, stopReason: "stopped", usage: null, createdAt: now().toISOString() }, ttl);
+        // A package built before the stop is already in storage: the answer keeps its card.
+        if (partialText || builtPackages.length > 0) {
+          await deps.repos.messages.append({ id: assistantMessageId, conversationId: id, seq: seq + 2, role: "assistant", content: result.content, model: result.servedModel ?? conv.modelId, fallbackReason: result.fallbackReason, stopReason: "stopped", usage: null, createdAt: now().toISOString(), ...(builtPackages.length > 0 ? { packages: builtPackages } : {}) }, ttl);
           messageCount = seq + 2;
         }
         await deps.repos.conversations.update(key, id, { messageCount, lastInputTokens: contextBefore + newTokens + estimateTokens(partialText) - projectTokens });

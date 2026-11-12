@@ -304,7 +304,9 @@ test.describe("Conversations", () => {
     await card.getByRole("checkbox", { name: /EOB August\.pdf/ }).uncheck();
     await card.getByRole("button", { name: "Apply" }).click();
     await expect(card).toContainText("1 document after the summary · 4 pages");
-    // The package survives a reload.
+    // The package survives a reload (once the answer has finished).
+    await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
+    await expect(page).toHaveURL(/\/c\/[0-9A-Z]{26}$/);
     await page.reload({ waitUntil: "load" });
     await expect(page.getByRole("group", { name: "Package: Appeal package" })).toContainText("1 document after the summary");
     errs.expectNone();
