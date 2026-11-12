@@ -141,5 +141,5 @@ export type TurnEvent =
   /** The model paused to use tools: the text streamed so far in this round was a remark along the way, not the answer. */
   | { type: "round"; round: number; note: string | null }
   | { type: "refused"; category: string | null }
-  | { type: "error"; code: "model_unavailable" | "bad_request" | "internal" | "aborted"; message: string; retryable: boolean; partial: boolean }
+  | { type: "error"; code: "model_unavailable" | "bad_request" | "internal" | "aborted"; message: string; retryable: boolean; partial: boolean; /** Codes that identify the failure for support (HTTP status, error class and code); shown small, never stored. */ ref?: string }
   | { type: "done"; model: string; stopReason: string | null; usage: UsageSummary; fallbackReason: PinReason | null };

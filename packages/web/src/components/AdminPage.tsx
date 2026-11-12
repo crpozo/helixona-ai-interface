@@ -574,9 +574,20 @@ function ModelErrors({ me, userName }: { me: Me; userName: (id: string) => strin
     let cancelled = false;
     setItems(null);
     setError(null);
-    adminAudit(day, "turn_error", 200)
-      .then((r) => {
-        if (!cancelled) setItems([...r].reverse());
+    // The log is kept by UTC day; the picker is the person's own day, which spans two of them.
+    const shift = (n: number) => {
+      const d = new Date(`${day}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+    const localDay = (ts: string) => {
+      const d = new Date(ts);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    };
+    Promise.all([shift(-1), day, shift(1)].map((d) => adminAudit(d, "turn_error", 200).catch(() => [] as AuditEvent[])))
+      .then((days) => {
+        const all = days.flat().filter((e) => localDay(e.ts) === day).sort((a, b) => b.ts.localeCompare(a.ts));
+        if (!cancelled) setItems(all);
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(errMsg(e));

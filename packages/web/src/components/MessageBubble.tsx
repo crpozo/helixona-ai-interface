@@ -265,6 +265,7 @@ export const MessageBubble = memo(function MessageBubble({ message: m, models, o
             <span className={`notice notice-error`} role="alert">
               {m.status === "incomplete" && m.error.code !== "network" ? "Incomplete response. " : ""}
               {errorText(m.error.code, m.error.message)}
+              {m.error.ref && <span className="error-ref">Reference for support: {m.error.ref}</span>}
             </span>
           )}
           {canRetry && (

@@ -408,7 +408,11 @@ export class ModelRouter {
         const code = cls.kind === "availability" || cls.kind === "config" || cls.kind === "billing" ? "model_unavailable" : cls.kind === "bug" ? "bad_request" : "internal";
         const backupPaused = candidates.slice(ci + 1).some((id) => this.breaker.isOpen(id));
         const message = code === "model_unavailable" ? userMessageFor(cls, backupPaused, this.opts.adminContact) : round > 1 && cls.kind === "bug" ? "The request grew too large while the files were being read. Ask a narrower question, or name the files or pages to look at, and try again." : "Something went wrong and the answer could not be completed. Click Retry; if it happens again, choose another model. Your message is kept.";
-        input.emit({ type: "error", code, message, retryable: code === "model_unavailable" || code === "internal" || round > 1, partial: emittedChars > 0 });
+        // What support needs to tell failures apart. For an error that is not the provider's (signing,
+        // credentials, a bug of ours) the start of its own message helps and quotes no request content.
+        const own = cls.kind === "unknown" && err instanceof Error ? err.message.replace(/\s+/g, " ").slice(0, 120) : null;
+        const ref = [cls.status != null ? `HTTP ${cls.status}` : null, cls.errorClass, cls.errorCode ?? null, own].filter(Boolean).join(" · ");
+        input.emit({ type: "error", code, message, retryable: code === "model_unavailable" || code === "internal" || round > 1, partial: emittedChars > 0, ...(ref ? { ref } : {}) });
         return this.failure(startModel, cls, latencyMs, emittedChars > 0);
       }
     }

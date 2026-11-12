@@ -4008,3 +4008,13 @@ td {
   color: var(--text);
   box-shadow: 0 0 0 1px var(--brand-line-gold);
 }
+
+/* The codes behind a failure (HTTP status, error class), small under the message: what support asks for. */
+.error-ref {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  opacity: 0.75;
+  overflow-wrap: anywhere;
+  user-select: all;
+}

@@ -375,6 +375,8 @@ export interface SseError {
   message: string;
   retryable: boolean;
   partial: boolean;
+  /** Codes that identify the failure for support (HTTP status, error class, provider code). */
+  ref?: string;
 }
 export interface SseDone {
   assistantMessageId: string;
