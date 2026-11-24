@@ -169,7 +169,7 @@ describe('AppStack', () => {
       ],
     });
     // OpenAI's models come from Amazon Bedrock with the task role: only those models, only invoke.
-    expect(JSON.stringify(appT.toJSON())).toContain('"Name":"OPENAI_VIA_BEDROCK","Value":"true"');
+    expect(JSON.stringify(appT.toJSON())).toContain('"Name":"OPENAI_VIA_BEDROCK","Value":"false"');
     appT.hasResourceProperties('AWS::IAM::Policy', {
       PolicyDocument: Match.objectLike({
         Statement: Match.arrayWith([Match.objectLike({ Sid: 'BedrockInvokeOpenAiModels', Action: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream', 'bedrock:GetInferenceProfile'], Effect: 'Allow' }), Match.objectLike({ Sid: 'BedrockDefaultProjectForOpenAiModels', Effect: 'Allow' })]),

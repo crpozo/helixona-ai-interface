@@ -25,7 +25,7 @@ describe("classifyError", () => {
     expect(c.kind).toBe("config");
     expect(c.breakerMs).toBe(60 * 60_000);
     expect(c.detail).toBe("no_access");
-    expect(userMessageFor(c, false)).toMatch(/no access to the model/);
+    expect(userMessageFor(c, false)).toMatch(/denied access to the model/);
   });
   it("a disabled organization is named as such", () => {
     const c = classifyError(apiError(403, "This organization has been disabled."));

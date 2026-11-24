@@ -92,7 +92,7 @@ export function userMessageFor(error: ClassifiedError, backupPaused: boolean, ad
           : error.detail === "model_not_found"
             ? "the provider does not recognize the model"
             : error.detail === "no_access"
-              ? "the provider says this API key has no access to the model"
+              ? "the provider denied access to the model for this account"
               : error.detail === "retention"
                 ? "the provider rejected the data-retention setting"
                 : "a configuration problem";

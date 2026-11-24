@@ -127,4 +127,4 @@ sin clave y con la política de Bedrock en el rol de la tarea.
 
 ## Modelos de OpenAI (vía Amazon Bedrock)
 
-Con `OPENAI_VIA_BEDROCK=true` (por defecto en el stack) la app ofrece GPT-6 Astra, GPT-6.1 Sol, GPT-6.1 Terra y GPT-6 Luna a través del endpoint compatible con OpenAI de Bedrock, firmando con el rol de la tarea. El rol sólo puede invocar esos modelos. Si un modelo responde "access denied", abrirlo una vez en la consola de Bedrock (Model catalog, Open in playground) con una cuenta administradora. El secreto `helixona-<stage>-openai-api-key` queda con su marcador: sólo se usaría para la API directa de OpenAI, que exige un BAA propio con OpenAI.
+Con `OPENAI_VIA_BEDROCK=false` (valor del stack) la app ofrece GPT-6 Astra, GPT-6.1 Sol, GPT-6.1 Terra y GPT-6 Luna por la API de OpenAI, con la clave del secreto `helixona-<stage>-openai-api-key` (bajo el BAA de la clínica con OpenAI). Si el secreto conserva su marcador, esos modelos no se ofrecen. Con `OPENAI_VIA_BEDROCK=true` se sirven desde Bedrock firmando con el rol de la tarea (permisos ya concedidos); en noviembre de 2026 AWS no los tenía disponibles para la cuenta.

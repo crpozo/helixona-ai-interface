@@ -299,36 +299,32 @@ and no audit event is written: the copy is equivalent to selecting the text on s
 file may contain PHI, so the policies document asks that it be pasted into the record and then
 deleted, and never kept on the desktop, in email or in a personal drive.
 
-## OpenAI models (served by Amazon Bedrock)
+## OpenAI models (OpenAI API, under the clinic's BAA with OpenAI)
 
 The assistant offers OpenAI's current models (GPT-6 Astra, GPT-6.1 Sol, GPT-6.1 Terra, GPT-6 Luna) in
-the same model list as the Claude ones. They are served by **Amazon Bedrock**, inside the clinic's AWS
-account, not by OpenAI's own API:
+the same model list as the Claude ones. They are served by **OpenAI's own API**
+(`https://api.openai.com/v1/responses`):
 
-- The service calls Bedrock's OpenAI-compatible endpoint in us-east-1
-  (`bedrock-runtime.us-east-1.amazonaws.com/openai/v1/responses`) with the models' US cross-Region
-  inference profiles (`us.openai.gpt-6…`), so requests are processed in US Regions only.
-- Requests are signed with the service's own IAM role (no API key exists). The role may only invoke
-  those models.
-- Amazon Bedrock is on the AWS HIPAA Eligible Services list and is covered by the clinic's AWS Business
-  Associate Addendum. AWS states that model providers have no access to customer prompts and
-  completions on Bedrock. No separate agreement with OpenAI is needed for this path.
-- Every request is sent with `store: false`: Bedrock retains nothing from the request or the response.
-- OpenAI's hosted tools (web search, file search) are not used. Failures are logged by code only.
+- The clinic has an executed Business Associate Agreement with OpenAI for its API organization. The
+  signed copy is kept by the account owner; keep a copy on file with the other agreements.
+- The organization's API key lives only in AWS Secrets Manager (`helixona-<stage>-openai-api-key`),
+  encrypted, and is read by the service at start. It is never in the code, in GitHub or in a chat.
+  Rotate it by creating a new key at OpenAI, saving it in the secret and redeploying.
+- Every request is sent with `store: false`, so OpenAI does not keep the response for later retrieval.
+  The account owner confirms in the OpenAI organization settings that data retention matches the BAA
+  (zero data retention where the agreement provides it) and that data is not used for training.
+- OpenAI's hosted tools (web search, file search) are not used. Failures are logged by code only;
+  the provider's error text is never stored.
 
 Conversations, files, audit and retention work exactly as with Claude. Who may use these models
-follows the per-person model policy (Administration, Users, Models). Their cost is billed by AWS, so
-it is not part of the Billing tab (which mirrors the Anthropic console); the Usage tab's estimates
-include it, at Bedrock's prices.
+follows the per-person model policy (Administration, Users, Models). Their cost is billed by OpenAI,
+so it is not part of the Billing tab (which mirrors the Anthropic console); the Usage tab's estimates
+include it, at OpenAI's list prices.
 
-First use: Bedrock enables a third-party model for the account the first time an authorized
-administrator uses it. If a model answers "access denied" in the assistant, open it once in the
-Bedrock console (Model catalog, the model, "Open in playground") with an administrator account.
-
-An alternative path exists and is off: OpenAI's own API with an organization key in the secret
-`helixona-<stage>-openai-api-key` (used only when `OPENAI_VIA_BEDROCK` is not `true`). That path sends
-data to OpenAI and requires an executed OpenAI Business Associate Agreement first; leave the secret
-on its placeholder.
+An alternative path exists and is off: the same models served by Amazon Bedrock inside the clinic's
+AWS account (`OPENAI_VIA_BEDROCK=true`), signed with the service's IAM role and covered by the AWS
+Business Associate Addendum. The role's permissions for it are in place; in November 2026 AWS had not
+made these models available to the clinic's account.
 
 ## Packages
 

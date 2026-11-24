@@ -206,7 +206,8 @@ export class AppStack extends cdk.Stack {
         APP_VERSION: cfg.imageTag,
         BILLING_VIEWER_EMAILS: cfg.billingViewerEmails,
         // OpenAI's models, served by Amazon Bedrock with the task role (covered by the AWS agreement).
-        OPENAI_VIA_BEDROCK: 'true',
+        // OpenAI's own API (key in the secret, under the clinic's BAA with OpenAI). 'true' serves them from Bedrock instead.
+        OPENAI_VIA_BEDROCK: 'false',
         // Who may use which models (administrators can adjust a person from the Administration page).
         MODEL_ACCESS: cfg.modelAccess,
         AWS_REGION: this.region,
