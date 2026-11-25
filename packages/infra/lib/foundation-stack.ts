@@ -328,6 +328,9 @@ export class FoundationStack extends cdk.Stack {
         { id: 'HIPAA.Security-DynamoDBAutoScalingEnabled', reason: 'Tabla on-demand (PAY_PER_REQUEST); el autoscaling de capacidad no aplica.' },
       ]);
     }
+    // The app no longer reads this secret (it reads a hand-made one by name), but the deployed App stack
+    // still imports its export until it is updated: keep the export so Foundation can deploy first.
+    this.exportValue(this.openAiApiKeySecret.secretArn);
     for (const secret of [this.sessionSecret, this.cognitoClientSecret, this.anthropicApiKeySecret, this.anthropicAdminApiKeySecret, this.openAiApiKeySecret]) {
       NagSuppressions.addResourceSuppressions(secret, [
         { id: 'AwsSolutions-SMG4', reason: 'Rotación manual documentada: rotar SESSION_SECRET invalida todas las sesiones, el client secret lo emite Cognito y la clave de Anthropic se rota desde console.anthropic.com; no hay lambda de rotación.' },
