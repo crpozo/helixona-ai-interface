@@ -16,13 +16,29 @@ import { memoryRepos, MemoryUserDirectory } from "./repos/memory.js";
 import { loadSystemPrompt } from "./system-prompt.js";
 import type { Deps } from "./deps.js";
 
+/**
+ * A secret as the console stores it: the value alone, or a key/value secret, which arrives as JSON
+ * ({"some-name":"the value"}). A key/value secret with exactly one text value yields that value.
+ */
+export function secretValue(raw: string | undefined): string | undefined {
+  const text = raw?.trim();
+  if (!text || !text.startsWith("{")) return text;
+  try {
+    const values = Object.values(JSON.parse(text) as Record<string, unknown>).filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+    return values.length === 1 ? values[0]!.trim() : text;
+  } catch {
+    return text;
+  }
+}
+
 export async function createDeps(env: NodeJS.ProcessEnv = process.env): Promise<Deps> {
   const config = loadConfig(env);
   const log = createSafeLogger({ level: config.LOG_LEVEL, strict: config.NODE_ENV !== "production" });
   // OpenAI's models join the catalog when they are served by Amazon Bedrock (the task role, under the
   // AWS agreement) or, failing that, when the server holds an OpenAI key of its own.
   const openAiBedrock = config.OPENAI_VIA_BEDROCK === "true" && !!config.AWS_REGION;
-  const openAiKey = !openAiBedrock && isConfiguredKey(config.OPENAI_API_KEY) ? config.OPENAI_API_KEY : null;
+  const openAiSecret = secretValue(config.OPENAI_API_KEY);
+  const openAiKey = !openAiBedrock && isConfiguredKey(openAiSecret) ? openAiSecret : null;
   const catalog = openAiBedrock ? withOpenAi(parseCatalog(config.MODEL_CATALOG_JSON), "bedrock") : openAiKey ? withOpenAi(parseCatalog(config.MODEL_CATALOG_JSON)) : parseCatalog(config.MODEL_CATALOG_JSON);
   if (config.EFFORT) catalog.effort = config.EFFORT;
   const repos = config.STORE_MODE === "memory"

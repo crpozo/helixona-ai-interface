@@ -986,11 +986,16 @@ describe("Packages", () => {
 describe("OpenAI models", () => {
   const ENV = { NODE_ENV: "test", AUTH_MODE: "dev", STORE_MODE: "memory", LLM_MODE: "fake", SESSION_SECRET: "test-secret-test-secret", WEB_DIST: "/nonexistent" };
   it("are offered only when the server holds an OpenAI key; the placeholder does not count", async () => {
-    const { createDeps } = await import("../src/server.js");
+    const { createDeps, secretValue } = await import("../src/server.js");
     const aliases = async (extra: Record<string, string>) => (await createDeps({ ...ENV, ...extra })).catalog.models.map((m) => m.alias);
     expect(await aliases({})).toEqual(["haiku", "sonnet", "opus", "fable"]);
     expect(await aliases({ OPENAI_API_KEY: "REPLACE_ME_WITH_OPENAI_API_KEY" })).toEqual(["haiku", "sonnet", "opus", "fable"]);
     expect(await aliases({ OPENAI_API_KEY: "sk-test-key" })).toEqual(["haiku", "sonnet", "opus", "fable", "gpt-luna", "gpt-terra", "gpt-sol", "gpt-astra"]);
+    // A key/value secret from the console arrives as JSON: its single value is the key.
+    expect(secretValue('{\n  "some-name": "sk-test-key"\n}')).toBe("sk-test-key");
+    expect(secretValue("  sk-test-key\n")).toBe("sk-test-key");
+    expect(await aliases({ OPENAI_API_KEY: '{"some-name":"sk-test-key"}' })).toContain("gpt-luna");
+    expect(await aliases({ OPENAI_API_KEY: '{"some-name":"REPLACE_ME_WITH_OPENAI_API_KEY"}' })).not.toContain("gpt-luna");
     // Served by Amazon Bedrock: no key needed, a Region is, and the prices are Bedrock's (10% over OpenAI's list).
     expect(await aliases({ OPENAI_VIA_BEDROCK: "true" })).toEqual(["haiku", "sonnet", "opus", "fable"]);
     const viaBedrock = (await createDeps({ ...ENV, OPENAI_VIA_BEDROCK: "true", AWS_REGION: "us-east-1" })).catalog;
