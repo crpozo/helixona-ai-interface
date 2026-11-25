@@ -307,7 +307,7 @@ the same model list as the Claude ones. They are served by **OpenAI's own API**
 
 - The clinic has an executed Business Associate Agreement with OpenAI for its API organization. The
   signed copy is kept by the account owner; keep a copy on file with the other agreements.
-- The organization's API key lives only in AWS Secrets Manager (`helixona-<stage>-openai-api-key`),
+- The organization's API key lives only in AWS Secrets Manager (`helixona-<stage>-openai-key-2` (created by hand in the app's Region)),
   encrypted, and is read by the service at start. It is never in the code, in GitHub or in a chat.
   Rotate it by creating a new key at OpenAI, saving it in the secret and redeploying.
 - Every request is sent with `store: false`, so OpenAI does not keep the response for later retrieval.

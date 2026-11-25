@@ -132,7 +132,9 @@ export class AppStack extends cdk.Stack {
     const cognitoClientSecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'CognitoClientSecretRef', props.cognitoClientSecret.secretArn);
     const anthropicApiKeySecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'AnthropicApiKeySecretRef', props.anthropicApiKeySecret.secretArn);
     const anthropicAdminApiKeySecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'AnthropicAdminApiKeySecretRef', props.anthropicAdminApiKeySecret.secretArn);
-    const openAiApiKeySecretRef = secretsmanager.Secret.fromSecretCompleteArn(this, 'OpenAiApiKeySecretRef', props.openAiApiKeySecret.secretArn);
+    // The OpenAI key lives in a secret the account owner creates by hand in this Region (plaintext, the
+    // key alone, default encryption key): the stack only reads it by name. It must exist before a deploy.
+    const openAiApiKeySecretRef = secretsmanager.Secret.fromSecretNameV2(this, 'OpenAiKeySecretRef', `${resourceName(stage, 'openai-key')}-2`);
 
     // Bug reports from the sidebar: the API publishes them to this topic and the maintainer's inbox is
     // subscribed (SNS asks that address to confirm once). Its own key: the PHI key stays with the data.
